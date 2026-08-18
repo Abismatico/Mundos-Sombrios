@@ -13,6 +13,11 @@ function createEmbers() {
 }
 createEmbers();
 
+
+const supabaseUrl = 'https://mectcbsmhmyefsllbope.supabase.co';
+const supabaseAnonKey = 'sb_publishable_b_MyJE3_glRlR5VEyFCZ4g_ZU3xzkeS';
+
+const supabase = supabase.createClient(supabaseUrl, supabaseAnonKey);
 // ==========================================
 // USER DATABASE & AUTHENTICATION
 // ==========================================
@@ -210,53 +215,97 @@ let selectedVttEquipmentCharId = null;
 // AUTHENTICATION LOGIC
 // ==========================================
 async function doLogin() {
-    const user = document.getElementById('login-user').value.trim();
-    const pass = document.getElementById('login-pass').value;
-    
-    if(!user || !pass) { alert("Preencha as credenciais."); return; }
-    
-    const account = usersDB.find(u => String(u.username || '').toLowerCase() === user.toLowerCase());
-    let valid = false;
-    if (account?.passwordHash) valid = await msVerifyPassword(pass, account.passwordHash);
-    else if (account?.password) { valid = account.password === pass; if (valid) await msMigrateLegacyPassword(account, pass); }
-    if(account && valid) {
-        currentUser = account;
-        document.getElementById('login-user').value = '';
-        document.getElementById('login-pass').value = '';
-        
-        document.getElementById('display-username').innerText = currentUser.username;
-        
-        // Emblema de Mestre
-        const emblem = document.getElementById('master-emblem');
-        if(currentUser.role === 'mestre' || currentUser.role === 'admin') {
-            emblem.style.display = 'block';
-            makeDraggable(emblem, emblem, false);
-        } else {
-            emblem.style.display = 'none';
-        }
-        
-        // Botão Admin
-        document.getElementById('btn-admin-panel').style.display = currentUser.role === 'admin' ? 'block' : 'none';
-        
-        // Restrição Tab Mestre Ancoragem
-        document.getElementById('tab-btn-gm').style.display = (currentUser.role === 'mestre' || currentUser.role === 'admin') ? 'inline-block' : 'none';
+    const email = document.getElementById('login-user').value.trim();
+    const password = document.getElementById('login-pass').value;
 
-        loadUserData();
-        
-        if(currentUser.role === 'admin') {
-            renderAdminRequestsWindows();
-        }
-
-        showScreen('screen-portal');
-        if (typeof window.renderOfficialPortal === 'function') window.renderOfficialPortal();
-        // Hard guarantee: a successful login can never leave the login layer active.
-        const loginScreen = document.getElementById('screen-login');
-        if (loginScreen) loginScreen.classList.remove('active', 'overlay');
-        const portalScreen = document.getElementById('screen-portal');
-        if (portalScreen) portalScreen.classList.add('active');
-    } else {
-        alert("Entidade não reconhecida ou senha incorreta no Vazio.");
+    if (!email || !password) {
+        alert("Preencha as credenciais.");
+        return;
     }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+    });
+
+    if (error) {
+        alert('Login inválido');
+        return;
+    }
+
+    const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', data.user.id)
+        .single();
+
+    if (profileError) {
+        alert('Perfil não encontrado');
+        return;
+    }
+
+    currentUser = {
+        id: profile.id,
+        username: profile.username,
+        email: profile.email,
+        role: profile.role
+    };
+
+    document.getElementById('login-user').value = '';
+    document.getElementById('login-pass').value = '';
+
+    document.getElementById('display-username').innerText = currentUser.username;
+
+    const emblem = document.getElementById('master-emblem');
+    if (currentUser.role === 'mestre' || currentUser.role === 'admin') {
+        emblem.style.display = 'block';
+    } else {
+        emblem.style.display = 'none';
+    }
+
+    document.getElementById('btn-admin-panel').style.display = currentUser.role === 'admin' ? 'block' : 'none';
+    document.getElementById('tab-btn-gm').style.display = (currentUser.role === 'mestre' || currentUser.role === 'admin') ? 'inline-block' : 'none';
+
+    showScreen('screen-portal');
+    if (typeof window.renderOfficialPortal === 'function') window.renderOfficialPortal();
+
+    const loginScreen = document.getElementById('screen-login');
+    if (loginScreen) loginScreen.classList.remove('active', 'overlay');
+
+    const portalScreen = document.getElementById('screen-portal');
+    if (portalScreen) portalScreen.classList.add('active');
+}
+
+async function createSupabaseAdmin() {
+  const { data, error } = await supabase.auth.signUp({
+    email: 'oliveiradbarbosa@mundossombrios.com',
+    password: '@Bs201197'
+  });
+
+  if (error) {
+    console.error(error);
+    alert('Erro ao criar admin: ' + error.message);
+    return;
+  }
+
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .insert([
+      {
+        id: data.user.id,
+        username: 'oliveira',
+        email: 'oliveiradbarbosa@mundossombrios.com',
+        role: 'admin'
+      }
+    ]);
+
+  if (profileError) {
+    console.error(profileError);
+    alert('Erro ao criar perfil do admin');
+    return;
+  }
+
+  alert('Admin criado com sucesso');
 }
 
 function doLogout() {
