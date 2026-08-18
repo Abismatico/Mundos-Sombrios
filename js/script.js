@@ -13,13 +13,6 @@ function createEmbers() {
 }
 createEmbers();
 
-
-// Supabase removido do bootstrap para evitar quebrar a execução do portal.
-// O fluxo ativo da aplicação é local (localStorage + PBKDF2), que é o que
-// mantém o botão de entrar no jogo funcionando e compatível com o restante do site.
-window.supabase = null;
-window.supabaseClient = null;
-
 // ==========================================
 // USER DATABASE & AUTHENTICATION
 // ==========================================
@@ -217,67 +210,68 @@ let selectedVttEquipmentCharId = null;
 // AUTHENTICATION LOGIC
 // ==========================================
 async function doLogin() {
-    const rawIdentifier = document.getElementById('login-user').value.trim();
+    const identifier = document.getElementById('login-user').value.trim();
     const password = document.getElementById('login-pass').value;
 
-    if (!rawIdentifier || !password) {
+    if (!identifier || !password) {
         alert('Preencha as credenciais.');
-        return;
+        return false;
     }
 
-    const normalized = String(rawIdentifier).toLowerCase();
-    const account = usersDB.find(u => {
-        const username = String(u?.username || '').toLowerCase();
-        const email = String(u?.email || '').toLowerCase();
-        return username === normalized || email === normalized;
-    });
+    const normalized = identifier.toLowerCase();
+    const account = usersDB.find(u =>
+        String(u?.username || '').toLowerCase() === normalized ||
+        String(u?.email || '').toLowerCase() === normalized
+    );
 
     if (!account) {
-        alert('Usuário não encontrado.');
-        return;
+        alert('Login inválido.');
+        return false;
     }
 
-    const passwordValid = await msVerifyPassword(password, account.passwordHash);
-    if (!passwordValid) {
-        alert('Senha inválida.');
-        return;
+    try {
+        let valid = false;
+        if (account.passwordHash) {
+            valid = await msVerifyPassword(password, account.passwordHash);
+        } else if (typeof account.password === 'string') {
+            valid = account.password === password;
+            if (valid) await msMigrateLegacyPassword(account, password);
+        }
+
+        if (!valid) {
+            alert('Login inválido.');
+            return false;
+        }
+
+        currentUser = {
+            id: account.id,
+            username: account.username,
+            email: account.email,
+            role: account.role || 'jogador'
+        };
+        loadUserData();
+
+        const displayName = document.getElementById('display-username');
+        if (displayName) displayName.innerText = currentUser.username;
+
+        const emblem = document.getElementById('master-emblem');
+        if (emblem) emblem.style.display = (currentUser.role === 'mestre' || currentUser.role === 'admin') ? 'block' : 'none';
+
+        const adminButton = document.getElementById('btn-admin-panel');
+        if (adminButton) adminButton.style.display = currentUser.role === 'admin' ? 'block' : 'none';
+
+        const gmTab = document.getElementById('tab-btn-gm');
+        if (gmTab) gmTab.style.display = (currentUser.role === 'mestre' || currentUser.role === 'admin') ? 'inline-block' : 'none';
+
+        showScreen('screen-portal');
+        if (typeof window.renderOfficialPortal === 'function') window.renderOfficialPortal();
+        return true;
+    } catch (error) {
+        console.error('[Mundos Sombrios] Falha no login local:', error);
+        alert('Não foi possível validar a credencial. Tente novamente.');
+        return false;
     }
-
-    currentUser = {
-        id: account.id,
-        username: account.username,
-        email: account.email,
-        role: account.role
-    };
-
-    document.getElementById('login-user').value = '';
-    document.getElementById('login-pass').value = '';
-
-    document.getElementById('display-username').innerText = currentUser.username;
-
-    const emblem = document.getElementById('master-emblem');
-    if (currentUser.role === 'mestre' || currentUser.role === 'admin') {
-        emblem.style.display = 'block';
-    } else {
-        emblem.style.display = 'none';
-    }
-
-    document.getElementById('btn-admin-panel').style.display = currentUser.role === 'admin' ? 'block' : 'none';
-    document.getElementById('tab-btn-gm').style.display = (currentUser.role === 'mestre' || currentUser.role === 'admin') ? 'inline-block' : 'none';
-
-    showScreen('screen-portal');
-    if (typeof window.renderOfficialPortal === 'function') window.renderOfficialPortal();
-
-    const loginScreen = document.getElementById('screen-login');
-    if (loginScreen) loginScreen.classList.remove('active', 'overlay');
-
-    const portalScreen = document.getElementById('screen-portal');
-    if (portalScreen) portalScreen.classList.add('active');
 }
-
-window.createSupabaseAdmin = async function () {
-    alert('Autenticação ativa: este site usa login local em localStorage. O admin inicial foi criado via bootstrap local.');
-};
 
 function doLogout() {
     if(confirm("Deseja desconectar do Vazio?")) {

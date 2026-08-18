@@ -5,7 +5,7 @@
 - Metadados visuais: `js/archetype-art-direction.js`
 - Renderer: `renderArchetypeCards()` em `js/script.js`
 - Shell visual: `css/builder/builder-modern-v0.62.css` + `css/builder/builder-art-direction-v0.63.css`
-- Cards base: `css/archetype-selection.css` + `css/archetype-art-direction-v0.63.css`
+- Cards base: `css/archetype-art-direction-v0.63.css`
 
 ## Dados
 - Naturezas/expansões: `ruleset[mode].natures`

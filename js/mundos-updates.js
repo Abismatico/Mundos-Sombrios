@@ -537,84 +537,8 @@ window.ENVOLTO_RITUALS_CANONICAL_SOURCE = 'A corrupção antológica O Envolto �
   const esc = (v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const safe = (v)=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 
-  // ---------- Mercado da Morte ----------
-  const TASK_EMBLEMS = ['✦','⬟','◈','✧','⟐','⟁','◇','⟡','☗','◉','✺','⚒'];
-  function hashCode(s){ let h=0; for(let i=0;i<s.length;i++) h=((h<<5)-h)+s.charCodeAt(i)|0; return Math.abs(h); }
-  function taskEmblem(name){ const h=hashCode(name||'Força-Tarefa'); const a=TASK_EMBLEMS[h%TASK_EMBLEMS.length]; const b=TASK_EMBLEMS[(h>>3)%TASK_EMBLEMS.length]; return {mark:a,accent:b,seed:h%360}; }
-  function forceTaskSvg(name){ const e=taskEmblem(name); return `<span class="task-emblem" style="--task-hue:${e.seed}deg" title="Emblema da Força-Tarefa">${e.mark}<i>${e.accent}</i></span>`; }
-  function renderMercado(forceData={}){
-    const host=document.getElementById('specific-content-container'); if(!host||currentClass!=='Mercador da Morte') return;
-    let panel=document.getElementById('death-market-panel');
-    if(!panel){
-      panel=document.createElement('section'); panel.id='death-market-panel'; panel.className='death-market-panel'; host.appendChild(panel);
-    }
-    const stamina = forceData.stamina || {};
-    const maneuvers = Array.isArray(forceData.maneuvers)?forceData.maneuvers:[];
-    const arsenal = Array.isArray(forceData.arsenal)?forceData.arsenal:[];
-    const tasks = Array.isArray(forceData.forceTasks)?forceData.forceTasks:[];
-    panel.innerHTML = `
-      <div class="death-market-head"><div><span class="eyebrow">AGENTE DE CARREIRA · MERCADO DA MORTE</span><h4>Registro Operacional</h4><p>Uma bancada tática separada para registrar recursos de combate, sem misturar o Mercado da Morte ao restante da ficha.</p></div><div class="death-market-seal">☠</div></div>
-      <div class="death-market-grid">
-        <section class="death-module bio-battery-module">
-          <div class="module-icon bio-battery"><span></span><b>+</b></div><div><span class="module-kicker">ESTAMINA</span><h5>Bio-Bateria</h5><small>Energia corporal pronta para manobras e esforço de campo.</small></div>
-          <div class="battery-display"><div class="battery-cell"><div class="battery-fill" style="height:${Math.max(0,Math.min(100,Number(stamina.current??stamina.max??0)/(Number(stamina.max||1))*100))}%"></div></div><div class="battery-values"><label>Atual<input id="mm-stamina-current" type="number" min="0" value="${Number(stamina.current||0)}"></label><label>Máxima<input id="mm-stamina-max" type="number" min="0" value="${Number(stamina.max||0)}"></label></div></div>
-        </section>
-        <section class="death-module maneuver-module">
-          <div class="module-title"><div class="module-icon movement">↯</div><div><span class="module-kicker">MOVIMENTO</span><h5>Manobras</h5></div><button type="button" class="souls-btn small-btn hide-on-view" onclick="addMercadoManeuver()">＋ Registrar</button></div>
-          <div id="mm-maneuvers" class="movement-log">${maneuvers.map((m,i)=>`<article class="movement-entry"><div class="movement-symbol">${esc(m.icon||'↝')}</div><div><b>${esc(m.name||'Manobra')}</b><small>${esc(m.type||'Movimento')} · ${esc(m.cost||'')}</small><p>${esc(m.note||'')}</p></div><button class="hide-on-view movement-remove" onclick="removeMercadoManeuver(${i})">×</button></article>`).join('')||'<div class="market-empty">Nenhuma manobra registrada.</div>'}</div>
-        </section>
-        <section class="death-module briefcase-module">
-          <div class="module-title"><div class="module-icon briefcase">▣</div><div><span class="module-kicker">EQUIPAMENTO</span><h5>Arsenal</h5></div><button type="button" class="souls-btn small-btn hide-on-view" onclick="addMercadoArsenal()">＋ Item</button></div>
-          <div id="mm-arsenal" class="weapon-case">${arsenal.map((a,i)=>`<article class="case-slot"><div class="weapon-mini">${esc(a.icon||'▰')}</div><div><b>${esc(a.name||'Arma')}</b><small>${esc(a.kind||'Equipamento')} · ${esc(a.ammo||'')}</small><p>${esc(a.note||'')}</p></div><button class="hide-on-view movement-remove" onclick="removeMercadoArsenal(${i})">×</button></article>`).join('')||'<div class="market-empty">Maleta vazia.</div>'}</div>
-        </section>
-        <section class="death-module task-module">
-          <div class="module-title"><div class="module-icon task">⌬</div><div><span class="module-kicker">COMANDO</span><h5>Forças-Tarefa</h5></div><button type="button" class="souls-btn small-btn hide-on-view" onclick="addMercadoTask()">＋ Designar</button></div>
-          <div id="mm-tasks" class="task-registry">${tasks.map((t,i)=>`<article class="task-entry"><div class="task-badge">${forceTaskSvg(t.name||`Força-Tarefa ${i+1}`)}</div><div><b>${esc(t.name||`Força-Tarefa ${i+1}`)}</b><small>${esc(t.role||'Unidade de operação')}</small><p>${esc(t.note||'')}</p></div><button class="hide-on-view movement-remove" onclick="removeMercadoTask(${i})">×</button></article>`).join('')||'<div class="market-empty">Nenhuma força-tarefa registrada.</div>'}</div>
-        </section>
-      </div>`;
-  }
-  function currentMercadoData(){
-    return window.__mmDraft || {stamina:{current:0,max:0},maneuvers:[],arsenal:[],forceTasks:[]};
-  }
-  window.__mmDraft = window.__mmDraft || {stamina:{current:0,max:0},maneuvers:[],arsenal:[],forceTasks:[]};
-  window.initMercadoData=function(data){ window.__mmDraft={stamina:{current:Number(data?.stamina?.current||0),max:Number(data?.stamina?.max||0)},maneuvers:Array.isArray(data?.maneuvers)?JSON.parse(JSON.stringify(data.maneuvers)):[],arsenal:Array.isArray(data?.arsenal)?JSON.parse(JSON.stringify(data.arsenal)):[],forceTasks:Array.isArray(data?.forceTasks)?JSON.parse(JSON.stringify(data.forceTasks)):[]}; renderMercado(window.__mmDraft); };
-  window.addMercadoManeuver=function(){ const name=prompt('Nome da manobra:','Deslocamento Tático'); if(!name)return; const type=prompt('Tipo de movimento:','Ação / Reação / Movimento'); const icon=prompt('Ícone da manobra (ex.: ↝, ⟳, ↯):','↝'); const note=prompt('Registro da manobra:',''); const d=currentMercadoData(); d.maneuvers.push({name,type,icon,note}); renderMercado(d); };
-  window.removeMercadoManeuver=function(i){ const d=currentMercadoData(); d.maneuvers.splice(i,1); renderMercado(d); };
-  window.addMercadoArsenal=function(){ const name=prompt('Nome do item/arma:','Carabina de Operações'); if(!name)return; const kind=prompt('Categoria:','Arma de Fogo'); const ammo=prompt('Munição/cargas:',''); const icon=prompt('Símbolo do item:','▰'); const note=prompt('Observações:',''); const d=currentMercadoData(); d.arsenal.push({name,kind,ammo,icon,note}); renderMercado(d); };
-  window.removeMercadoArsenal=function(i){ const d=currentMercadoData(); d.arsenal.splice(i,1); renderMercado(d); };
-  window.addMercadoTask=function(){ const name=prompt('Nome da Força-Tarefa:','Força-Tarefa Eclipse'); if(!name)return; const role=prompt('Função da unidade:','Contenção / Extração / Demolição'); const note=prompt('Registro operacional:',''); const d=currentMercadoData(); d.forceTasks.push({name,role,note,emblem:taskEmblem(name)}); renderMercado(d); };
-  window.removeMercadoTask=function(i){ const d=currentMercadoData(); d.forceTasks.splice(i,1); renderMercado(d); };
-
-  const oldSelectClass = window.selectClass;
-  window.selectClass=function(className, skipAutofill=false){
-    const r=oldSelectClass.apply(this,arguments);
-    if(className==='Mercador da Morte') renderMercado(window.__mmDraft);
-    return r;
-  };
-  const oldSaveCharacter=window.saveCharacter;
-  window.saveCharacter=function(e){
-    const wasIndex=editingIndex;
-    if(currentClass==='Mercador da Morte'){
-      const d=currentMercadoData();
-      d.stamina.current=Number(document.getElementById('mm-stamina-current')?.value||d.stamina.current||0);
-      d.stamina.max=Number(document.getElementById('mm-stamina-max')?.value||d.stamina.max||0);
-      window.__mmDraft=d;
-    }
-    const result=oldSaveCharacter.apply(this,arguments);
-    try{
-      const savedIndex=wasIndex!==null && wasIndex!==undefined ? wasIndex : characters.length-1;
-      if(characters[savedIndex]){
-        if(currentClass==='Mercador da Morte') characters[savedIndex].mercadoDaMorte=JSON.parse(JSON.stringify(window.__mmDraft));
-        characters[savedIndex].alchemyIngredientValues=JSON.parse(JSON.stringify(window.__alchemyIngredientValues||{}));
-        saveGlobalCharacters();
-      }
-    }catch(err){ console.warn('[Mundos Sombrios] Dados refinados não puderam ser persistidos:',err); }
-    return result;
-  };
-  const oldBuildPayload=window.buildCharacterPayloadFromBuilder;
-  if(typeof oldBuildPayload==='function') window.buildCharacterPayloadFromBuilder=function(){ const p=oldBuildPayload.apply(this,arguments); if(currentClass==='Mercador da Morte') p.mercadoDaMorte=JSON.parse(JSON.stringify(window.__mmDraft)); return p; };
-  const oldLoad=window.loadCharacterToBuilder;
-  if(typeof oldLoad==='function') window.loadCharacterToBuilder=function(){ const r=oldLoad.apply(this,arguments); const ch=(arguments[1]||characters)[arguments[0]]; initMercadoData(ch?.mercadoDaMorte||{stamina:{current:0,max:0},maneuvers:[],arsenal:[],forceTasks:[]}); if(currentClass==='Mercador da Morte')renderMercado(window.__mmDraft); return r; };
+  // Mercado da Morte: legacy v0.12 renderer/data hooks removed.
+  // Canonical ownership is v0.16 (renderMerc16 + normalizeMerc16 + persistence hooks).
 
   // ---------- Cards: class/expansion symbol, not 3D cube; cross-mode opening ----------
   const symbolMap={
@@ -664,139 +588,8 @@ window.ENVOLTO_RITUALS_CANONICAL_SOURCE = 'A corrupção antológica O Envolto �
 /* ===== END v012-update.js ===== */
 
 /* ===== BEGIN v013-update.js ===== */
-
-
 (function(){
   'use strict';
-  const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const safe=(v)=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-
-  // ================================================================
-  // MERCADOR DA MORTE — CANONICAL MANEUVERS FROM OCULTATON BASE
-  // ================================================================
-  const CANONICAL_MERCADOR_MANEUVERES=[
-    {id:'deslocamento-tatico',name:'Deslocamento Tático',cost:'1 EP',type:'Ação rápida',icon:'↝',effect:'Como ação rápida, você se move metade do seu deslocamento sem provocar ataques de oportunidade.'},
-    {id:'golpe-brutal',name:'Golpe Brutal',cost:'2 EP',type:'Ataque',icon:'╳',effect:'Ao atingir um ataque, você adiciona um dado extra de dano da arma e empurra o alvo 3 metros.'},
-    {id:'contra-ataque-reflexo',name:'Contra-Ataque Reflexo',cost:'3 EP',type:'Reação',icon:'⟳',effect:'Quando um inimigo erra um ataque corpo a corpo contra você, você gasta uma Reação para realizar um ataque completo imediato.'},
-    {id:'fôlego-de-sobrevivência',name:'Fôlego de Sobrevivência',cost:'2 EP',type:'Ação padrão',icon:'◒',effect:'Como ação padrão, você ignora as penalidades da Espiral de Condições por 1d4 rodadas.'}
-  ];
-
-  // The base book establishes that Mercadores operate in Task Forces but does not
-  // provide a named/described catalogue. The site already had these operational
-  // units in its equipment catalogue, so v0.13 exposes them as site-operational
-  // selections without claiming they are book-canon.
-  const SITE_FORCE_TASKS=[
-    {id:'alfa-01',code:'ALFA-01',name:'Os Ceifadores',description:'Infiltração, eliminação silenciosa e apagamento de rastros em operações urbanas.',maneuvers:['Silenciamento de Assinatura — neutralização acústica e identificação reduzida.','Marca Fantasma — marca um alvo para rastreamento até o fim da cena.','Apagamento de Cena — remoção de digitais, sangue, resíduos de EP e registros simples.'],shape:'shield-cross'},
-    {id:'sigma-33',code:'SIGMA-33',name:'Os Predadores',description:'Caça especializada a entidades anômalas e alvos com regeneração.',maneuvers:['Munição de Linhagem — pressão ofensiva contra criaturas anômalas.','Rompimento de Regeneração — interrompe regeneração do alvo até o próximo turno.','Rastro de Caça — apoio de investigação e sobrevivência para rastreamento anômalo.'],shape:'wolf-chevron'},
-    {id:'ecta-44',code:'ECTA-44',name:'Os Últimos Caçadores',description:'Contenção de entidades infernais, pactos e manifestações de origem demoníaca.',maneuvers:['Cinza Consagrada — reforço de dano contra entidades infernais.','Quebra-Pacto — reduz resistência espiritual após acerto.','Selo de Ruptura — bloqueio de possessão, invocação, teleporte infernal e fuga planar menor.'],shape:'cross-flame'},
-    {id:'c137',code:'C-137',name:'Os Desbravadores do Além',description:'Exploração de anomalias espaciais e temporais e navegação de zonas de cisma.',maneuvers:['Penetração Dimensional — ataque que ignora cobertura física comum.','Fase Instável — desestabiliza a Defesa Passiva do alvo contra o próximo ataque.','Âncora Temporal — bloqueia teleporte, deslocamento ou arrastamento temporal por 1 rodada.'],shape:'compass-star'},
-    {id:'sigma-02',code:'SIGMA-02',name:'Os Bate-Estaca',description:'Equipe de choque especializada em alvos grandes, blindados ou difíceis de imobilizar.',maneuvers:['Perfurador de Colosso — pressão ofensiva contra criaturas Grandes ou superiores.','Âncora Cinética — reduz deslocamento do alvo atingido.','Lança-Âncora — prende uma criatura Grande a uma estrutura.'],shape:'anchor-fortress'},
-    {id:'epsilon-00',code:'EPSILON-00',name:'Mente Sã',description:'Suporte psicológico, estabilização de agentes e gestão de lacunas mentais.',maneuvers:['Injeção de Calma — remoção de Estresse ou reforço de Vontade.','Kit de Lacuna — operação de apagamento seletivo de memória.','Triagem Mental — classificação e contenção de agentes sob colapso psicológico.'],shape:'brain-chevron'},
-    {id:'delta-02',code:'DELTA-02',name:'Olho do Saber',description:'Inteligência, infiltração, identidade operacional e redução de rastros forenses.',maneuvers:['Assinatura Limpa — dificultar investigação balística.','Arma de Serviço — camuflagem visual de armamento leve.','Máscara Biométrica — evasão de reconhecimento e identificação.'],shape:'eye-spear'},
-    {id:'tânatos-01',code:'TÂNATOS-01',name:'Os Coveiros',description:'Operações de contenção terminal, mortos-vivos e encerramento de manifestações persistentes.',maneuvers:['Cinza Terminal — pressão ofensiva contra mortos-vivos.','Não Retorne — impedir reanimação simples de um morto-vivo derrotado até o fim da cena.','Caixa de Sepultamento — selar restos, objetos ou manifestações menores.'],shape:'skull-shield'},
-    {id:'omega-01',code:'ÔMEGA-01',name:'O Relicário',description:'Custódia, armazenamento e transporte seguro de componentes e objetos anômalos de baixa Capacidade.',maneuvers:['Maleta de Selagem — contenção de objeto anômalo pequeno.','Custódia de Componente — transporte de documentos, amostras e artefatos de baixa Capacidade.','Chave do Pináculo — acesso operacional a armazenamento autorizado quando disponível.'],shape:'relic-vault'}
-  ];
-
-  function insigniaSvg(task){
-    const s=task?.shape||'shield-cross';
-    const common='viewBox="0 0 64 64" aria-hidden="true" focusable="false"';
-    const map={
-      'shield-cross':`<path d="M8 10h48v24c0 11-10 18-24 22C18 52 8 45 8 34V10Z"/><path d="M32 17v30M20 29h24"/>`,
-      'wolf-chevron':`<path d="M10 17l10 6 12-10 12 10 10-6-5 20-17 15L15 37 10 17Z"/><path d="M22 32h20M25 37h14"/>`,
-      'cross-flame':`<path d="M32 7v50M14 25h36"/><path d="M24 14c-4 8 4 9 0 15-5 7 1 16 8 18 7-2 13-9 8-18-4-6 4-7 0-15"/>`,
-      'compass-star':`<circle cx="32" cy="32" r="23"/><path d="M32 11l5 16 16 5-16 5-5 16-5-16-16-5 16-5 5-16Z"/>`,
-      'anchor-fortress':`<path d="M32 8v34M21 18h22M15 42c5 9 12 13 17 13s12-4 17-13M24 8h16"/><path d="M13 24h38"/>`,
-      'brain-chevron':`<path d="M22 15c-8 0-10 12-4 16-7 4-4 16 4 16 3 7 10 5 10 1V20c0-4-3-5-10-5ZM42 15c8 0 10 12 4 16 7 4 4 16-4 16-3 7-10 5-10 1V20c0-4 3-5 10-5Z"/><path d="M21 29h22"/>`,
-      'eye-spear':`<path d="M8 32s10-14 24-14 24 14 24 14-10 14-24 14S8 32 8 32Z"/><circle cx="32" cy="32" r="7"/><path d="M32 8v10M32 46v10"/>`,
-      'skull-shield':`<path d="M9 11h46v25c0 11-9 18-23 24C18 54 9 47 9 36V11Z"/><circle cx="24" cy="32" r="4"/><circle cx="40" cy="32" r="4"/><path d="M24 42h16M28 46h8"/>`,
-      'relic-vault':`<rect x="10" y="10" width="44" height="44" rx="5"/><path d="M20 20h24v24H20zM28 26h8v12h-8z"/><path d="M32 10v10M32 44v10"/>`
-    };
-    return `<span class="task-insignia task-insignia-${esc(s)}"><svg ${common} fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${map[s]||map['shield-cross']}</svg></span>`;
-  }
-  function oldEmblemFallback(name){ const h=[...String(name||'')].reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,0); return Math.abs(h)%360; }
-
-  function normalizeMercado(d){
-    const source=d||{};
-    const canonical=Array.isArray(source.maneuvers)?source.maneuvers:[];
-    const selected=Array.isArray(source.selectedManeuverIds)?source.selectedManeuverIds:CANONICAL_MERCADOR_MANEUVERES.map(x=>x.id);
-    return {
-      stamina:{current:Number(source?.stamina?.current||0),max:Number(source?.stamina?.max||0)},
-      selectedManeuverIds:[...new Set(selected)],
-      maneuvers:canonical.filter(x=>x.id&&!CANONICAL_MERCADOR_MANEUVERES.some(c=>c.id===x.id) || x.custom).map(x=>({...x})),
-      arsenal:Array.isArray(source.arsenal)?JSON.parse(JSON.stringify(source.arsenal)):[],
-      forceTasks:Array.isArray(source.forceTasks)?JSON.parse(JSON.stringify(source.forceTasks)):[]
-    };
-  }
-  window.__mmDraft=normalizeMercado(window.__mmDraft);
-
-  function renderMercadoV13(d){
-    if(typeof currentClass==='undefined'||currentClass!=='Mercador da Morte')return;
-    const host=document.getElementById('specific-content-container'); if(!host)return;
-    let panel=document.getElementById('death-market-panel');
-    if(!panel){ panel=document.createElement('section'); panel.id='death-market-panel'; panel.className='death-market-panel'; host.appendChild(panel); }
-    const data=window.__mmDraft=normalizeMercado(d);
-    const canon=data.selectedManeuverIds||[];
-    const selectedTasks=data.forceTasks||[];
-    panel.innerHTML=`
-      <div class="death-market-head"><div><span class="eyebrow">AGENTE DE CARREIRA · MERCADO DA MORTE</span><h4>Registro Operacional</h4><p>Estamina, catálogo de manobras, arsenal e designação de Força-Tarefa em módulos independentes.</p></div><div class="death-market-seal">☠</div></div>
-      <div class="death-market-grid">
-        <section class="death-module bio-battery-module"><div class="module-icon bio-battery"><span></span><b>+</b></div><div><span class="module-kicker">ESTAMINA</span><h5>Bio-Bateria</h5><small>Reserva física e condicionamento pós-Sala Branca.</small></div><div class="battery-display"><div class="battery-cell"><div class="battery-fill" style="height:${Math.max(0,Math.min(100,Number(data.stamina.current||0)/(Number(data.stamina.max||1))*100))}%"></div></div><div class="battery-values"><label>Atual<input id="mm-stamina-current" type="number" min="0" value="${Number(data.stamina.current||0)}"></label><label>Máxima<input id="mm-stamina-max" type="number" min="0" value="${Number(data.stamina.max||0)}"></label></div></div></section>
-        <section class="death-module maneuver-module"><div class="module-title"><div class="module-icon movement">↯</div><div><span class="module-kicker">CATÁLOGO CANÔNICO</span><h5>Manobras</h5></div><button type="button" class="souls-btn small-btn hide-on-view" onclick="openMercadorManeuverCatalog()">☷ Catálogo</button></div>
-          <div class="canonical-maneuver-grid">${CANONICAL_MERCADOR_MANEUVERES.map(m=>`<article class="canonical-maneuver ${canon.includes(m.id)?'is-selected':''}"><div class="movement-symbol">${m.icon}</div><div><b>${esc(m.name)}</b><small>${esc(m.type)} · ${esc(m.cost)}</small><p>${esc(m.effect)}</p></div><button type="button" class="souls-btn tiny-btn hide-on-view" onclick="toggleMercadorManeuver('${esc(m.id)}')">${canon.includes(m.id)?'REGISTRADA':'REGISTRAR'}</button></article>`).join('')}</div>
-          ${data.maneuvers.map((m,i)=>`<article class="movement-entry custom-maneuver"><div class="movement-symbol">${esc(m.icon||'↝')}</div><div><b>${esc(m.name||'Manobra personalizada')}</b><small>${esc(m.type||'Personalizada')} · ${esc(m.cost||'')}</small><p>${esc(m.note||'')}</p></div><button type="button" class="hide-on-view movement-remove" onclick="removeMercadoManeuver(${i})">×</button></article>`).join('')}
-        </section>
-        <section class="death-module briefcase-module"><div class="module-title"><div class="module-icon briefcase">▣</div><div><span class="module-kicker">EQUIPAMENTO</span><h5>Arsenal</h5></div><button type="button" class="souls-btn small-btn hide-on-view" onclick="addMercadoArsenal()">＋ Item</button></div><div id="mm-arsenal" class="weapon-case">${data.arsenal.map((a,i)=>`<article class="case-slot"><div class="weapon-mini">${esc(a.icon||'▰')}</div><div><b>${esc(a.name||'Arma')}</b><small>${esc(a.kind||'Equipamento')} · ${esc(a.ammo||'')}</small><p>${esc(a.note||'')}</p></div><button class="hide-on-view movement-remove" onclick="removeMercadoArsenal(${i})">×</button></article>`).join('')||'<div class="market-empty">Maleta vazia.</div>'}</div></section>
-        <section class="death-module task-module"><div class="module-title"><div class="module-icon task">⌬</div><div><span class="module-kicker">COMANDO</span><h5>Força-Tarefa</h5></div><button type="button" class="souls-btn small-btn hide-on-view" onclick="openMercadorForceTaskCatalog()">＋ Selecionar</button></div><div class="force-task-source-note"><b>Catálogo operacional do site</b><span>O livro-base confirma a operação em Forças-Tarefa, mas não fornece nomes, descrições ou manobras de unidades.</span></div><div id="mm-tasks" class="task-registry">${selectedTasks.map((t,i)=>`<article class="task-entry"><div class="task-badge">${t.insignia||insigniaSvg(t)}</div><div><b>${esc(t.code||'')}</b> <span class="task-name-inline">${esc(t.name||'Força-Tarefa')}</span><small>${esc(t.description||t.role||'Unidade operacional')}</small><div class="task-maneuver-list">${(t.maneuvers||[]).map(x=>`<span>${esc(x)}</span>`).join('')}</div></div><button class="hide-on-view movement-remove" onclick="removeMercadoTask(${i})">×</button></article>`).join('')||'<div class="market-empty">Nenhuma força-tarefa designada.</div>'}</div></section>
-      </div>`;
-  }
-
-  window.initMercadoData=function(data){
-    const src=normalizeMercado(data);
-    if(!Array.isArray(data?.selectedManeuverIds)) src.selectedManeuverIds=CANONICAL_MERCADOR_MANEUVERES.map(x=>x.id);
-    window.__mmDraft=src; renderMercadoV13(src);
-  };
-  window.toggleMercadorManeuver=function(id){ const d=normalizeMercado(window.__mmDraft); const i=d.selectedManeuverIds.indexOf(id); if(i>=0)d.selectedManeuverIds.splice(i,1); else d.selectedManeuverIds.push(id); window.__mmDraft=d; renderMercadoV13(d); };
-  window.removeMercadoManeuver=function(i){ const d=normalizeMercado(window.__mmDraft); d.maneuvers.splice(i,1); window.__mmDraft=d; renderMercadoV13(d); };
-  window.addMercadoManeuver=function(){ const name=prompt('Nome da manobra personalizada:',''); if(!name)return; const type=prompt('Tipo de movimento:','Ação / Reação / Movimento'); const icon=prompt('Ícone da manobra:','↝'); const note=prompt('Registro da manobra:',''); const d=normalizeMercado(window.__mmDraft); d.maneuvers.push({name,type,icon,note,custom:true}); window.__mmDraft=d; renderMercadoV13(d); };
-  window.openMercadorManeuverCatalog=function(){
-    let modal=document.getElementById('mercador-maneuver-modal'); if(!modal){modal=document.createElement('div');modal.id='mercador-maneuver-modal';modal.className='v13-modal';document.body.appendChild(modal);}
-    modal.innerHTML=`<div class="v13-modal-card"><header><div><span class="eyebrow">LIVRO-BASE · OCULTATON</span><h3>Manobras do Mercador da Morte</h3><p>As quatro manobras explicitamente listadas no texto da classe.</p></div><button class="v13-modal-close" onclick="document.getElementById('mercador-maneuver-modal').remove()">×</button></header><div class="v13-catalog-grid">${CANONICAL_MERCADOR_MANEUVERES.map(m=>`<article class="v13-catalog-card"><div class="catalog-icon">${m.icon}</div><div><b>${esc(m.name)}</b><small>${esc(m.type)} · ${esc(m.cost)}</small><p>${esc(m.effect)}</p></div><button class="souls-btn small-btn" onclick="toggleMercadorManeuver('${m.id}');openMercadorManeuverCatalog()">${window.__mmDraft.selectedManeuverIds.includes(m.id)?'REGISTRADA':'REGISTRAR'}</button></article>`).join('')}</div><footer><small>Nota de fonte: o livro-base usa “EP” nos custos desta tabela, embora a própria classe defina Estamina como seu recurso de combate.</small></footer></div>`;
-  };
-
-  function taskCardHtml(t,selected){return `<article class="force-task-option ${selected?'selected':''}"><div class="force-task-insignia">${insigniaSvg(t)}</div><div class="force-task-copy"><div class="force-task-code">${esc(t.code)}</div><h4>${esc(t.name)}</h4><p>${esc(t.description)}</p><div class="force-task-maneuvers">${t.maneuvers.map(m=>`<span>${esc(m)}</span>`).join('')}</div></div><button type="button" class="souls-btn small-btn" onclick="selectMercadorForceTask('${t.id}')">${selected?'DESIGNADA':'DESIGNAR'}</button></article>`;}
-  window.openMercadorForceTaskCatalog=function(){
-    let modal=document.getElementById('mercador-task-modal'); if(!modal){modal=document.createElement('div');modal.id='mercador-task-modal';modal.className='v13-modal';document.body.appendChild(modal);}
-    const current=new Set((window.__mmDraft.forceTasks||[]).map(t=>t.id));
-    modal.innerHTML=`<div class="v13-modal-card v13-task-modal"><header><div><span class="eyebrow">MERCADO DA MORTE · FORÇAS-TAREFA</span><h3>Seleção Operacional</h3><p>Insígnias militares distintas e perfis operacionais do catálogo atual do site.</p></div><button class="v13-modal-close" onclick="document.getElementById('mercador-task-modal').remove()">×</button></header><div class="force-task-catalog">${SITE_FORCE_TASKS.map(t=>taskCardHtml(t,current.has(t.id))).join('')}</div><footer><small>O livro-base confirma a existência de Forças-Tarefa, mas não nomeia as unidades; estas entradas preservam o catálogo operacional que já existia no site.</small></footer></div>`;
-  };
-  window.selectMercadorForceTask=function(id){ const t=SITE_FORCE_TASKS.find(x=>x.id===id); if(!t)return; const d=normalizeMercado(window.__mmDraft); const i=d.forceTasks.findIndex(x=>x.id===id); if(i>=0)d.forceTasks.splice(i,1); else d.forceTasks.push({...t,insignia:insigniaSvg(t),emblemHue:oldEmblemFallback(t.id)}); window.__mmDraft=d; const modal=document.getElementById('mercador-task-modal'); if(modal)modal.remove(); renderMercadoV13(d); };
-  window.removeMercadoTask=function(i){ const d=normalizeMercado(window.__mmDraft); d.forceTasks.splice(i,1); window.__mmDraft=d; renderMercadoV13(d); };
-  window.addMercadoArsenal=function(){ const name=prompt('Nome do item/arma:',''); if(!name)return; const kind=prompt('Categoria:','Arma de Fogo'); const ammo=prompt('Munição/cargas:',''); const icon=prompt('Símbolo do item:','▰'); const note=prompt('Observações:',''); const d=normalizeMercado(window.__mmDraft); d.arsenal.push({name,kind,ammo,icon,note}); window.__mmDraft=d; renderMercadoV13(d); };
-  window.removeMercadoArsenal=function(i){ const d=normalizeMercado(window.__mmDraft); d.arsenal.splice(i,1); window.__mmDraft=d; renderMercadoV13(d); };
-
-  const prevSave=window.saveCharacter;
-  window.saveCharacter=function(e){
-    if(currentClass==='Mercador da Morte'){
-      const d=normalizeMercado(window.__mmDraft); d.stamina.current=Number(document.getElementById('mm-stamina-current')?.value||d.stamina.current||0); d.stamina.max=Number(document.getElementById('mm-stamina-max')?.value||d.stamina.max||0); window.__mmDraft=d;
-    }
-    const res=prevSave.apply(this,arguments);
-    try{
-      const builder=document.getElementById('screen-builder');
-      if(builder?.classList.contains('overlay')&&typeof isVttGM!=='undefined'&&isVttGM&&typeof tablePlayers!=='undefined'&&editingIndex!==null&&tablePlayers[editingIndex]) return res;
-      const idx=editingIndex!==null&&editingIndex!==undefined?editingIndex:characters.length-1;
-      if(typeof characters!=='undefined'&&characters[idx]&&currentClass==='Mercador da Morte') characters[idx].mercadoDaMorte=JSON.parse(JSON.stringify(window.__mmDraft));
-      if(typeof characters!=='undefined'&&characters[idx]){ delete characters[idx].alchemyIngredientValues; saveGlobalCharacters(); }
-    }catch(err){console.warn('[Mundos Sombrios v0.13] persistência pós-salvamento:',err)}
-    return res;
-  };
-  const prevBuild=window.buildCharacterPayloadFromBuilder;
-  if(typeof prevBuild==='function') window.buildCharacterPayloadFromBuilder=function(){const p=prevBuild.apply(this,arguments);if(currentClass==='Mercador da Morte')p.mercadoDaMorte=JSON.parse(JSON.stringify(normalizeMercado(window.__mmDraft)));delete p.alchemyIngredientValues;return p;};
-  const prevLoad=window.loadCharacterToBuilder;
-  if(typeof prevLoad==='function') window.loadCharacterToBuilder=function(){const res=prevLoad.apply(this,arguments);const arr=arguments[1]||characters,idx=arguments[0],ch=arr[idx];window.initMercadoData(ch?.mercadoDaMorte||{}); if(currentClass==='Mercador da Morte')renderMercadoV13(window.__mmDraft); return res;};
-  const prevSelect=window.selectClass;
-  if(typeof prevSelect==='function')window.selectClass=function(className,skipAutofill){const res=prevSelect.apply(this,arguments);if(className==='Mercador da Morte'){if(!window.__mmDraft?.selectedManeuverIds?.length)window.__mmDraft.selectedManeuverIds=CANONICAL_MERCADOR_MANEUVERES.map(x=>x.id);renderMercadoV13(window.__mmDraft);}return res;};
-
-  // ================================================================
   // ALQUERINO — ONE GLOBAL STOCK CONTROL, keep per-item quantity fields
   // ================================================================
   const prevRenderIngredientLibrary=window.renderAlchemyIngredientLibrary;
@@ -823,257 +616,12 @@ window.ENVOLTO_RITUALS_CANONICAL_SOURCE = 'A corrupção antológica O Envolto �
     if(typeof window.renderAlchemyIngredientLibrary==='function')window.renderAlchemyIngredientLibrary();
   };
 
-  // ================================================================
-  // CARD SYMBOLS — a little larger, themed motion per class/expansion
-  // ================================================================
-  const SYMBOL_META={
-    mercador:{glyph:'⚔',label:'Mercador da Morte'},carrasco:{glyph:'☩',label:'Carrasco Cinzento'},alquerino:{glyph:'⚗',label:'Alquerino'},hermetico:{glyph:'☿',label:'Hermético'},taumaturgico:{glyph:'✦',label:'Taumatúrgico'},esoterico:{glyph:'◈',label:'Esotérico'},envolto:{glyph:'∅',label:'O Envolto'},arauto:{glyph:'◌',label:'Arauto'},tocado:{glyph:'◒',label:'Tocado'},condenado:{glyph:'⟁',label:'Condenado'},ordem:{glyph:'✧',label:'Ordem dos Sete'},linhagem:{glyph:'🧬',label:'Linhagem Herdada'},player:{glyph:'⌘',label:'Projeto Player'},aprimorador:{glyph:'⟡',label:'Aprimorador'},exodo:{glyph:'◈',label:'Êxodo: Assimilação'},ocultatun:{glyph:'☉',label:'Ocultatun: Ecos'}
-  };
-  function symbolMeta(ch){
-    const c=safe(ch?.className),n=safe(ch?.nature); let key='';
-    if(c.includes('mercador'))key='mercador';else if(c.includes('carrasco'))key='carrasco';else if(c.includes('alquerino'))key='alquerino';else if(c.includes('hermetico'))key='hermetico';else if(c.includes('taumaturgico'))key='taumaturgico';else if(c.includes('esoterico'))key='esoterico';else if(c.includes('arauto'))key='arauto';else if(c.includes('tocado'))key='tocado';else if(c.includes('condenado'))key='condenado';else if(n.includes('envo'))key='envolto';else if(n.includes('ordem'))key='ordem';else if(n.includes('linhagem'))key='linhagem';else if(n.includes('player'))key='player';else if(n.includes('aprimorador'))key='aprimorador';else if(ch?.mode==='exodo')key='exodo';else key='ocultatun';
-    return {...SYMBOL_META[key],key};
-  }
-  function decorateCardsV13(){
-    document.querySelectorAll('#character-list .card-wrapper').forEach((w,i)=>{
-      const ch=typeof characters!=='undefined'?characters[i]:null;if(!ch)return;
-      const host=w.querySelector('.card-3d-icon-wrapper');if(!host)return;
-      const meta=symbolMeta(ch);
-      host.innerHTML=`<div class="class-symbol-float symbol-${meta.key}" title="${esc(meta.label)}" aria-label="${esc(meta.label)}">${esc(meta.glyph)}</div>`;
-      host.dataset.symbolKey=meta.key;
-      const card=w.querySelector('.soul-card');
-      if(card){
-        const task=ch.mercadoDaMorte?.forceTasks?.[0];
-        let badge=card.querySelector('.force-task-card-badge');
-        if(task){
-          if(!badge){badge=document.createElement('div');badge.className='force-task-card-badge';card.appendChild(badge);}
-          badge.innerHTML=task.insignia||insigniaSvg(task);
-        }else if(badge)badge.remove();
-      }
-    });
-  }
-  const prevRenderChars=window.renderCharList;
-  if(typeof prevRenderChars==='function')window.renderCharList=function(){const r=prevRenderChars.apply(this,arguments);setTimeout(decorateCardsV13,0);return r;};
-  const prevUpdateCarousel=window.updateCarousel;
-  if(typeof prevUpdateCarousel==='function')window.updateCarousel=function(){const r=prevUpdateCarousel.apply(this,arguments);document.querySelectorAll('#character-list .card-wrapper').forEach(w=>w.style.display='block');decorateCardsV13();return r;};
-  const prevHandle=window.handleCardClick;
-  if(typeof prevHandle==='function')window.handleCardClick=function(index,wrapper){const result=prevHandle.apply(this,arguments);setTimeout(decorateCardsV13,360);return result;};
-
-  // Initial cleanup of the old v0.12 per-ingredient value controls.
-  document.querySelectorAll('#alchemy-ingredient-library .ingredient-value-field').forEach(n=>n.remove());
-  setTimeout(()=>{try{if(typeof window.renderAlchemyIngredientLibrary==='function')window.renderAlchemyIngredientLibrary();decorateCardsV13();}catch(e){console.warn('[Mundos Sombrios v0.13] init:',e)}},80);
 })();
-
 /* ===== END v013-update.js ===== */
 
-/* ===== BEGIN v014-update.js ===== */
 
 
-(function(){
-  'use strict';
-  const esc=(v)=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-  const RANKS=[
-    {id:'cadete',name:'Cadete de Limiar',patamar:'I',staminaBonus:6,salary:100,pe:'15 iniciais',symbol:'chevron-1'},
-    {id:'executor',name:'Executor de Silêncio',patamar:'I',staminaBonus:7,salary:150,pe:'+5 PE',symbol:'chevron-2'},
-    {id:'tenente',name:'Tenente da Queda',patamar:'II',staminaBonus:8,salary:225,pe:'+5 PE',symbol:'bars-2'},
-    {id:'capitao',name:'Capitão Sombrio',patamar:'II',staminaBonus:9,salary:325,pe:'+5 PE',symbol:'bars-3'},
-    {id:'mestre',name:'Mestre do Véu',patamar:'III',staminaBonus:10,salary:500,pe:'+5 PE',symbol:'star-shield'},
-    {id:'arauto',name:'Arauto da Morte',patamar:'IV',staminaBonus:12,salary:750,pe:'+5 PE',symbol:'eagle-skull'}
-  ];
-
-  const ARSENAL_ICONS={
-    pistol:{label:'Pistola',svg:'<path d="M8 27h29l8 6h11v8H39l-7-5H21v9h-7v-9H8z"/><path d="M39 27v-8h9v8"/>'},
-    rifle:{label:'Rifle',svg:'<path d="M5 29h25l8-5h21v7H39l-7 6H18l-6-5H5z"/><path d="M24 37l-4 10h-7l4-10"/>'},
-    shotgun:{label:'Escopeta',svg:'<path d="M5 29h42l12-5v9l-12-3H29l-8 6H13l4-7H5z"/>'},
-    blade:{label:'Lâmina',svg:'<path d="M7 39l35-22 15-2-10 12-34 19z"/><path d="M13 45l8-2"/>'},
-    grenade:{label:'Granada',svg:'<path d="M24 17h16v7H24z"/><path d="M20 24h24l4 8-5 18H21l-5-18z"/><path d="M36 12v5"/>'},
-    armor:{label:'Armadura',svg:'<path d="M17 12l15-6 15 6v17c0 12-8 21-15 27-7-6-15-15-15-27z"/><path d="M32 17v27M24 29h16"/>'},
-    medkit:{label:'Kit médico',svg:'<rect x="10" y="16" width="44" height="34" rx="4"/><path d="M24 16v-5h16v5M22 33h20M32 23v20"/>'},
-    radio:{label:'Rádio',svg:'<rect x="15" y="12" width="34" height="40" rx="4"/><path d="M22 20h20M22 28h20M22 37h8M22 44h8M43 37h2M43 44h2"/><path d="M32 12L40 5"/>'},
-    scanner:{label:'Scanner',svg:'<rect x="12" y="10" width="40" height="44" rx="5"/><path d="M21 20h22M21 29h22M21 38h14M21 47h22"/>'},
-    artifact:{label:'Artefato',svg:'<path d="M32 7l6 12 13 2-9 9 2 13-12-6-12 6 2-13-9-9 13-2z"/><circle cx="32" cy="30" r="5"/>'},
-    device:{label:'Dispositivo',svg:'<rect x="9" y="14" width="46" height="35" rx="5"/><circle cx="21" cy="31" r="5"/><path d="M31 25h16M31 32h16M31 39h10"/>'},
-    ammo:{label:'Munição',svg:'<path d="M20 9h10v46H20zM35 9h10v46H35z"/><path d="M20 9l5-4 5 4M35 9l5-4 5 4"/>'}
-  };
-
-  function rankSymbol(rank){
-    const s=rank?.symbol||'chevron-1';
-    const m={
-      'chevron-1':'<path d="M10 17l22 30 22-30-22 13z"/>',
-      'chevron-2':'<path d="M9 15l23 30 23-30-23 13z"/><path d="M9 27l23 30 23-30-23 13z"/>',
-      'bars-2':'<path d="M14 13h36v8H14zM14 29h36v8H14z"/><path d="M20 46h24"/>',
-      'bars-3':'<path d="M11 10h42v8H11zM11 25h42v8H11zM11 40h42v8H11z"/>',
-      'star-shield':'<path d="M12 12h40v25c0 10-8 16-20 21-12-5-20-11-20-21z"/><path d="M32 17l4 8 9 1-7 6 2 9-8-4-8 4 2-9-7-6 9-1z"/>',
-      'eagle-skull':'<path d="M8 17l15 7 9-12 9 12 15-7-7 19 7 11-16-4-8 13-8-13-16 4 7-11z"/><circle cx="27" cy="33" r="3"/><circle cx="37" cy="33" r="3"/><path d="M28 42h8"/>'
-    };
-    return `<span class="rank-insignia rank-${esc(s)}"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${m[s]||m['chevron-1']}</svg></span>`;
-  }
-
-  function iconSvg(key){ const d=ARSENAL_ICONS[key]||ARSENAL_ICONS.device; return `<span class="arsenal-mini-icon"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${d.svg}</svg></span>`; }
-  function normalize(d){
-    const src=d||{};
-    const rankId=src.rankId||'cadete';
-    const rank=RANKS.find(r=>r.id===rankId)||RANKS[0];
-    return {
-      ...src,
-      rankId:rank.id,
-      salary:Number(src.salary??rank.salary),
-      operationalCO:Number(src.operationalCO??src.co??0),
-      arsenal:Array.isArray(src.arsenal)?JSON.parse(JSON.stringify(src.arsenal)):[]
-    };
-  }
-  function getDraft(){ return normalize(window.__mmDraft); }
-  function saveDraft(d){ window.__mmDraft=normalize(d); if(typeof renderMercadoV14==='function')renderMercadoV14(window.__mmDraft); }
-
-  function rankBlock(d){
-    const r=RANKS.find(x=>x.id===d.rankId)||RANKS[0];
-    return `<section class="death-module rank-module">
-      <div class="rank-main">${rankSymbol(r)}<div><span class="module-kicker">AUTORIZAÇÃO OPERACIONAL</span><h5>${esc(r.name)}</h5><small>Patamar ${esc(r.patamar)} · Bônus de Estamina +${r.staminaBonus} · ${esc(r.pe)}</small></div></div>
-      <div class="rank-fields"><label>Patente<select id="mm-rank">${RANKS.map(x=>`<option value="${x.id}" ${x.id===r.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label><div class="rank-salary"><span>SALÁRIO</span><b>${r.salary} CO</b><small>por Ciclo Operacional</small></div><label>Salário atual<input id="mm-salary" type="number" min="0" value="${Number(d.salary)}"></label><label>CO disponível<input id="mm-co" type="number" min="0" value="${Number(d.operationalCO)}"></label></div>
-    </section>`;
-  }
-
-  function arsenalHtml(d){
-    return `<section class="death-module arsenal-v14-module"><div class="module-title"><div class="module-icon briefcase">▣</div><div><span class="module-kicker">ARSENAL DE ASSINATURA</span><h5>Maleta Operacional</h5><small>Monte, reorganize e edite todo o arsenal no mesmo lugar.</small></div><button type="button" class="souls-btn small-btn hide-on-view" onclick="openMercadorArsenalWorkbench()">▣ Abrir Maleta</button></div><div class="arsenal-v14-grid">${d.arsenal.map((a,i)=>`<article class="arsenal-v14-item" data-index="${i}"><button class="arsenal-edit-overlay hide-on-view" onclick="openMercadorArsenalWorkbench(${i})">Editar</button>${iconSvg(a.iconKey||'device')}<div class="arsenal-v14-copy"><b>${esc(a.name||'Item sem nome')}</b><small>${esc(a.kind||'Equipamento')} ${a.ammo?`· ${esc(a.ammo)}`:''}</small><p>${esc(a.note||'Sem observações.')}</p></div></article>`).join('')||'<div class="market-empty">A maleta está vazia. Abra a bancada para montar seu arsenal.</div>'}</div></section>`;
-  }
-
-  window.renderMercadoV14=function(d){
-    if(typeof currentClass==='undefined'||currentClass!=='Mercador da Morte')return;
-    const panel=document.getElementById('death-market-panel'); if(!panel)return;
-    const data=normalize(d); window.__mmDraft=data;
-    const old=panel.querySelector('.v14-layer'); if(old)old.remove();
-    const layer=document.createElement('div'); layer.className='v14-layer';
-    layer.innerHTML=rankBlock(data)+arsenalHtml(data);
-    panel.appendChild(layer);
-    const rankEl=document.getElementById('mm-rank'); if(rankEl)rankEl.onchange=()=>{
-      const d=getDraft(); d.rankId=rankEl.value; const r=RANKS.find(x=>x.id===d.rankId)||RANKS[0]; d.salary=r.salary;
-      const vigInput=document.querySelector('#attr-vig, #attr-vigor, [name="vig"], [name="vigor"], #for-vig, #vig'); const vig=Number(vigInput?.value||0); d.stamina.max=Math.max(0,6+vig+r.staminaBonus); saveDraft(d);
-    };
-    ['mm-salary','mm-co'].forEach(id=>{const el=document.getElementById(id); if(el)el.onchange=()=>{const d=getDraft(); if(id==='mm-salary')d.salary=Number(el.value||0); else d.operationalCO=Number(el.value||0); window.__mmDraft=d;};});
-  };
-
-  window.openMercadorArsenalWorkbench=function(editIndex){
-    const d=getDraft(); let modal=document.getElementById('mercador-arsenal-workbench');
-    if(!modal){modal=document.createElement('div');modal.id='mercador-arsenal-workbench';modal.className='v14-modal';document.body.appendChild(modal);}
-    const items=d.arsenal;
-    function editorHtml(index){
-      const a=index>=0?(items[index]||{}):{};
-      return `<div class="arsenal-editor-form"><input type="hidden" id="ma-index" value="${index}"><div class="arsenal-preview">${iconSvg(a.iconKey||'device')}<span id="ma-preview-name">${esc(a.name||'Novo item')}</span></div><label>Nome<input id="ma-name" value="${esc(a.name||'')}" placeholder="Rifle, pistola, dispositivo..." oninput="document.getElementById('ma-preview-name').textContent=this.value||'Novo item'"></label><label>Categoria<input id="ma-kind" value="${esc(a.kind||'Arma de Fogo')}" placeholder="Arma / Dispositivo / Item"></label><label>Munição / Cargas<input id="ma-ammo" value="${esc(a.ammo||'')}" placeholder="6 cargas, 12 munições, N/A..."></label><label>Descrição / Efeito<textarea id="ma-note" rows="4">${esc(a.note||'')}</textarea></label><div class="arsenal-icon-picker">${Object.entries(ARSENAL_ICONS).map(([k,v])=>`<button type="button" class="arsenal-icon-choice ${k===(a.iconKey||'device')?'selected':''}" data-icon="${k}" title="${esc(v.label)}" onclick="pickMercadorArsenalIcon('${k}')">${iconSvg(k)}<small>${esc(v.label)}</small></button>`).join('')}</div><div class="modal-actions"><button type="button" class="souls-btn small-btn" onclick="saveMercadorArsenalItem()">Salvar item</button>${index>=0?`<button type="button" class="souls-btn small-btn danger" onclick="deleteMercadorArsenalItem(${index})">Remover</button>`:''}</div></div>`;
-    }
-    modal.innerHTML=`<div class="v14-modal-card"><header><div><span class="eyebrow">MERCADO DA MORTE · ARSENAL</span><h3>Maleta de Operações</h3><p>Monte o arsenal inteiro em uma única bancada e atribua uma miniatura temática a cada item.</p></div><button class="v13-modal-close" onclick="document.getElementById('mercador-arsenal-workbench').remove()">×</button></header><div class="arsenal-workbench-layout"><aside class="arsenal-case-list">${items.map((a,i)=>`<button type="button" class="arsenal-case-row ${i===editIndex?'active':''}" onclick="openMercadorArsenalWorkbench(${i})">${iconSvg(a.iconKey||'device')}<span><b>${esc(a.name||'Item')}</b><small>${esc(a.kind||'Equipamento')}</small></span></button>`).join('')||'<div class="market-empty">Nenhum item.</div>'}<button type="button" class="souls-btn small-btn arsenal-add-btn" onclick="openMercadorArsenalWorkbench(-1)">＋ Novo item</button></aside><main>${editorHtml(editIndex)}</main></div></div>`;
-    modal.dataset.iconKey=items[editIndex]?.iconKey||'device';
-  };
-  window.pickMercadorArsenalIcon=function(k){ const modal=document.getElementById('mercador-arsenal-workbench'); if(!modal)return; modal.dataset.iconKey=k; modal.querySelectorAll('.arsenal-icon-choice').forEach(b=>b.classList.toggle('selected',b.dataset.icon===k)); };
-  window.saveMercadorArsenalItem=function(){
-    const modal=document.getElementById('mercador-arsenal-workbench'); if(!modal)return; const i=Number(modal.querySelector('#ma-index')?.value??-1); const d=getDraft(); const item={name:document.getElementById('ma-name')?.value.trim()||'Item sem nome',kind:document.getElementById('ma-kind')?.value.trim()||'Equipamento',ammo:document.getElementById('ma-ammo')?.value.trim()||'',note:document.getElementById('ma-note')?.value.trim()||'',iconKey:modal.dataset.iconKey||'device'}; if(i>=0)d.arsenal[i]=item;else d.arsenal.push(item); window.__mmDraft=d; modal.remove(); renderMercadoV14(d);
-  };
-  window.deleteMercadorArsenalItem=function(i){const d=getDraft(); d.arsenal.splice(i,1); window.__mmDraft=d; document.getElementById('mercador-arsenal-workbench')?.remove(); renderMercadoV14(d);};
-
-  const prevInit=window.initMercadoData;
-  window.initMercadoData=function(data){ const src=typeof prevInit==='function'?prevInit(data):null; const merged=normalize(data); window.__mmDraft=merged; setTimeout(()=>window.renderMercadoV14(merged),0); return src; };
-  const prevSelect=window.selectClass;
-  if(typeof prevSelect==='function')window.selectClass=function(className,skipAutofill){const r=prevSelect.apply(this,arguments); if(className==='Mercador da Morte')setTimeout(()=>window.renderMercadoV14(window.__mmDraft),30); return r;};
-  const prevSave=window.saveCharacter;
-  if(typeof prevSave==='function')window.saveCharacter=function(){
-    if(typeof currentClass!=='undefined'&&currentClass==='Mercador da Morte'){
-      const d=getDraft(); const rank=RANKS.find(r=>r.id===d.rankId)||RANKS[0]; d.salary=Number(document.getElementById('mm-salary')?.value??d.salary??rank.salary); d.operationalCO=Number(document.getElementById('mm-co')?.value??d.operationalCO??0); d.rankId=rank.id; window.__mmDraft=d;
-    }
-    const result=prevSave.apply(this,arguments);
-    try{const idx=editingIndex!==null&&editingIndex!==undefined?editingIndex:(characters?.length-1); if(typeof characters!=='undefined'&&characters[idx]&&currentClass==='Mercador da Morte'){characters[idx].mercadoDaMorte=JSON.parse(JSON.stringify(window.__mmDraft)); saveGlobalCharacters();}}catch(e){console.warn('[v0.14] persistência Mercador:',e)}
-    return result;
-  };
-  const prevBuild=window.buildCharacterPayloadFromBuilder;
-  if(typeof prevBuild==='function')window.buildCharacterPayloadFromBuilder=function(){const p=prevBuild.apply(this,arguments);if(typeof currentClass!=='undefined'&&currentClass==='Mercador da Morte')p.mercadoDaMorte=JSON.parse(JSON.stringify(window.__mmDraft));return p;};
-  setTimeout(()=>{if(typeof currentClass!=='undefined'&&currentClass==='Mercador da Morte')window.renderMercadoV14(window.__mmDraft);},120);
-})();
-
-/* ===== END v014-update.js ===== */
-
-/* ===== BEGIN v015-update.js ===== */
-
-
-(function(){
-  'use strict';
-  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const safe=v=>String(v||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-
-  const MERC_RANKS=[
-    {id:'cadete',name:'Cadete de Limiar',patamar:'I',staminaBonus:6,salary:100,symbol:'chevron-1'},
-    {id:'executor',name:'Executor de Silêncio',patamar:'I',staminaBonus:7,salary:150,symbol:'chevron-2'},
-    {id:'tenente',name:'Tenente da Queda',patamar:'II',staminaBonus:8,salary:225,symbol:'bars-2'},
-    {id:'capitao',name:'Capitão Sombrio',patamar:'II',staminaBonus:9,salary:325,symbol:'bars-3'},
-    {id:'mestre',name:'Mestre do Véu',patamar:'III',staminaBonus:10,salary:500,symbol:'star-shield'},
-    {id:'arauto',name:'Arauto da Morte',patamar:'IV',staminaBonus:12,salary:750,symbol:'eagle-skull'}
-  ];
-  const MERC_MANEUVERES=[
-    {id:'deslocamento-tatico',name:'Deslocamento Tático',cost:'1 EP',type:'Ação rápida',icon:'↝',effect:'Como ação rápida, você se move metade do seu deslocamento sem provocar ataques de oportunidade.'},
-    {id:'golpe-brutal',name:'Golpe Brutal',cost:'2 EP',type:'Ataque',icon:'╳',effect:'Ao atingir um ataque, você adiciona um dado extra de dano da arma e empurra o alvo 3 metros.'},
-    {id:'contra-ataque-reflexo',name:'Contra-Ataque Reflexo',cost:'3 EP',type:'Reação',icon:'⟳',effect:'Quando um inimigo erra um ataque corpo a corpo contra você, você gasta uma Reação para realizar um ataque completo imediato.'},
-    {id:'fôlego-de-sobrevivência',name:'Fôlego de Sobrevivência',cost:'2 EP',type:'Ação padrão',icon:'◒',effect:'Como ação padrão, você ignora as penalidades da Espiral de Condições por 1d4 rodadas.'}
-  ];
-  const TASKS=(()=>{ try{return window.MUNDOS_SITE_FORCE_TASKS||[]}catch(_){return [];} })();
-  const taskFallback=[
-    ['ALFA-01','Os Ceifadores','Infiltração, eliminação silenciosa e apagamento de rastros.'],['SIGMA-33','Os Predadores','Caça especializada a entidades anômalas e alvos com regeneração.'],['ECTA-44','Os Últimos Caçadores','Contenção de entidades infernais, pactos e manifestações demoníacas.'],['C-137','Os Desbravadores do Além','Exploração de anomalias espaciais e temporais e zonas de cisma.'],['SIGMA-02','Os Bate-Estaca','Equipe de choque contra alvos grandes, blindados ou difíceis de imobilizar.'],['EPSILON-00','Mente Sã','Suporte psicológico e estabilização de agentes.'],['DELTA-02','Olho do Saber','Inteligência, infiltração e redução de rastros forenses.'],['TÂNATOS-01','Os Coveiros','Contenção terminal e encerramento de manifestações persistentes.'],['ÔMEGA-01','O Relicário','Custódia e transporte de componentes e objetos anômalos.']
-  ].map((x,i)=>({id:safe(x[0]),code:x[0],name:x[1],description:x[2],maneuvers:['Manobra operacional registrada pela unidade.'],shape:['shield-cross','wolf-chevron','cross-flame','compass-star','anchor-fortress','brain-chevron','eye-spear','skull-shield','relic-vault'][i]}));
-  const FORCE_TASKS=(TASKS.length?TASKS:taskFallback);
-  function rankInsignia(rank){
-    const map={
-      'chevron-1':'<path d="M10 17l22 30 22-30-22 13z"/>','chevron-2':'<path d="M9 15l23 30 23-30-23 13z"/><path d="M9 27l23 30 23-30-23 13z"/>','bars-2':'<path d="M14 13h36v8H14zM14 29h36v8H14z"/>','bars-3':'<path d="M11 10h42v8H11zM11 25h42v8H11zM11 40h42v8H11z"/>','star-shield':'<path d="M12 12h40v25c0 10-8 16-20 21-12-5-20-11-20-21z"/><path d="M32 17l4 8 9 1-7 6 2 9-8-4-8 4 2-9-7-6 9-1z"/>','eagle-skull':'<path d="M8 17l15 7 9-12 9 12 15-7-7 19 7 11-16-4-8 13-8-13-16 4 7-11z"/><circle cx="27" cy="33" r="3"/><circle cx="37" cy="33" r="3"/><path d="M28 42h8"/>'};
-    const s=map[rank?.symbol]||map['chevron-1']; return `<span class="v15-rank-insignia"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${s}</svg></span>`;
-  }
-  function normalizeMercador(d){
-    const s=d||{}, rankId=s.rankId||'cadete', r=MERC_RANKS.find(x=>x.id===rankId)||MERC_RANKS[0];
-    return {rankId:r.id,salary:Number(s.salary??r.salary),operationalCO:Number(s.operationalCO??s.co??0),stamina:{current:Number(s.stamina?.current||0),max:Number(s.stamina?.max||0)},selectedManeuverIds:Array.isArray(s.selectedManeuverIds)?[...new Set(s.selectedManeuverIds)]:MERC_MANEUVERES.map(m=>m.id),maneuvers:Array.isArray(s.maneuvers)?JSON.parse(JSON.stringify(s.maneuvers)):[],arsenal:Array.isArray(s.arsenal)?JSON.parse(JSON.stringify(s.arsenal)):[],forceTasks:Array.isArray(s.forceTasks)?JSON.parse(JSON.stringify(s.forceTasks)):[]};
-  }
-  function getMerc(){window.__mmDraft=normalizeMercador(window.__mmDraft);return window.__mmDraft;}
-  function saveMerc(d){window.__mmDraft=normalizeMercador(d); renderMercadorUnified();}
-
-  function taskInsignia(t){ const key=t?.shape||'shield-cross'; const m={
-    'shield-cross':'<path d="M8 10h48v24c0 11-10 18-24 22C18 52 8 45 8 34V10Z"/><path d="M32 17v30M20 29h24"/>','wolf-chevron':'<path d="M10 17l10 6 12-10 12 10 10-6-5 20-17 15L15 37 10 17Z"/><path d="M22 32h20"/>','cross-flame':'<path d="M32 7v50M14 25h36"/><path d="M24 14c-4 8 4 9 0 15-5 7 1 16 8 18 7-2 13-9 8-18-4-6 4-7 0-15"/>','compass-star':'<circle cx="32" cy="32" r="23"/><path d="M32 11l5 16 16 5-16 5-5 16-5-16-16-5 16-5 5-16Z"/>','anchor-fortress':'<path d="M32 8v34M21 18h22M15 42c5 9 12 13 17 13s12-4 17-13M24 8h16"/>','brain-chevron':'<path d="M22 15c-8 0-10 12-4 16-7 4-4 16 4 16 3 7 10 5 10 1V20c0-4-3-5-10-5ZM42 15c8 0 10 12 4 16 7 4 4 16-4 16-3 7-10 5-10 1V20c0-4 3-5 10-5Z"/>','eye-spear':'<path d="M8 32s10-14 24-14 24 14 24 14-10 14-24 14S8 32 8 32Z"/><circle cx="32" cy="32" r="7"/>','skull-shield':'<path d="M9 11h46v25c0 11-9 18-23 24C18 54 9 47 9 36V11Z"/><circle cx="24" cy="32" r="4"/><circle cx="40" cy="32" r="4"/><path d="M24 42h16"/>','relic-vault':'<rect x="10" y="10" width="44" height="44" rx="5"/><path d="M20 20h24v24H20zM28 26h8v12h-8z"/>'}; return `<span class="v15-task-insignia"><svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${m[key]||m['shield-cross']}</svg></span>`; }
-
-  const ICONS={pistol:'▰',rifle:'◫',shotgun:'▤',blade:'⌁',grenade:'◉',armor:'◇',medkit:'✚',radio:'⌁',scanner:'⌖',artifact:'✧',device:'▣',ammo:'••'};
-  function arsenalIcon(key){return `<span class="v15-arsenal-icon">${esc(ICONS[key]||ICONS.device)}</span>`;}
-
-  function renderMercadorUnified(){
-    if(typeof currentClass==='undefined'||currentClass!=='Mercador da Morte')return;
-    const host=document.getElementById('specific-content-container'); if(!host)return;
-    const d=getMerc(), r=MERC_RANKS.find(x=>x.id===d.rankId)||MERC_RANKS[0], ratio=d.stamina.max?Math.max(0,Math.min(100,d.stamina.current/d.stamina.max*100)):0;
-    const panel=document.getElementById('death-market-panel')||document.createElement('section'); panel.id='death-market-panel'; panel.className='death-market-panel'; host.appendChild(panel);
-    panel.innerHTML=`<div class="death-market-head"><div><span class="eyebrow">AGENTE DE CARREIRA · MERCADO DA MORTE</span><h4>Registro Operacional</h4><p>Patente, salário, bio-bateria, manobras, maleta de arsenal e Força-Tarefa coexistem na mesma janela.</p></div><div class="death-market-seal">☠</div></div>
-    <div class="death-market-grid v15-merchant-grid">
-      <section class="death-module v15-rank-panel"><div class="v15-rank-main">${rankInsignia(r)}<div><span class="module-kicker">AUTORIZAÇÃO OPERACIONAL</span><h5>${esc(r.name)}</h5><small>Patamar ${r.patamar} · +${r.staminaBonus} Estamina · Salário ${r.salary} CO/ciclo</small></div></div><div class="v15-rank-fields"><label>Patente<select id="v15-rank-select">${MERC_RANKS.map(x=>`<option value="${x.id}" ${x.id===r.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label><label>Salário atual<input id="v15-salary" type="number" min="0" value="${d.salary}"></label><label>CO disponível<input id="v15-co" type="number" min="0" value="${d.operationalCO}"></label></div></section>
-      <section class="death-module v15-battery"><div class="module-title"><div class="module-icon bio-battery"><span></span><b>+</b></div><div><span class="module-kicker">RECURSO DE CLASSE</span><h5>Bio-Bateria</h5><small>Estamina atual / máxima.</small></div></div><div class="v15-battery-body"><div class="v15-battery-cell"><div style="height:${ratio}%"></div></div><label>Atual<input id="v15-st-cur" type="number" min="0" value="${d.stamina.current}"></label><label>Máxima<input id="v15-st-max" type="number" min="0" value="${d.stamina.max}"></label></div></section>
-      <section class="death-module v15-maneuvers"><div class="module-title"><div class="module-icon movement">↯</div><div><span class="module-kicker">LIVRO-BASE · OCULTATUN</span><h5>Manobras</h5><small>As quatro manobras canônicas + registros personalizados.</small></div><button type="button" class="souls-btn small-btn" onclick="openMercadorManeuverCatalog()">☷ Catálogo</button></div><div class="v15-maneuver-list">${MERC_MANEUVERES.map(m=>`<article class="v15-man"><div class="v15-man-symbol">${m.icon}</div><div><b>${esc(m.name)}</b><small>${esc(m.type)} · ${esc(m.cost)}</small><p>${esc(m.effect)}</p></div><button class="souls-btn tiny-btn" onclick="toggleV15Maneuver('${m.id}')">${d.selectedManeuverIds.includes(m.id)?'REGISTRADA':'REGISTRAR'}</button></article>`).join('')}${d.maneuvers.map((m,i)=>`<article class="v15-man custom"><div class="v15-man-symbol">${esc(m.icon||'↝')}</div><div><b>${esc(m.name||'Manobra')}</b><small>${esc(m.type||'Personalizada')} · ${esc(m.cost||'')}</small><p>${esc(m.note||'')}</p></div><button class="movement-remove" onclick="removeV15CustomManeuver(${i})">×</button></article>`).join('')}</div></section>
-      <section class="death-module v15-arsenal"><div class="module-title"><div class="module-icon briefcase">▣</div><div><span class="module-kicker">MALETA OPERACIONAL</span><h5>Arsenal de Assinatura</h5><small>Abra a bancada e monte/edit toda a maleta sem sair desta janela.</small></div><button class="souls-btn small-btn" onclick="openV15ArsenalWorkbench()">▣ Abrir Maleta</button></div><div class="v15-arsenal-grid">${d.arsenal.map(a=>`<article class="v15-weapon-card">${arsenalIcon(a.iconKey||'device')}<div><b>${esc(a.name||'Item sem nome')}</b><small>${esc(a.kind||'Equipamento')} ${a.ammo?`· ${esc(a.ammo)}`:''}</small><p>${esc(a.note||'')}</p></div></article>`).join('')||'<div class="market-empty">Maleta vazia.</div>'}</div></section>
-      <section class="death-module v15-task"><div class="module-title"><div class="module-icon task">⌬</div><div><span class="module-kicker">COMANDO</span><h5>Força-Tarefa</h5><small>A designação permanece visível mesmo ao trocar a patente.</small></div><button class="souls-btn small-btn" onclick="openV15TaskCatalog()">＋ Selecionar</button></div><div class="v15-task-list">${d.forceTasks.map((t,i)=>`<article class="v15-task-card"><div>${taskInsignia(t)}</div><div><b>${esc(t.code||'')}</b> <strong>${esc(t.name||'Força-Tarefa')}</strong><small>${esc(t.description||'')}</small>${Array.isArray(t.maneuvers)?`<div class="v15-task-mans">${t.maneuvers.map(m=>`<span>${esc(m)}</span>`).join('')}</div>`:''}</div><button class="movement-remove" onclick="removeV15Task(${i})">×</button></article>`).join('')||'<div class="market-empty">Nenhuma força-tarefa designada.</div>'}</div></section>
-    </div>`;
-    document.getElementById('v15-rank-select').onchange=()=>{const nd=getMerc();nd.rankId=document.getElementById('v15-rank-select').value;const nr=MERC_RANKS.find(x=>x.id===nd.rankId)||MERC_RANKS[0];nd.salary=nr.salary;nd.stamina.max=Math.max(0,6+attrMod('vig')+nr.staminaBonus);saveMerc(nd);};
-    ['v15-salary','v15-co','v15-st-cur','v15-st-max'].forEach(id=>{const el=document.getElementById(id);if(el)el.oninput=()=>{const nd=getMerc();if(id==='v15-salary')nd.salary=Number(el.value||0);if(id==='v15-co')nd.operationalCO=Number(el.value||0);if(id==='v15-st-cur')nd.stamina.current=Number(el.value||0);if(id==='v15-st-max')nd.stamina.max=Number(el.value||0);window.__mmDraft=nd;};});
-  }
-  function attrMod(key){const id={vig:'attr-vig',int:'attr-int'}[key];const v=Number(document.getElementById(id)?.value||0);return Math.floor((v-3)/2);}
-  window.renderMercadoV14=renderMercadorUnified; window.renderMercadoV13=renderMercadorUnified;
-  window.initMercadoData=function(data){window.__mmDraft=normalizeMercador(data);renderMercadorUnified();};
-  window.toggleV15Maneuver=function(id){const d=getMerc();d.selectedManeuverIds=d.selectedManeuverIds.includes(id)?d.selectedManeuverIds.filter(x=>x!==id):[...d.selectedManeuverIds,id];saveMerc(d);};
-  window.removeV15CustomManeuver=i=>{const d=getMerc();d.maneuvers.splice(i,1);saveMerc(d);};
-  window.removeV15Task=i=>{const d=getMerc();d.forceTasks.splice(i,1);saveMerc(d);};
-  window.openMercadorManeuverCatalog=function(){let m=document.getElementById('v15-mer-man');if(!m){m=document.createElement('div');m.id='v15-mer-man';m.className='v15-modal';document.body.appendChild(m);}m.innerHTML=`<div class="v15-modal-card"><header><div><span class="eyebrow">LIVRO-BASE · OCULTATUN</span><h3>Catálogo de Manobras</h3><p>Quatro manobras explicitamente listadas para o Mercador da Morte.</p></div><button class="v13-modal-close" onclick="this.closest('.v15-modal').remove()">×</button></header><div class="v15-catalog-grid">${MERC_MANEUVERES.map(x=>`<article class="v15-catalog-item"><b>${esc(x.name)}</b><small>${esc(x.type)} · ${esc(x.cost)}</small><p>${esc(x.effect)}</p><button class="souls-btn small-btn" onclick="toggleV15Maneuver('${x.id}');openMercadorManeuverCatalog()">${getMerc().selectedManeuverIds.includes(x.id)?'REGISTRADA':'REGISTRAR'}</button></article>`).join('')}</div><footer><small>Nota de fonte: a tabela usa “EP” nos custos, embora a classe defina Estamina como recurso de combate.</small></footer></div>`;};
-  window.openV15TaskCatalog=function(){let m=document.getElementById('v15-task-modal');if(!m){m=document.createElement('div');m.id='v15-task-modal';m.className='v15-modal';document.body.appendChild(m);}const active=new Set(getMerc().forceTasks.map(t=>t.id));m.innerHTML=`<div class="v15-modal-card"><header><div><span class="eyebrow">MERCADO DA MORTE</span><h3>Seleção de Força-Tarefa</h3><p>Escolha uma unidade; a patente e a maleta permanecem preservadas.</p></div><button class="v13-modal-close" onclick="this.closest('.v15-modal').remove()">×</button></header><div class="v15-task-catalog">${FORCE_TASKS.map(t=>`<article class="v15-task-option ${active.has(t.id)?'active':''}"><div>${taskInsignia(t)}</div><div><b>${esc(t.code)} · ${esc(t.name)}</b><p>${esc(t.description||'')}</p><div>${(t.maneuvers||[]).map(x=>`<span>${esc(x)}</span>`).join('')}</div></div><button class="souls-btn small-btn" onclick="selectV15Task('${esc(t.id)}')">${active.has(t.id)?'DESIGNADA':'DESIGNAR'}</button></article>`).join('')}</div></div>`;};
-  window.selectV15Task=function(id){const t=FORCE_TASKS.find(x=>x.id===id);if(!t)return;const d=getMerc();const i=d.forceTasks.findIndex(x=>x.id===id);if(i>=0)d.forceTasks.splice(i,1);else d.forceTasks.push({...t,insignia:taskInsignia(t)});window.__mmDraft=d;document.getElementById('v15-task-modal')?.remove();renderMercadorUnified();};
-
-  function openV15ArsenalWorkbench(){
-    let m=document.getElementById('v15-arsenal-modal'); if(!m){m=document.createElement('div');m.id='v15-arsenal-modal';m.className='v15-modal';document.body.appendChild(m);} const d=getMerc();
-    const draw=(idx=-1)=>{const a=idx>=0?(d.arsenal[idx]||{}):{};m.innerHTML=`<div class="v15-modal-card v15-arsenal-modal-card"><header><div><span class="eyebrow">MERCADO DA MORTE · MALETA</span><h3>Montagem do Arsenal</h3><p>Edite qualquer item e mantenha toda a maleta em uma única bancada.</p></div><button class="v13-modal-close" onclick="this.closest('.v15-modal').remove()">×</button></header><div class="v15-arsenal-layout"><aside>${d.arsenal.map((x,i)=>`<button class="v15-case-row ${i===idx?'active':''}" onclick="openV15ArsenalWorkbench(${i})">${arsenalIcon(x.iconKey)}<span><b>${esc(x.name||'Item')}</b><small>${esc(x.kind||'Equipamento')}</small></span></button>`).join('')}<button class="souls-btn small-btn" onclick="openV15ArsenalWorkbench(-1)">＋ Novo item</button></aside><main><div class="v15-arsenal-preview">${arsenalIcon(a.iconKey)}<b>${esc(a.name||'Novo item')}</b></div><label>Nome<input id="v15-ai-name" value="${esc(a.name||'')}"/></label><label>Categoria<input id="v15-ai-kind" value="${esc(a.kind||'Equipamento')}"/></label><label>Munição / Cargas<input id="v15-ai-ammo" value="${esc(a.ammo||'')}"/></label><label>Descrição / Efeito<textarea id="v15-ai-note" rows="5">${esc(a.note||'')}</textarea></label><label>Miniatura<select id="v15-ai-icon">${Object.keys(ICONS).map(k=>`<option value="${k}" ${k===(a.iconKey||'device')?'selected':''}>${ICONS[k]} ${k}</option>`).join('')}</select></label><div class="modal-actions"><button class="souls-btn" onclick="saveV15ArsenalItem(${idx})">Salvar item</button>${idx>=0?`<button class="souls-btn" onclick="deleteV15ArsenalItem(${idx})">Remover</button>`:''}</div></main></div></div>`;};
-    window.openV15ArsenalWorkbench=(idx=-1)=>{d.arsenal=getMerc().arsenal;draw(idx);}; draw(arguments[0]??-1);
-  }
-  window.openV15ArsenalWorkbench=openV15ArsenalWorkbench;
-  window.saveV15ArsenalItem=function(idx){const d=getMerc(),a={name:document.getElementById('v15-ai-name')?.value.trim()||'Item sem nome',kind:document.getElementById('v15-ai-kind')?.value.trim()||'Equipamento',ammo:document.getElementById('v15-ai-ammo')?.value.trim()||'',note:document.getElementById('v15-ai-note')?.value.trim()||'',iconKey:document.getElementById('v15-ai-icon')?.value||'device'};if(idx>=0)d.arsenal[idx]=a;else d.arsenal.push(a);window.__mmDraft=d;document.getElementById('v15-arsenal-modal')?.remove();renderMercadorUnified();};
-  window.deleteV15ArsenalItem=function(idx){const d=getMerc();d.arsenal.splice(idx,1);window.__mmDraft=d;document.getElementById('v15-arsenal-modal')?.remove();renderMercadorUnified();};
-
-
-})();
-
-/* ===== END v015-update.js ===== */
 
 /* ===== BEGIN v016-update.js ===== */
 
@@ -1818,7 +1366,7 @@ window.ENVOLTO_RITUALS = [
       const head=root.querySelector('.death-market-head'); if(head){const d=window.__mmDraft||{};const k=document.createElement('div');k.className='v17-market-kpis';k.innerHTML=`<div class="v17-kpi"><span>Patente</span><b>${esc(d.rankId||'—')}</b></div><div class="v17-kpi"><span>Salário</span><b>${Number(d.salary||0)} CO</b></div><div class="v17-kpi"><span>Estamina</span><b>${Number(d.stamina?.current||0)}/${Number(d.stamina?.max||0)}</b></div><div class="v17-kpi"><span>Forças-Tarefa</span><b>${Array.isArray(d.forceTasks)?d.forceTasks.length:0}</b></div>`; head.after(k);}
     }
   }
-  const oldMM=window.renderMercadorUnified; if(typeof oldMM==='function')window.renderMercadorUnified=function(){const r=oldMM.apply(this,arguments); setTimeout(harmonizeMarket,10); return r;};
+  const oldMM=window.renderMerc16; if(typeof oldMM==='function')window.renderMerc16=function(){const r=oldMM.apply(this,arguments); setTimeout(harmonizeMarket,10); return r;};
 
   // ================================================================
   // ALQUERINO — 9 named/documented Caminhos from the book
@@ -1965,12 +1513,12 @@ if(typeof window.syncEnvoltoTab!=='function'){
     }
     shell.classList.add('v18-market-stable');
   }
-  const oldMMRender=window.renderMercadorUnified;
-  if(typeof oldMMRender==='function') window.renderMercadorUnified=function(){const r=oldMMRender.apply(this,arguments);setTimeout(stabilizeMarket,0);return r;};
-  const oldMM16=window.renderMerc16;
-  if(typeof oldMM16==='function') window.renderMerc16=function(){const r=oldMM16.apply(this,arguments);setTimeout(stabilizeMarket,0);return r;};
-  const oldMM13=window.renderMercadoV13;
-  if(typeof oldMM13==='function') window.renderMercadoV13=function(){const r=oldMM13.apply(this,arguments);setTimeout(stabilizeMarket,0);return r;};
+  const oldMMRender=window.renderMerc16;
+  if(typeof oldMMRender==='function' && !oldMMRender.__marketStabilized){
+    const wrapped=function(){const r=oldMMRender.apply(this,arguments);setTimeout(stabilizeMarket,0);return r;};
+    wrapped.__marketStabilized=true;
+    window.renderMerc16=wrapped;
+  }
 
   setTimeout(()=>{enforceContext();stabilizeMarket();},260);
 })();
@@ -2011,7 +1559,7 @@ if(typeof window.syncEnvoltoTab!=='function'){
     if(panel){ panel.style.position='relative'; panel.style.inset='auto'; panel.style.float='none'; panel.style.transform='none'; }
   }
 
-  const oldMerc=window.renderMercadoV13;
+  const oldMerc=window.renderMerc16;
   if(typeof oldMerc==='function' && !oldMerc.__consolidatedFix){
     const wrapped=function(){
       const r=oldMerc.apply(this,arguments);
@@ -2019,7 +1567,7 @@ if(typeof window.syncEnvoltoTab!=='function'){
       return r;
     };
     wrapped.__consolidatedFix=true;
-    window.renderMercadoV13=wrapped;
+    window.renderMerc16=wrapped;
   }
   const oldSelect=window.selectClass;
   if(typeof oldSelect==='function' && !oldSelect.__consolidatedMerc){

@@ -1,6 +1,6 @@
 from pathlib import Path
 import re, json, subprocess
-root=Path('/mnt/data/mt-current')
+root=Path(__file__).resolve().parent
 pdfs=[
  ('exodo','Êxodo · Livro-Base','codex-files/livro-base-exodo.pdf'),
  ('ocultatun','Ocultatun · Ecos da Decadência','codex-files/livro-base-ocultatun-ecos.pdf'),

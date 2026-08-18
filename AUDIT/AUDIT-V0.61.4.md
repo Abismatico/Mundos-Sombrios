@@ -26,12 +26,9 @@ Fixar a classe e a expansão/natureza escolhidas após a criação da ficha, man
 - `toggleEditUI()` desabilita os cards de arquétipo para fichas existentes, mas mantém as demais ferramentas de edição ativas.
 - O estado ativo do card passou a usar `data-archetype`, eliminando a dependência do antigo `h4`.
 
-### `css/archetype-selection.css`
-- Novo estilo único para cards 3D de Classe/Expansão.
-- Êxodo: holograma oscilante, scanline e iluminação fria.
-- Ocultatun: arquivo secreto/estante, papel/metal envelhecido, selo de registro.
-- Estado `archetype-locked` para edição.
-- Responsividade e `prefers-reduced-motion`.
+### Camada visual de arquétipos
+- A antiga folha `css/archetype-selection.css` foi absorvida pelo stylesheet canônico V0.63.
+- O foco de teclado e o estado `archetype-locked` continuam no renderer atual.
 
 ### `index.html`
 - Apenas o novo stylesheet de seleção foi adicionado.
