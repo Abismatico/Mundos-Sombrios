@@ -156,6 +156,26 @@ function refreshInitialSetupVisibility() {
 let currentUser = null;
 Object.defineProperty(window, 'currentUser', { configurable:true, get:()=>currentUser });
 
+async function msSyncOnlineState() {
+    if (!window.MS_DB || !window.MS_DB.ready || !currentUser) return;
+    try {
+        await window.MS_DB.saveProfile({
+            id: currentUser.id,
+            username: currentUser.username,
+            email: currentUser.email,
+            role: currentUser.role || 'jogador'
+        });
+        await window.MS_DB.syncUserState({
+            users: usersDB,
+            tables: allTablesDB,
+            characters: characters,
+            requests: requestsDB
+        });
+    } catch (error) {
+        console.warn('[Mundos Sombrios] Falha na sincronização online:', error);
+    }
+}
+
 // ==========================================
 // GAME DATABASE
 // ==========================================
@@ -265,6 +285,7 @@ async function doLogin() {
 
         showScreen('screen-portal');
         if (typeof window.renderOfficialPortal === 'function') window.renderOfficialPortal();
+        await msSyncOnlineState();
         return true;
     } catch (error) {
         console.error('[Mundos Sombrios] Falha no login local:', error);
@@ -313,10 +334,17 @@ async function doRegister() {
     };
     usersDB.push(newUser);
     msWriteStorageJSON('mundosSombriosUsers', usersDB);
+    if (window.MS_DB && window.MS_DB.ready) {
+        await window.MS_DB.saveProfile(newUser);
+    }
     
     if(reqMaster) {
-        requestsDB.push({ id: Date.now(), userId: newUser.id, username: user });
+        const request = { id: Date.now(), userId: newUser.id, username: user, createdAt: new Date().toISOString(), status: 'pending' };
+        requestsDB.push(request);
         msWriteStorageJSON('mundosSombriosRequests', requestsDB);
+        if (window.MS_DB && window.MS_DB.ready) {
+            await window.MS_DB.saveAdminRequest(request);
+        }
     }
     
     alert("Alma Despertada! Agora você pode atravessar o portal (Login).");
@@ -370,8 +398,12 @@ async function createInitialAdmin() {
     if (usersDB.some(u => String(u.username || '').toLowerCase() === username.toLowerCase())) {
         alert('Este usuário já existe.'); return;
     }
-    usersDB.push({ id:'u' + Date.now(), username, email, passwordHash: await msHashPassword(password), role:'admin', createdAt:new Date().toISOString() });
+    const newAdmin = { id:'u' + Date.now(), username, email, passwordHash: await msHashPassword(password), role:'admin', createdAt:new Date().toISOString() };
+    usersDB.push(newAdmin);
     msWriteStorageJSON('mundosSombriosUsers', usersDB);
+    if (window.MS_DB && window.MS_DB.ready) {
+        await window.MS_DB.saveProfile(newAdmin);
+    }
     refreshInitialSetupVisibility();
     closeInitialSetup();
     alert('ADM inicial criado. Em uma publicação real, migre esta autenticação para o backend.');
@@ -435,6 +467,9 @@ async function saveUserRow(index) {
     delete targetUser.password;
     targetUser.role = nextRole;
     msWriteStorageJSON('mundosSombriosUsers', usersDB);
+    if (window.MS_DB && window.MS_DB.ready) {
+        await window.MS_DB.saveProfile(targetUser);
+    }
     renderAdminPanel();
     alert("Registro Akáshico alterado.");
     return true;
@@ -479,6 +514,9 @@ function handleReq(reqId, approved) {
             if(u) {
                 u.role = 'mestre';
                 msWriteStorageJSON('mundosSombriosUsers', usersDB);
+                if (window.MS_DB && window.MS_DB.ready) {
+                    window.MS_DB.saveProfile(u);
+                }
             }
         }
         requestsDB = requestsDB.filter(r => r.id !== reqId);
@@ -3542,6 +3580,9 @@ function msUpsertTable(table) {
     if (idx >= 0) allTablesDB[idx] = normalized;
     else allTablesDB.push(normalized);
     msWriteJSON('mundosSombriosTables', allTablesDB);
+    if (window.MS_DB && window.MS_DB.ready) {
+        window.MS_DB.saveTable(normalized);
+    }
     return normalized;
 }
 
@@ -3566,6 +3607,9 @@ function msPersistCharacterToRepo(char, ownerId, charIdOverride = null) {
 
     store[ownerId] = repo;
     msWriteJSON(MS_REPO_KEY, store);
+    if (window.MS_DB && window.MS_DB.ready) {
+        window.MS_DB.saveCharacter(saved);
+    }
     msRefreshLegacyCharacterUnion();
 }
 
@@ -3717,6 +3761,9 @@ function saveDraftTable() {
     };
 
     msUpsertTable(newTable);
+    if (window.MS_DB && window.MS_DB.ready) {
+        window.MS_DB.saveTable(newTable);
+    }
     myTables = (allTablesDB || []).filter(t => String(t.ownerId) === String(currentUser.id)).map(msClone);
     isDraftMode = false;
     currentTableData = msClone(newTable);
@@ -4006,6 +4053,9 @@ function saveCharacter(e) {
     }
 
     saveGlobalCharacters();
+    if (window.MS_DB && window.MS_DB.ready) {
+        window.MS_DB.saveCharacter(msClone(payload));
+    }
     closeBuilder();
 }
 
