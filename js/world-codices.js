@@ -28,8 +28,8 @@
   const catalog = Array.isArray(window.CODEX_FILE_CATALOG) ? window.CODEX_FILE_CATALOG : [];
   const state = { mode:null, query:'', reader:null };
 
-  function readJSON(key,fallback){ try{const v=JSON.parse(localStorage.getItem(key)||''); return v ?? fallback;}catch(_){return fallback;} }
-  function writeJSON(key,v){ localStorage.setItem(key, JSON.stringify(v)); }
+  function readJSON(key,fallback){ console.warn('[Mundos Sombrios] Armazenamento local desativado no Códice dos Mundos.'); return fallback; }
+  function writeJSON(key,v){ console.warn('[Mundos Sombrios] Armazenamento local desativado no Códice dos Mundos.'); }
   function disabledIds(){ return new Set((readJSON(DISABLED_KEY,[])||[]).map(String)); }
   function isAdmin(){ try{return !!(currentUser && currentUser.role==='admin');}catch(_){return false;} }
   function esc(v){ return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }

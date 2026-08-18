@@ -43,8 +43,8 @@
     portalVersion:'V0.61.3'
   };
   function clone(v){return JSON.parse(JSON.stringify(v));}
-  function read(){try{const raw=localStorage.getItem(KEY); if(!raw)return clone(defaults); const data=JSON.parse(raw); return merge(defaults,data);}catch(_){return clone(defaults);}}
-  function write(data){try{localStorage.setItem(KEY,JSON.stringify(data));return true;}catch(_){return false;}}
+  function read(){console.warn('[Mundos Sombrios] Armazenamento local desativado no conteúdo do portal.'); return clone(defaults);}
+  function write(data){console.warn('[Mundos Sombrios] Armazenamento local desativado no conteúdo do portal.'); return false;}
   function merge(base,extra){const out={...base,...extra}; ['announcements','events','classes','expansions','community','stories','worlds'].forEach(k=>{out[k]=Array.isArray(extra?.[k])?extra[k]:clone(base[k]);}); out.hero={...base.hero,...(extra?.hero||{})}; out.featured={...base.featured,...(extra?.featured||{})}; return out;}
   function isAdmin(){try{return !!(window.currentUser&&currentUser.role==='admin');}catch(_){return false;}}
   function published(list){return (Array.isArray(list)?list:[]).filter(x=>x&&x.published!==false);}

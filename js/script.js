@@ -26,27 +26,67 @@ function msRequireDependency(globalName, label, action) {
 }
 
 function msReadStorageJSON(key, fallback) {
-    try {
-        const raw = localStorage.getItem(key);
-        return raw ? JSON.parse(raw) : fallback;
-    } catch (error) {
-        console.warn('[Mundos Sombrios] Falha ao ler armazenamento:', key, error);
-        return fallback;
-    }
+    console.warn('[Mundos Sombrios] Armazenamento local desativado. Dados devem ser lidos do Supabase.');
+    return fallback;
 }
 
 function msWriteStorageJSON(key, value) {
-    try {
-        localStorage.setItem(key, JSON.stringify(value));
-        return true;
-    } catch (error) {
-        console.warn('[Mundos Sombrios] Falha ao gravar armazenamento:', key, error);
-        return false;
-    }
+    console.warn('[Mundos Sombrios] Armazenamento local desativado. Dados devem ser gravados no Supabase.');
+    return false;
 }
 
 let usersDB = msReadStorageJSON('mundosSombriosUsers', []);
 let requestsDB = msReadStorageJSON('mundosSombriosRequests', []);
+
+function normalizeStoredUser(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const normalized = { ...raw };
+    normalized.role = normalizeUserRole(raw.role || raw.permission || 'jogador');
+    normalized.passwordHash = raw.passwordHash || raw.password_hash || raw.password || null;
+    normalized.username = String(raw.username || '').trim();
+    normalized.email = String(raw.email || '').trim();
+    normalized.banned = !!(raw.banned || raw.isBanned || raw.status === 'banned');
+    normalized.status = raw.status || (normalized.banned ? 'banned' : 'active');
+    if (!normalized.id && raw.user_id) normalized.id = raw.user_id;
+    return normalized;
+}
+
+function mergeUsersFromSources(localList, remoteList) {
+    const map = new Map();
+    const all = [...(Array.isArray(localList) ? localList : []), ...(Array.isArray(remoteList) ? remoteList : [])];
+    for (const entry of all) {
+        const normalized = normalizeStoredUser(entry);
+        if (!normalized || !normalized.id) continue;
+        const existing = map.get(normalized.id);
+        if (!existing) {
+            map.set(normalized.id, normalized);
+            continue;
+        }
+        const scoreCurrent = Number(existing.updatedAt || existing.updated_at || existing.createdAt || existing.created_at || 0);
+        const scoreNext = Number(normalized.updatedAt || normalized.updated_at || normalized.createdAt || normalized.created_at || 0);
+        map.set(normalized.id, scoreNext >= scoreCurrent ? normalized : existing);
+    }
+    const merged = [...map.values()];
+    merged.sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')));
+    return merged;
+}
+
+async function hydrateAuthState() {
+    if (!window.MS_DB || !window.MS_DB.ready) return usersDB;
+    try {
+        const [remoteUsers, remoteRequests] = await Promise.all([
+            window.MS_DB.fetchUsers(),
+            window.MS_DB.fetchAdminRequests()
+        ]);
+        usersDB = mergeUsersFromSources(usersDB, remoteUsers);
+        requestsDB = Array.isArray(remoteRequests) && remoteRequests.length ? remoteRequests : requestsDB;
+        msWriteStorageJSON('mundosSombriosUsers', usersDB);
+        msWriteStorageJSON('mundosSombriosRequests', requestsDB);
+    } catch (error) {
+        console.warn('[Mundos Sombrios] Falha ao hidratar dados remotos:', error);
+    }
+    return usersDB;
+}
 
 // Segurança local de protótipo: NÃO existem mais contas padrão/credenciais embutidas.
 // Em produção, autenticação/autorização deve ser feita no backend.
@@ -88,20 +128,32 @@ async function msMigrateLegacyPassword(account, plainPassword) {
 }
 
 function hasConfiguredAdmin() {
-    return usersDB.some(u => u && u.role === 'admin' && u.passwordHash);
+    return usersDB.some(u => u && normalizeUserRole(u.role) === 'admin' && (u.passwordHash || u.password_hash));
 }
 
 function countAdmins() {
-    return usersDB.filter(u => u && u.role === 'admin').length;
+    return usersDB.filter(u => u && normalizeUserRole(u.role) === 'admin').length;
+}
+
+function normalizeUserRole(role) {
+    const next = String(role || 'jogador').trim().toLowerCase();
+    if (['jogador', 'mestre', 'admin'].includes(next)) return next;
+    return 'jogador';
+}
+
+function isUserBanned(user) {
+    if (!user) return false;
+    return !!(user.banned || user.isBanned || user.status === 'banned');
 }
 
 function normalizeSingleAdminState() {
-    const admins = usersDB.filter(u => u && u.role === 'admin');
+    const admins = usersDB.filter(u => u && normalizeUserRole(u.role) === 'admin');
     if (admins.length <= 1) return false;
 
     const primaryAdminId = admins[0].id;
     usersDB = usersDB.map(u => {
-        if (!u || u.role !== 'admin' || u.id === primaryAdminId) return u;
+        if (!u) return u;
+        if (normalizeUserRole(u.role) !== 'admin' || u.id === primaryAdminId) return u;
         return { ...u, role: 'jogador' };
     });
 
@@ -146,6 +198,7 @@ function refreshInitialSetupVisibility() {
 
 (async function bootstrapAdminProfile() {
     try {
+        await hydrateAuthState();
         normalizeSingleAdminState();
         await ensureDefaultAdminBootstrap();
     } finally {
@@ -238,6 +291,7 @@ async function doLogin() {
         return false;
     }
 
+    await hydrateAuthState();
     const normalized = identifier.toLowerCase();
     const account = usersDB.find(u =>
         String(u?.username || '').toLowerCase() === normalized ||
@@ -249,10 +303,16 @@ async function doLogin() {
         return false;
     }
 
+    if (isUserBanned(account)) {
+        alert('Esta conta foi banida pelo Arconte.');
+        return false;
+    }
+
     try {
         let valid = false;
-        if (account.passwordHash) {
-            valid = await msVerifyPassword(password, account.passwordHash);
+        const passwordHash = account.passwordHash || account.password_hash || account.password;
+        if (passwordHash && typeof passwordHash === 'string') {
+            valid = await msVerifyPassword(password, passwordHash);
         } else if (typeof account.password === 'string') {
             valid = account.password === password;
             if (valid) await msMigrateLegacyPassword(account, password);
@@ -267,7 +327,7 @@ async function doLogin() {
             id: account.id,
             username: account.username,
             email: account.email,
-            role: account.role || 'jogador'
+            role: normalizeUserRole(account.role || 'jogador')
         };
         loadUserData();
 
@@ -323,14 +383,17 @@ async function doRegister() {
     const reqMaster = document.getElementById('reg-req-master').checked;
     
     if(!user || !pass || !email) { alert("Preencha todos os campos."); return; }
-    if(usersDB.find(u => u.username === user)) { alert("Nome já reclamado por outra alma."); return; }
+    await hydrateAuthState();
+    if(usersDB.find(u => String(u.username || '').toLowerCase() === user.toLowerCase() || String(u.email || '').toLowerCase() === email.toLowerCase())) { alert("Nome ou e-mail já reclamados por outra alma."); return; }
     
     const newUser = {
         id: 'u' + Date.now(),
         username: user,
         email: email,
         passwordHash: await msHashPassword(pass),
-        role: 'jogador' // starts as player
+        role: 'jogador',
+        banned: false,
+        status: 'active'
     };
     usersDB.push(newUser);
     msWriteStorageJSON('mundosSombriosUsers', usersDB);
@@ -372,6 +435,7 @@ function doRecover() {
 }
 
 async function openInitialSetup() {
+    await hydrateAuthState();
     if (hasConfiguredAdmin()) { alert('O ADM inicial já foi configurado nesta instalação.'); return; }
     document.getElementById('setup-admin-user').value = '';
     document.getElementById('setup-admin-email').value = '';
@@ -387,6 +451,7 @@ function closeInitialSetup() {
 }
 
 async function createInitialAdmin() {
+    await hydrateAuthState();
     if (countAdmins() >= 1) { alert('Apenas um administrador pode existir nesta instalação.'); return; }
     const username = document.getElementById('setup-admin-user').value.trim();
     const email = document.getElementById('setup-admin-email').value.trim();
@@ -398,7 +463,7 @@ async function createInitialAdmin() {
     if (usersDB.some(u => String(u.username || '').toLowerCase() === username.toLowerCase())) {
         alert('Este usuário já existe.'); return;
     }
-    const newAdmin = { id:'u' + Date.now(), username, email, passwordHash: await msHashPassword(password), role:'admin', createdAt:new Date().toISOString() };
+    const newAdmin = { id:'u' + Date.now(), username, email, passwordHash: await msHashPassword(password), role:'admin', createdAt:new Date().toISOString(), banned: false, status: 'active' };
     usersDB.push(newAdmin);
     msWriteStorageJSON('mundosSombriosUsers', usersDB);
     if (window.MS_DB && window.MS_DB.ready) {
@@ -428,6 +493,8 @@ function renderAdminPanel() {
     const tbody = document.getElementById('admin-users-list');
     tbody.innerHTML = '';
     usersDB.forEach((u, index) => {
+        const role = normalizeUserRole(u.role);
+        const status = isUserBanned(u) ? 'BANIDA' : 'ATIVA';
         tbody.innerHTML += `
             <tr>
                 <td>${u.id}</td>
@@ -435,12 +502,18 @@ function renderAdminPanel() {
                 <td><input type="password" id="edit-pass-${index}" placeholder="Nova senha (opcional)" autocomplete="new-password"></td>
                 <td>
                     <select id="edit-role-${index}">
-                        <option value="jogador" ${u.role==='jogador'?'selected':''}>Jogador</option>
-                        <option value="mestre" ${u.role==='mestre'?'selected':''}>Mestre</option>
-                        <option value="admin" ${u.role==='admin'?'selected':''}>Admin</option>
+                        <option value="jogador" ${role==='jogador'?'selected':''}>Jogador</option>
+                        <option value="mestre" ${role==='mestre'?'selected':''}>Mestre</option>
+                        <option value="admin" ${role==='admin'?'selected':''}>Admin</option>
                     </select>
                 </td>
-                <td><button class="souls-btn small-btn" style="border-color:#00ffcc; color:#00ffcc;" onclick="saveUserRow(${index})">Salvar</button></td>
+                <td>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="souls-btn small-btn" style="border-color:#00ffcc; color:#00ffcc;" onclick="saveUserRow(${index})">Salvar</button>
+                        <button class="souls-btn small-btn" style="border-color:${isUserBanned(u) ? '#ffcc00' : '#ff3333'}; color:${isUserBanned(u) ? '#ffcc00' : '#ff3333'};" onclick="toggleUserBan(${index})">${isUserBanned(u) ? 'Desbanir' : 'Banir'}</button>
+                    </div>
+                </td>
+                <td style="color:${isUserBanned(u) ? '#ff6666' : '#7af1c4'}; font-weight:bold;">${status}</td>
             </tr>
         `;
     });
@@ -451,9 +524,9 @@ async function saveUserRow(index) {
     if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
     if (!Number.isInteger(index) || !usersDB[index]) { alert('Usuário inválido.'); return false; }
 
-    const nextRole = document.getElementById(`edit-role-${index}`).value;
+    const nextRole = normalizeUserRole(document.getElementById(`edit-role-${index}`).value);
     const targetUser = usersDB[index];
-    const hasAnotherAdmin = usersDB.some(u => u && u.id !== targetUser.id && u.role === 'admin');
+    const hasAnotherAdmin = usersDB.some(u => u && u.id !== targetUser.id && normalizeUserRole(u.role) === 'admin');
 
     if (nextRole === 'admin' && hasAnotherAdmin) {
         alert('Apenas um administrador pode existir nesta instalação.');
@@ -461,17 +534,44 @@ async function saveUserRow(index) {
         return false;
     }
 
-    targetUser.username = document.getElementById(`edit-user-${index}`).value;
+    if (targetUser.id === currentUser.id && nextRole !== 'admin' && usersDB.filter(u => normalizeUserRole(u.role) === 'admin').length <= 1) {
+        alert('Não é permitido remover o único Arconte ativo.');
+        renderAdminPanel();
+        return false;
+    }
+
+    targetUser.username = document.getElementById(`edit-user-${index}`).value.trim();
     const newPassword = document.getElementById(`edit-pass-${index}`).value;
     if (newPassword) targetUser.passwordHash = await msHashPassword(newPassword);
     delete targetUser.password;
     targetUser.role = nextRole;
+    targetUser.banned = !!targetUser.banned;
+    targetUser.status = targetUser.banned ? 'banned' : 'active';
     msWriteStorageJSON('mundosSombriosUsers', usersDB);
     if (window.MS_DB && window.MS_DB.ready) {
         await window.MS_DB.saveProfile(targetUser);
     }
     renderAdminPanel();
     alert("Registro Akáshico alterado.");
+    return true;
+}
+
+function toggleUserBan(index) {
+    if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
+    const targetUser = usersDB[index];
+    if (!targetUser) { alert('Usuário inválido.'); return false; }
+    if (targetUser.role === 'admin' && targetUser.id === currentUser.id) {
+        alert('O Arconte principal não pode ser banido.');
+        return false;
+    }
+
+    targetUser.banned = !isUserBanned(targetUser);
+    targetUser.status = targetUser.banned ? 'banned' : 'active';
+    msWriteStorageJSON('mundosSombriosUsers', usersDB);
+    if (window.MS_DB && window.MS_DB.ready) {
+        window.MS_DB.saveProfile(targetUser);
+    }
+    renderAdminPanel();
     return true;
 }
 

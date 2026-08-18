@@ -53,10 +53,15 @@
             username: String(user.username || '').trim(),
             email: String(user.email || '').trim(),
             role: user.role || 'jogador',
-            password_hash: user.passwordHash || null,
+            password_hash: user.passwordHash || user.password_hash || null,
             created_at: user.createdAt || new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            data: user.data || {}
+            banned: !!(user.banned || user.isBanned || user.status === 'banned'),
+            status: user.status || (user.banned ? 'banned' : 'active'),
+            data: user.data || {
+                banned: !!(user.banned || user.isBanned || user.status === 'banned'),
+                status: user.status || (user.banned ? 'banned' : 'active')
+            }
         };
     }
 

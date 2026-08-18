@@ -7,8 +7,8 @@
   const FILES='mundosSombriosGMFilesV1', NOTES='mundosSombriosGMNotesV1', NPCS='mundosSombriosGMNPCsV1', VTT='mundosSombriosVttStateV1';
   const MAX_FILE=3*1024*1024;
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const read=(k,f)=>{try{const v=JSON.parse(localStorage.getItem(k)||'');return v??f}catch(_){return f}};
-  const write=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(_){return false}};
+  const read=(k,f)=>{console.warn('[Mundos Sombrios] Armazenamento local desativado nas ferramentas do mestre.'); return f;};
+  const write=(k,v)=>{console.warn('[Mundos Sombrios] Armazenamento local desativado nas ferramentas do mestre.'); return false;};
   const gm=()=>{try{return !!(currentUser&&(currentUser.role==='mestre'||currentUser.role==='admin'))}catch(_){return false}};
   const uid=()=>{try{return String(currentUser?.id||'')}catch(_){return ''}};
   const scoped=(key)=>{const all=read(key,{});return (all&&typeof all==='object'&&!Array.isArray(all)&&Array.isArray(all[uid()]))?all[uid()]:[]};
