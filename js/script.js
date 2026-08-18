@@ -17,7 +17,10 @@ createEmbers();
 const supabaseUrl = 'https://mectcbsmhmyefsllbope.supabase.co';
 const supabaseAnonKey = 'sb_publishable_b_MyJE3_glRlR5VEyFCZ4g_ZU3xzkeS';
 
-const supabase = supabase.createClient(supabaseUrl, supabaseAnonKey);
+const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
+const supabase = supabaseClient;
+window.supabaseClient = supabaseClient;
+
 // ==========================================
 // USER DATABASE & AUTHENTICATION
 // ==========================================
@@ -276,38 +279,36 @@ async function doLogin() {
     if (portalScreen) portalScreen.classList.add('active');
 }
 
-async function createSupabaseAdmin() {
+window.createSupabaseAdmin = async function () {
   const { data, error } = await supabase.auth.signUp({
-    email: 'oliveiradbarbosa@mundossombrios.com',
-    password: '@Bs201197'
+    email: "oliveiradbarbosa@mundossombrios.com",
+    password: "@Bs201197"
   });
 
   if (error) {
     console.error(error);
-    alert('Erro ao criar admin: ' + error.message);
     return;
   }
 
   const { error: profileError } = await supabase
-    .from('profiles')
+    .from("profiles")
     .insert([
       {
         id: data.user.id,
-        username: 'oliveira',
-        email: 'oliveiradbarbosa@mundossombrios.com',
-        role: 'admin'
+        username: "oliveira",
+        email: "oliveiradbarbosa@mundossombrios.com",
+        role: "admin"
       }
     ]);
 
   if (profileError) {
     console.error(profileError);
-    alert('Erro ao criar perfil do admin');
     return;
   }
 
-  alert('Admin criado com sucesso');
-}
-
+  console.log("Admin criado com sucesso");
+  alert("Admin criado com sucesso");
+};
 function doLogout() {
     if(confirm("Deseja desconectar do Vazio?")) {
         currentUser = null;
