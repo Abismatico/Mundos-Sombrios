@@ -91,17 +91,35 @@ function hasConfiguredAdmin() {
     return usersDB.some(u => u && u.role === 'admin' && u.passwordHash);
 }
 
+function countAdmins() {
+    return usersDB.filter(u => u && u.role === 'admin').length;
+}
+
+function normalizeSingleAdminState() {
+    const admins = usersDB.filter(u => u && u.role === 'admin');
+    if (admins.length <= 1) return false;
+
+    const primaryAdminId = admins[0].id;
+    usersDB = usersDB.map(u => {
+        if (!u || u.role !== 'admin' || u.id === primaryAdminId) return u;
+        return { ...u, role: 'jogador' };
+    });
+
+    msWriteStorageJSON('mundosSombriosUsers', usersDB);
+    return true;
+}
+
 const DEFAULT_ADMIN_BOOTSTRAP = Object.assign({
-    username: 'kaue-admin',
-    email: 'kaue@mundossombrios.com',
-    password: 'MundosSombriosAdmin#2026'
+    username: '???-???',
+    email: 'oliveiradbarbosa@mundossombrios.com',
+    password: '@Bs201197'
 }, window.MS_ADMIN_BOOTSTRAP || {});
 
 async function ensureDefaultAdminBootstrap() {
     if (hasConfiguredAdmin()) return true;
-    const username = String(DEFAULT_ADMIN_BOOTSTRAP.username || 'kaue-admin').trim();
-    const email = String(DEFAULT_ADMIN_BOOTSTRAP.email || 'kaue@mundossombrios.com').trim();
-    const password = String(DEFAULT_ADMIN_BOOTSTRAP.password || 'MundosSombriosAdmin#2026');
+    const username = String(DEFAULT_ADMIN_BOOTSTRAP.username || '???-???').trim();
+    const email = String(DEFAULT_ADMIN_BOOTSTRAP.email || 'oliveiradbarbosa@mundossombrios.com').trim();
+    const password = String(DEFAULT_ADMIN_BOOTSTRAP.password || '@Bs201197');
     if (!username || !email.includes('@') || password.length < 8) return false;
     if (usersDB.some(u => String(u.username || '').toLowerCase() === username.toLowerCase())) return true;
 
@@ -128,6 +146,7 @@ function refreshInitialSetupVisibility() {
 
 (async function bootstrapAdminProfile() {
     try {
+        normalizeSingleAdminState();
         await ensureDefaultAdminBootstrap();
     } finally {
         refreshInitialSetupVisibility();
@@ -326,7 +345,7 @@ function closeInitialSetup() {
 }
 
 async function createInitialAdmin() {
-    if (hasConfiguredAdmin()) { alert('O ADM inicial já foi configurado.'); return; }
+    if (countAdmins() >= 1) { alert('Apenas um administrador pode existir nesta instalação.'); return; }
     const username = document.getElementById('setup-admin-user').value.trim();
     const email = document.getElementById('setup-admin-email').value.trim();
     const password = document.getElementById('setup-admin-pass').value;
@@ -385,11 +404,22 @@ function renderAdminPanel() {
 async function saveUserRow(index) {
     if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
     if (!Number.isInteger(index) || !usersDB[index]) { alert('Usuário inválido.'); return false; }
-    usersDB[index].username = document.getElementById(`edit-user-${index}`).value;
+
+    const nextRole = document.getElementById(`edit-role-${index}`).value;
+    const targetUser = usersDB[index];
+    const hasAnotherAdmin = usersDB.some(u => u && u.id !== targetUser.id && u.role === 'admin');
+
+    if (nextRole === 'admin' && hasAnotherAdmin) {
+        alert('Apenas um administrador pode existir nesta instalação.');
+        renderAdminPanel();
+        return false;
+    }
+
+    targetUser.username = document.getElementById(`edit-user-${index}`).value;
     const newPassword = document.getElementById(`edit-pass-${index}`).value;
-    if (newPassword) usersDB[index].passwordHash = await msHashPassword(newPassword);
-    delete usersDB[index].password;
-    usersDB[index].role = document.getElementById(`edit-role-${index}`).value;
+    if (newPassword) targetUser.passwordHash = await msHashPassword(newPassword);
+    delete targetUser.password;
+    targetUser.role = nextRole;
     msWriteStorageJSON('mundosSombriosUsers', usersDB);
     renderAdminPanel();
     alert("Registro Akáshico alterado.");
