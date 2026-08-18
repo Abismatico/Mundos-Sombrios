@@ -1,0 +1,9 @@
+# Dependency and editor leftovers
+.DS_Store
+Thumbs.db
+.vscode/
+__pycache__/
+*.log
+
+# Local deployment artifacts
+*.local

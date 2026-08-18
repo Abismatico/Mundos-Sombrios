@@ -1,0 +1,37 @@
+/* Mundos Sombrios — Cards de Classe/Expansão (V0.61.4)
+   Fonte única visual para seleção inicial; usa variáveis por card para preservar identidade.
+*/
+.archetype-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:18px;perspective:1200px;padding:8px 2px 18px}
+.archetype-card{position:relative;min-height:210px;border:1px solid color-mix(in srgb,var(--archetype-accent,#d4af37) 68%,#111);border-radius:16px;padding:20px 18px 17px;display:flex;flex-direction:column;align-items:flex-start;text-align:left;overflow:hidden;cursor:pointer;color:#f4f4f4;background:#0b0d12;box-shadow:0 18px 38px rgba(0,0,0,.38),inset 0 0 0 1px rgba(255,255,255,.035);transform-style:preserve-3d;transition:transform .28s ease,box-shadow .28s ease,border-color .28s ease,filter .28s ease;isolation:isolate}
+.archetype-card::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 84% 15%,color-mix(in srgb,var(--archetype-glow,#7aa7ff) 24%,transparent),transparent 42%),linear-gradient(155deg,color-mix(in srgb,var(--archetype-accent,#d4af37) 12%,transparent),transparent 54%);pointer-events:none;z-index:-2}
+.archetype-card::after{content:"";position:absolute;inset:1px;border-radius:15px;border:1px solid rgba(255,255,255,.045);pointer-events:none;z-index:5}
+.archetype-card:hover:not(:disabled){transform:translateY(-9px) rotateX(4deg) rotateY(-4deg);box-shadow:0 28px 55px rgba(0,0,0,.5),0 0 28px color-mix(in srgb,var(--archetype-glow,#7aa7ff) 28%,transparent),inset 0 0 35px color-mix(in srgb,var(--archetype-accent,#d4af37) 7%,transparent)}
+.archetype-card:focus-visible{outline:2px solid var(--archetype-accent,#d4af37);outline-offset:3px}
+.archetype-card.active{border-color:var(--archetype-accent,#d4af37);box-shadow:0 22px 44px rgba(0,0,0,.44),0 0 32px color-mix(in srgb,var(--archetype-glow,#7aa7ff) 30%,transparent),inset 0 0 38px color-mix(in srgb,var(--archetype-accent,#d4af37) 11%,transparent)}
+.archetype-card.active::after{border-color:color-mix(in srgb,var(--archetype-accent,#d4af37) 65%,transparent)}
+.archetype-seal{width:50px;height:50px;border:1px solid color-mix(in srgb,var(--archetype-accent,#d4af37) 70%,#222);border-radius:50%;display:grid;place-items:center;font-size:1.35rem;color:var(--archetype-accent,#d4af37);background:rgba(0,0,0,.28);box-shadow:0 0 18px color-mix(in srgb,var(--archetype-glow,#7aa7ff) 22%,transparent);transform:translateZ(18px);margin-bottom:12px}
+.archetype-kind{font-size:.62rem;letter-spacing:.16em;font-weight:800;color:color-mix(in srgb,var(--archetype-accent,#d4af37) 92%,#fff);opacity:.92;margin-bottom:7px}
+.archetype-card strong{font:700 1.15rem/1.25 "Cinzel",serif;color:#fff;transform:translateZ(12px)}
+.archetype-card small{font:.78rem/1.45 Roboto,sans-serif;color:#b7bbc5;margin-top:9px;max-width:34ch}
+.archetype-meta{margin-top:auto;padding-top:16px;font-size:.54rem;letter-spacing:.1em;color:#7f8796;text-transform:uppercase}
+.archetype-depth{position:absolute;right:-30px;bottom:-40px;width:130px;height:130px;border-radius:30%;border:1px solid color-mix(in srgb,var(--archetype-accent,#d4af37) 40%,transparent);transform:rotate(28deg);opacity:.25;pointer-events:none}
+.archetype-scanline{position:absolute;inset:-120% 0 auto;height:42%;background:linear-gradient(transparent,rgba(255,255,255,.08),transparent);opacity:0;pointer-events:none}
+/* Êxodo: holograma oscilante */
+.archetype-grid-exodo .archetype-card{background:linear-gradient(145deg,rgba(6,17,28,.94),rgba(5,10,18,.96));border-style:solid;animation:exoHoloFloat 5.5s ease-in-out infinite}
+.archetype-grid-exodo .archetype-card:nth-child(2n){animation-delay:-2.2s}
+.archetype-grid-exodo .archetype-card::before{background:repeating-linear-gradient(180deg,transparent 0 7px,rgba(106,238,255,.028) 8px 9px),radial-gradient(circle at 80% 18%,rgba(105,232,255,.17),transparent 38%),linear-gradient(155deg,rgba(84,189,255,.09),transparent 55%)}
+.archetype-grid-exodo .archetype-card:hover:not(:disabled) .archetype-scanline{opacity:.8;animation:scanHolo 1.15s linear infinite}
+/* Ocultatun: arquivo secreto / estante */
+.archetype-grid-ocultatun .archetype-card{background:linear-gradient(165deg,#16120e,#0e0d0b 62%,#1a1713);border-radius:6px;box-shadow:inset 9px 0 0 rgba(121,85,46,.18),0 18px 40px rgba(0,0,0,.48)}
+.archetype-grid-ocultatun .archetype-card::before{background:linear-gradient(90deg,rgba(171,123,58,.12),transparent 20%,transparent 78%,rgba(82,61,41,.12)),repeating-linear-gradient(180deg,transparent 0 42px,rgba(102,74,43,.08) 43px 45px),radial-gradient(circle at 86% 20%,rgba(207,181,118,.08),transparent 35%)}
+.archetype-grid-ocultatun .archetype-card::after{border-radius:5px;border-left-color:rgba(206,176,103,.28)}
+.archetype-grid-ocultatun .archetype-seal{border-radius:5px;transform:translateZ(15px) rotate(-2deg);background:linear-gradient(135deg,rgba(55,37,20,.8),rgba(22,18,13,.9));box-shadow:inset 0 0 0 3px rgba(180,144,77,.06),0 5px 12px rgba(0,0,0,.35)}
+.archetype-grid-ocultatun .archetype-meta{border-top:1px solid rgba(164,129,74,.2);width:100%;padding-top:10px}
+.archetype-locked{cursor:not-allowed!important;filter:saturate(.68) brightness(.78);transform:none!important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.035),0 10px 22px rgba(0,0,0,.28)!important}
+.archetype-locked::before{opacity:.55}
+.archetype-card:disabled{opacity:.93}
+@keyframes exoHoloFloat{0%,100%{transform:translateY(0) rotateX(0deg)}50%{transform:translateY(-2px) rotateX(1.2deg)}}
+@keyframes scanHolo{0%{transform:translateY(-80%)}100%{transform:translateY(340%)}}
+@media (prefers-reduced-motion:reduce){.archetype-grid-exodo .archetype-card{animation:none}.archetype-card,.archetype-card:hover:not(:disabled){transition:none;transform:none!important}.archetype-scanline{display:none!important}}
+@media (max-width:720px){.archetype-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.archetype-card{min-height:190px;padding:15px}.archetype-card strong{font-size:1rem}.archetype-card small{font-size:.72rem}.archetype-seal{width:42px;height:42px;font-size:1.05rem}}
+@media (max-width:480px){.archetype-grid{grid-template-columns:1fr}.archetype-card{min-height:170px}}
