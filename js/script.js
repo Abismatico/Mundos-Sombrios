@@ -14,12 +14,11 @@ function createEmbers() {
 createEmbers();
 
 
-const supabaseUrl = 'https://mectcbsmhmyefsllbope.supabase.co';
-const supabaseAnonKey = 'sb_publishable_b_MyJE3_glRlR5VEyFCZ4g_ZU3xzkeS';
-
-const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseAnonKey);
-const supabase = supabaseClient;
-window.supabaseClient = supabaseClient;
+// Supabase removido do bootstrap para evitar quebrar a execução do portal.
+// O fluxo ativo da aplicação é local (localStorage + PBKDF2), que é o que
+// mantém o botão de entrar no jogo funcionando e compatível com o restante do site.
+window.supabase = null;
+window.supabaseClient = null;
 
 // ==========================================
 // USER DATABASE & AUTHENTICATION
@@ -218,40 +217,37 @@ let selectedVttEquipmentCharId = null;
 // AUTHENTICATION LOGIC
 // ==========================================
 async function doLogin() {
-    const email = document.getElementById('login-user').value.trim();
+    const rawIdentifier = document.getElementById('login-user').value.trim();
     const password = document.getElementById('login-pass').value;
 
-    if (!email || !password) {
-        alert("Preencha as credenciais.");
+    if (!rawIdentifier || !password) {
+        alert('Preencha as credenciais.');
         return;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
+    const normalized = String(rawIdentifier).toLowerCase();
+    const account = usersDB.find(u => {
+        const username = String(u?.username || '').toLowerCase();
+        const email = String(u?.email || '').toLowerCase();
+        return username === normalized || email === normalized;
     });
 
-    if (error) {
-        alert('Login inválido');
+    if (!account) {
+        alert('Usuário não encontrado.');
         return;
     }
 
-    const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', data.user.id)
-        .single();
-
-    if (profileError) {
-        alert('Perfil não encontrado');
+    const passwordValid = await msVerifyPassword(password, account.passwordHash);
+    if (!passwordValid) {
+        alert('Senha inválida.');
         return;
     }
 
     currentUser = {
-        id: profile.id,
-        username: profile.username,
-        email: profile.email,
-        role: profile.role
+        id: account.id,
+        username: account.username,
+        email: account.email,
+        role: account.role
     };
 
     document.getElementById('login-user').value = '';
@@ -280,35 +276,9 @@ async function doLogin() {
 }
 
 window.createSupabaseAdmin = async function () {
-  const { data, error } = await supabase.auth.signUp({
-    email: "oliveiradbarbosa@mundossombrios.com",
-    password: "@Bs201197"
-  });
-
-  if (error) {
-    console.error(error);
-    return;
-  }
-
-  const { error: profileError } = await supabase
-    .from("profiles")
-    .insert([
-      {
-        id: data.user.id,
-        username: "oliveira",
-        email: "oliveiradbarbosa@mundossombrios.com",
-        role: "admin"
-      }
-    ]);
-
-  if (profileError) {
-    console.error(profileError);
-    return;
-  }
-
-  console.log("Admin criado com sucesso");
-  alert("Admin criado com sucesso");
+    alert('Autenticação ativa: este site usa login local em localStorage. O admin inicial foi criado via bootstrap local.');
 };
+
 function doLogout() {
     if(confirm("Deseja desconectar do Vazio?")) {
         currentUser = null;
