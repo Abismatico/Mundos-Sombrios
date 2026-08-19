@@ -493,8 +493,26 @@ function isCurrentAdmin() {
 }
 
 async function openAdminPanel() {
-    if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
-    await hydrateAuthState();
+    try {
+        await hydrateAuthState();
+        const freshUsers = Array.isArray(window.MS_DB && window.MS_DB.ready ? await window.MS_DB.fetchUsers() : []) ? (window.MS_DB && window.MS_DB.ready ? await window.MS_DB.fetchUsers() : []) : [];
+        if (freshUsers.length) {
+            usersDB = mergeUsersFromSources(usersDB, freshUsers);
+        }
+        if (!isCurrentAdmin()) {
+            const liveCurrent = usersDB.find(u => String(u.id) === String(currentUser?.id || '')) || null;
+            if (liveCurrent) currentUser = { ...liveCurrent, passwordHash: liveCurrent.passwordHash || liveCurrent.password_hash || liveCurrent.password || null };
+        }
+        if (!isCurrentAdmin()) {
+            alert('Acesso restrito ao ADM.');
+            return false;
+        }
+    } catch (error) {
+        console.warn('[Mundos Sombrios] Falha ao abrir painel do Arconte:', error);
+        alert('Não foi possível validar o Arconte no banco remoto.');
+        return false;
+    }
+
     renderAdminPanel();
     renderAdminRequestsWindows();
     document.getElementById('admin-panel-modal').style.display = 'flex';
@@ -504,6 +522,7 @@ async function openAdminPanel() {
 function renderAdminPanel() {
     if (!isCurrentAdmin()) return false;
     const tbody = document.getElementById('admin-users-list');
+    if (!tbody) return false;
     tbody.innerHTML = '';
     usersDB.forEach((u, index) => {
         const role = normalizeUserRole(u.role);
@@ -593,7 +612,9 @@ function renderAdminRequestsWindows() {
     const container = document.getElementById('admin-requests-container');
     if (!container) return false;
 
-    requestsDB = dedupeRequests(requestsDB);
+    if (window.MS_DB && window.MS_DB.ready) {
+        requestsDB = dedupeRequests(requestsDB);
+    }
     const visibleRequests = requestsDB.filter(req => String(req.status || 'pending').toLowerCase() === 'pending');
 
     container.innerHTML = '';
