@@ -58,7 +58,11 @@
           if(type==='class')payload.subtitle=String(fd.get('subtitle')||'').trim();
           const arr=Array.isArray(c[cfg.key])?c[cfg.key]:[];const ix=arr.findIndex(x=>String(x.id)===String(payload.id));if(ix>=0)arr[ix]=payload;else arr.unshift(payload);c[cfg.key]=arr;
         }
-        if(!write(c))throw new Error('Não foi possível salvar o conteúdo no armazenamento local.');
+        const saved = await write(c);
+        if(!saved) throw new Error('Não foi possível salvar o conteúdo no armazenamento local.');
+        if (window.PortalContent && typeof window.PortalContent.hydrate === 'function') {
+          await window.PortalContent.hydrate();
+        }
         if(typeof window.renderOfficialPortal==='function')await window.renderOfficialPortal();
         open();
       }catch(err){alert(err?.message||'Não foi possível salvar o conteúdo.');}

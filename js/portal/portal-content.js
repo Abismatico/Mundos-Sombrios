@@ -100,7 +100,11 @@
 
     if (window.MS_DB && window.MS_DB.ready) {
       try {
-        await window.MS_DB.saveSiteContent(next, KEY);
+        const result = await window.MS_DB.saveSiteContent(next, KEY);
+        if (result === null || result === undefined) {
+          console.warn('[Mundos Sombrios] saveSiteContent retornou nulo; o conteúdo pode não ter sido persistido no Supabase.');
+          return false;
+        }
         return true;
       } catch (error) {
         console.warn('[Mundos Sombrios] Falha ao salvar conteúdo em Supabase:', error);
