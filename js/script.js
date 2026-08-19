@@ -553,7 +553,9 @@ function toggleUserBan(index) {
 function renderAdminRequestsWindows() {
     if (!isCurrentAdmin()) return false;
     const container = document.getElementById('admin-requests-container');
+    if (!container) return false;
     container.innerHTML = '';
+
     requestsDB.forEach((req, idx) => {
         const top = 100 + (idx * 30);
         const left = 100 + (idx * 30);
@@ -561,52 +563,110 @@ function renderAdminRequestsWindows() {
         win.id = `req-win-${req.id}`;
         win.className = 'vtt-floating-window';
         win.style.cssText = `position:absolute; top:${top}px !important; left:${left}px !important; transform:none !important; width:300px; display:flex; pointer-events:auto; z-index:9500;`;
-        
-        win.innerHTML = `
-            <div class="vtt-window-header" id="req-header-${req.id}">
-                <span class="vtt-font" style="font-size:0.9rem;">Elevação de Mestre</span>
-                <button class="win-close-btn" onclick="document.getElementById('req-win-${req.id}').style.display='none'">X</button>
-            </div>
-            <div class="vtt-window-body" style="text-align:center;">
-                <p style="margin-bottom:15px; font-size:0.9rem;"><b>${req.username}</b> deseja forjar Fendas (Mestre).</p>
-                <div style="display:flex; gap:10px; justify-content:center;">
-                    <button class="souls-btn small-btn" style="border-color:#a8ff00; color:#a8ff00;" onclick="handleReq(${req.id}, true)">Aceitar</button>
-                    <button class="souls-btn small-btn" style="border-color:#ff3333; color:#ff3333;" onclick="handleReq(${req.id}, false)">Negar</button>
-                </div>
-            </div>
-        `;
+
+        const header = document.createElement('div');
+        header.className = 'vtt-window-header';
+        header.id = `req-header-${req.id}`;
+        header.style.cursor = 'move';
+
+        const title = document.createElement('span');
+        title.className = 'vtt-font';
+        title.style.fontSize = '0.9rem';
+        title.textContent = 'Elevação de Mestre';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.type = 'button';
+        closeBtn.className = 'win-close-btn';
+        closeBtn.textContent = 'X';
+        closeBtn.addEventListener('click', () => {
+            const target = document.getElementById(`req-win-${req.id}`);
+            if (target) target.remove();
+        });
+
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+
+        const body = document.createElement('div');
+        body.className = 'vtt-window-body';
+        body.style.textAlign = 'center';
+
+        const text = document.createElement('p');
+        text.style.marginBottom = '15px';
+        text.style.fontSize = '0.9rem';
+        text.innerHTML = `<b>${req.username}</b> deseja forjar Fendas (Mestre).`;
+
+        const actions = document.createElement('div');
+        actions.style.display = 'flex';
+        actions.style.gap = '10px';
+        actions.style.justifyContent = 'center';
+
+        const acceptBtn = document.createElement('button');
+        acceptBtn.type = 'button';
+        acceptBtn.className = 'souls-btn small-btn';
+        acceptBtn.style.borderColor = '#a8ff00';
+        acceptBtn.style.color = '#a8ff00';
+        acceptBtn.textContent = 'Aceitar';
+        acceptBtn.addEventListener('click', () => {
+            handleReq(req.id, true);
+        });
+
+        const rejectBtn = document.createElement('button');
+        rejectBtn.type = 'button';
+        rejectBtn.className = 'souls-btn small-btn';
+        rejectBtn.style.borderColor = '#ff3333';
+        rejectBtn.style.color = '#ff3333';
+        rejectBtn.textContent = 'Negar';
+        rejectBtn.addEventListener('click', () => {
+            handleReq(req.id, false);
+        });
+
+        actions.appendChild(acceptBtn);
+        actions.appendChild(rejectBtn);
+        body.appendChild(text);
+        body.appendChild(actions);
+
+        win.appendChild(header);
+        win.appendChild(body);
         container.appendChild(win);
-        makeDraggable(win, win.querySelector(`#req-header-${req.id}`), false);
+
+        if (header) {
+            makeDraggable(win, header, false);
+        }
     });
+
+    return true;
 }
 
 async function handleReq(reqId, approved) {
     if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
     const req = requestsDB.find(r => String(r.id) === String(reqId));
-    if(req) {
-        if(approved) {
-            const u = usersDB.find(u => String(u.id) === String(req.userId || req.user_id));
-            if(u) {
-                u.role = 'mestre';
-                u.status = 'active';
-                u.banned = false;
-                msWriteStorageJSON('mundosSombriosUsers', usersDB);
-                if (window.MS_DB && window.MS_DB.ready) {
-                    await window.MS_DB.saveProfile(u);
-                }
+    if (!req) return false;
+
+    if (approved) {
+        const u = usersDB.find(u => String(u.id) === String(req.userId || req.user_id));
+        if (u) {
+            u.role = 'mestre';
+            u.status = 'active';
+            u.banned = false;
+            msWriteStorageJSON('mundosSombriosUsers', usersDB);
+            if (window.MS_DB && window.MS_DB.ready) {
+                await window.MS_DB.saveProfile(u);
             }
         }
-        requestsDB = requestsDB.filter(r => String(r.id) !== String(reqId));
-        msWriteStorageJSON('mundosSombriosRequests', requestsDB);
-        if (window.MS_DB && window.MS_DB.ready) {
-            const remoteReqs = await window.MS_DB.fetchAdminRequests();
-            requestsDB = remoteReqs.filter(r => String(r.status || 'pending') === 'pending');
-        }
-        document.getElementById(`req-win-${reqId}`)?.remove();
-        renderAdminRequestsWindows();
-        return true;
     }
-    return false;
+
+    requestsDB = requestsDB.filter(r => String(r.id) !== String(reqId));
+    msWriteStorageJSON('mundosSombriosRequests', requestsDB);
+    if (window.MS_DB && window.MS_DB.ready) {
+        const remoteReqs = await window.MS_DB.fetchAdminRequests();
+        requestsDB = Array.isArray(remoteReqs) ? remoteReqs.filter(r => String(r.status || 'pending') === 'pending') : [];
+    }
+
+    const win = document.getElementById(`req-win-${reqId}`);
+    if (win) win.remove();
+
+    renderAdminRequestsWindows();
+    return true;
 }
 
 // ==========================================
