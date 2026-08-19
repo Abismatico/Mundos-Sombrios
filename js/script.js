@@ -161,36 +161,6 @@ function normalizeSingleAdminState() {
     return true;
 }
 
-const DEFAULT_ADMIN_BOOTSTRAP = Object.assign({
-    username: '???-???',
-    email: 'oliveiradbarbosa@mundossombrios.com',
-    password: '@Bs201197'
-}, window.MS_ADMIN_BOOTSTRAP || {});
-
-async function ensureDefaultAdminBootstrap() {
-    if (hasConfiguredAdmin()) return true;
-    const username = String(DEFAULT_ADMIN_BOOTSTRAP.username || '???-???').trim();
-    const email = String(DEFAULT_ADMIN_BOOTSTRAP.email || 'oliveiradbarbosa@mundossombrios.com').trim();
-    const password = String(DEFAULT_ADMIN_BOOTSTRAP.password || '@Bs201197');
-    if (!username || !email.includes('@') || password.length < 8) return false;
-    if (usersDB.some(u => String(u.username || '').toLowerCase() === username.toLowerCase())) return true;
-
-    const account = {
-        id: 'u-default-admin',
-        username,
-        email,
-        passwordHash: await msHashPassword(password),
-        role: 'admin',
-        createdAt: new Date().toISOString(),
-        isBootstrap: true
-    };
-
-    usersDB.push(account);
-    msWriteStorageJSON('mundosSombriosUsers', usersDB);
-    console.info('[Mundos Sombrios] Admin bootstrap criado para a instalação pública.');
-    return true;
-}
-
 function refreshInitialSetupVisibility() {
     const btn = document.getElementById('btn-initial-setup');
     if (btn) btn.style.display = hasConfiguredAdmin() ? 'none' : 'inline-block';
@@ -200,7 +170,6 @@ function refreshInitialSetupVisibility() {
     try {
         await hydrateAuthState();
         normalizeSingleAdminState();
-        await ensureDefaultAdminBootstrap();
     } finally {
         refreshInitialSetupVisibility();
     }
@@ -345,6 +314,10 @@ async function doLogin() {
 
         showScreen('screen-portal');
         if (typeof window.renderOfficialPortal === 'function') window.renderOfficialPortal();
+        if (currentUser.role === 'admin') {
+            await hydrateAuthState();
+            renderAdminRequestsWindows();
+        }
         await msSyncOnlineState();
         return true;
     } catch (error) {
@@ -471,7 +444,7 @@ async function createInitialAdmin() {
     }
     refreshInitialSetupVisibility();
     closeInitialSetup();
-    alert('ADM inicial criado. Em uma publicação real, migre esta autenticação para o backend.');
+    alert('ADM inicial criado e salvo no Supabase. Nenhuma credencial fica embutida no código.');
 }
 
 // ==========================================
@@ -481,9 +454,11 @@ function isCurrentAdmin() {
     return !!(currentUser && currentUser.role === 'admin');
 }
 
-function openAdminPanel() {
+async function openAdminPanel() {
     if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
+    await hydrateAuthState();
     renderAdminPanel();
+    renderAdminRequestsWindows();
     document.getElementById('admin-panel-modal').style.display = 'flex';
     return true;
 }
@@ -605,23 +580,30 @@ function renderAdminRequestsWindows() {
     });
 }
 
-function handleReq(reqId, approved) {
+async function handleReq(reqId, approved) {
     if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
-    const req = requestsDB.find(r => r.id === reqId);
+    const req = requestsDB.find(r => String(r.id) === String(reqId));
     if(req) {
         if(approved) {
-            const u = usersDB.find(u => u.id === req.userId);
+            const u = usersDB.find(u => String(u.id) === String(req.userId || req.user_id));
             if(u) {
                 u.role = 'mestre';
+                u.status = 'active';
+                u.banned = false;
                 msWriteStorageJSON('mundosSombriosUsers', usersDB);
                 if (window.MS_DB && window.MS_DB.ready) {
-                    window.MS_DB.saveProfile(u);
+                    await window.MS_DB.saveProfile(u);
                 }
             }
         }
-        requestsDB = requestsDB.filter(r => r.id !== reqId);
+        requestsDB = requestsDB.filter(r => String(r.id) !== String(reqId));
         msWriteStorageJSON('mundosSombriosRequests', requestsDB);
+        if (window.MS_DB && window.MS_DB.ready) {
+            const remoteReqs = await window.MS_DB.fetchAdminRequests();
+            requestsDB = remoteReqs.filter(r => String(r.status || 'pending') === 'pending');
+        }
         document.getElementById(`req-win-${reqId}`)?.remove();
+        renderAdminRequestsWindows();
         return true;
     }
     return false;
@@ -915,7 +897,7 @@ function selectGameMode(mode) {
     }
     selectedGameMode = mode;
     currentMode = mode;
-    try { sessionStorage.setItem('mundosSombriosSelectedMode', mode); } catch(e) {}
+    window.__mundosSelectedMode = mode;
     const titleEl = document.getElementById('sanctuary-title');
     titleEl.innerText = mode === 'exodo' ? "Santuário de Êxodo" : "Santuário de Ocultatun";
     showScreen('screen-char-select');
@@ -1910,11 +1892,16 @@ function kickPlayer(index, type) {
     if(confirm(`Deseja ${type === 'perm' ? 'BANIR' : 'EXPULSAR'} ${p.name}?`)) {
         if(type === 'perm' && currentTableData && !p.isNPC) {
             currentTableData.banned.push(p.id);
-            localStorage.setItem('mundosSombriosTables', JSON.stringify(allTablesDB));
+            if (Array.isArray(allTablesDB)) {
+                const idx = allTablesDB.findIndex(t => t.id === currentTableData.id);
+                if (idx !== -1) {
+                    allTablesDB[idx] = { ...allTablesDB[idx], banned: currentTableData.banned || [] };
+                }
+            }
         }
         tablePlayers.splice(index, 1);
         renderVttCards();
-        openManagePlayers(); // refresh list
+        openManagePlayers();
     }
 }
 
@@ -1939,7 +1926,6 @@ function applyVttTheme() {
         currentTableData.theme = document.getElementById('vtt-theme-select').value;
         const idx = allTablesDB.findIndex(t => t.id === currentTableData.id);
         if(idx !== -1) allTablesDB[idx].theme = currentTableData.theme;
-        localStorage.setItem('mundosSombriosTables', JSON.stringify(allTablesDB));
     }
     cancelVttTheme(); 
 }
@@ -3510,29 +3496,22 @@ const MS_REPO_KEY = 'mundosSombriosCharacterReposV3';
 const MS_JOINED_KEY = 'mundosSombriosJoinedReposV3';
 const MS_TABLE_MIGRATION_KEY = 'mundosSombriosTableMigrationV3';
 const MS_CHAR_MIGRATION_KEY = 'mundosSombriosCharMigrationV3';
+const msInMemoryStore = {};
 
 function msClone(value) {
     return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
 
 function msReadJSON(key, fallback) {
-    try {
-        const raw = localStorage.getItem(key);
-        return raw ? JSON.parse(raw) : fallback;
-    } catch (err) {
-        console.warn('[Mundos Sombrios] Falha ao ler JSON:', key, err);
-        return fallback;
+    if (Object.prototype.hasOwnProperty.call(msInMemoryStore, key)) {
+        return msClone(msInMemoryStore[key]);
     }
+    return msClone(fallback);
 }
 
 function msWriteJSON(key, value) {
-    try {
-        localStorage.setItem(key, JSON.stringify(value));
-        return true;
-    } catch (err) {
-        console.warn('[Mundos Sombrios] Persistência indisponível:', key, err);
-        return false;
-    }
+    msInMemoryStore[key] = msClone(value);
+    return true;
 }
 
 function msEnsureRepoStore() {
@@ -4396,7 +4375,7 @@ function initBuilderForSelectedMode() {
 
             let mode = (selectedGameMode === 'exodo' || selectedGameMode === 'ocultatun')
                 ? selectedGameMode
-                : ((currentMode === 'exodo' || currentMode === 'ocultatun') ? currentMode : (sessionStorage.getItem('mundosSombriosSelectedMode') || ''));
+                : ((currentMode === 'exodo' || currentMode === 'ocultatun') ? currentMode : (window.__mundosSelectedMode || ''));
             if (mode !== 'exodo' && mode !== 'ocultatun') {
                 alert('Escolha primeiro o modo de jogo: Êxodo ou Ocultatun.');
                 showScreen('screen-mode-select');

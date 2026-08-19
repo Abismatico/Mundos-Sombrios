@@ -560,8 +560,7 @@ window.ENVOLTO_RITUALS_CANONICAL_SOURCE = 'A corrupção antológica O Envolto �
     const cardMode=(ch.mode==='ocultatun'||ch.mode==='exodo')?ch.mode:null;
     const activeMode=(selectedGameMode==='ocultatun'||selectedGameMode==='exodo')?selectedGameMode:currentMode;
     if(cardMode && activeMode && cardMode!==activeMode){
-      selectedGameMode=cardMode; currentMode=cardMode;
-      try{sessionStorage.setItem('mundosSombriosSelectedMode',cardMode);}catch(e){}
+      selectedGameMode=cardMode; currentMode=cardMode; window.__mundosSelectedMode = cardMode;
       return beginNewCharacter();
     }
     currentMode=cardMode||activeMode||currentMode;
