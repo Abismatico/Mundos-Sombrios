@@ -94,6 +94,70 @@
     return clone(current);
   }
 
+  async function portalEntryToPost(entry, kind = 'portal') {
+    const safeId = String(entry?.id || `${kind}-${Date.now().toString(36)}`);
+    const safeTitle = String(entry?.title || 'Registro sem título').trim();
+    const safeSummary = String(entry?.summary || entry?.description || entry?.subtitle || entry?.body || '').trim();
+    const safeBody = String(entry?.body || safeSummary).trim();
+    const safeCategory = String(entry?.category || entry?.kind || entry?.world || '').trim();
+    const safeWorld = String(entry?.world || entry?.key || '').trim();
+    const slug = String(entry?.slug || safeId)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || `${kind}-${Date.now().toString(36)}`;
+
+    return {
+      id: safeId,
+      slug,
+      type: String(kind),
+      title: safeTitle,
+      subtitle: String(entry?.subtitle || safeCategory || safeWorld || '').trim(),
+      summary: safeSummary,
+      body: safeBody,
+      category: safeCategory,
+      world: safeWorld,
+      status: entry?.published === false ? 'draft' : 'published',
+      published: entry?.published !== false,
+      metadata: {
+        ...(entry && typeof entry === 'object' ? entry : {}),
+        source: 'portal-official',
+        savedAt: new Date().toISOString()
+      },
+      createdAt: entry?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  async function syncPortalContentToPosts(next) {
+    if (!window.MS_DB || !window.MS_DB.ready || !next || typeof next !== 'object') return true;
+    try {
+      const groups = [
+        ['announcements', 'announcement'],
+        ['events', 'event'],
+        ['classes', 'class'],
+        ['expansions', 'expansion'],
+        ['community', 'community'],
+        ['stories', 'story'],
+        ['worlds', 'world']
+      ];
+
+      const tasks = [];
+      for (const [key, kind] of groups) {
+        const items = Array.isArray(next[key]) ? next[key] : [];
+        for (const it of items) {
+          if (!it || typeof it !== 'object') continue;
+          tasks.push(window.MS_DB.savePost(portalEntryToPost(it, kind)));
+        }
+      }
+
+      await Promise.all(tasks);
+      return true;
+    } catch (error) {
+      console.warn('[Mundos Sombrios] Falha ao sincronizar conteúdo do portal para posts:', error);
+      return false;
+    }
+  }
+
   async function write(data) {
     const next = merge(defaults, data || {});
     current = next;
@@ -105,6 +169,7 @@
           console.warn('[Mundos Sombrios] saveSiteContent retornou nulo; o conteúdo pode não ter sido persistido no Supabase.');
           return false;
         }
+        await syncPortalContentToPosts(next);
         return true;
       } catch (error) {
         console.warn('[Mundos Sombrios] Falha ao salvar conteúdo em Supabase:', error);
