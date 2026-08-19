@@ -554,9 +554,14 @@ function renderAdminRequestsWindows() {
     if (!isCurrentAdmin()) return false;
     const container = document.getElementById('admin-requests-container');
     if (!container) return false;
+
+    const uniqueRequests = [...new Map(
+        (Array.isArray(requestsDB) ? requestsDB : []).map(req => [String(req.id), req])
+    ).values()];
+
     container.innerHTML = '';
 
-    requestsDB.forEach((req, idx) => {
+    uniqueRequests.forEach((req, idx) => {
         const top = 100 + (idx * 30);
         const left = 100 + (idx * 30);
         const win = document.createElement('div');
@@ -629,9 +634,7 @@ function renderAdminRequestsWindows() {
         win.appendChild(body);
         container.appendChild(win);
 
-        if (header) {
-            makeDraggable(win, header, false);
-        }
+        makeDraggable(win, header, false);
     });
 
     return true;
@@ -641,6 +644,8 @@ async function handleReq(reqId, approved) {
     if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
     const req = requestsDB.find(r => String(r.id) === String(reqId));
     if (!req) return false;
+
+    const resolvedReq = { ...req, status: approved ? 'approved' : 'rejected', updatedAt: new Date().toISOString() };
 
     if (approved) {
         const u = usersDB.find(u => String(u.id) === String(req.userId || req.user_id));
@@ -657,9 +662,12 @@ async function handleReq(reqId, approved) {
 
     requestsDB = requestsDB.filter(r => String(r.id) !== String(reqId));
     msWriteStorageJSON('mundosSombriosRequests', requestsDB);
+
     if (window.MS_DB && window.MS_DB.ready) {
+        await window.MS_DB.saveAdminRequest(resolvedReq);
         const remoteReqs = await window.MS_DB.fetchAdminRequests();
         requestsDB = Array.isArray(remoteReqs) ? remoteReqs.filter(r => String(r.status || 'pending') === 'pending') : [];
+        msWriteStorageJSON('mundosSombriosRequests', requestsDB);
     }
 
     const win = document.getElementById(`req-win-${reqId}`);
