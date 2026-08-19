@@ -1,7 +1,7 @@
 (function () {
     const config = window.MS_DB_CONFIG || {
         url: 'https://mectcbsmhmyefsllbope.supabase.co',
-        anonKey: 'sb_publishable_b_MyJE3_glRlR5VEyFCZ4g_ZU3xzkeS'
+        anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1lY3RjYnNtaG15ZWZzbGxib3BlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcwMTEyNTUsImV4cCI6MjEwMjU4NzI1NX0.Wu9LyRfhRjLLLu-zEBaFWwXosZiBqbdqAzGv4m58u-s'
     };
 
     if (!window.supabase || typeof window.supabase.createClient !== 'function') {
