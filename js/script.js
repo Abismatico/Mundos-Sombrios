@@ -93,6 +93,34 @@ async function hydrateAuthState() {
 if (!Array.isArray(usersDB)) usersDB = [];
 if (!Array.isArray(requestsDB)) requestsDB = [];
 
+function normalizeRequestEntry(req) {
+    if (!req || typeof req !== 'object') return null;
+    const id = String(req.id ?? req.request_id ?? req.reqId ?? 'req-' + Date.now());
+    const userId = String(req.userId ?? req.user_id ?? req.user ?? 'system');
+    const username = String(req.username || req.userName || 'desconhecido').trim() || 'desconhecido';
+    const status = String(req.status || 'pending').trim().toLowerCase();
+    const createdAt = req.createdAt || req.created_at || new Date().toISOString();
+    const updatedAt = req.updatedAt || req.updated_at || createdAt;
+    return { ...req, id, userId, username, status, createdAt, updatedAt };
+}
+
+function dedupeRequests(list) {
+    const map = new Map();
+    (Array.isArray(list) ? list : []).forEach((req) => {
+        const normalized = normalizeRequestEntry(req);
+        if (!normalized || !normalized.id) return;
+        const existing = map.get(normalized.id);
+        if (!existing) {
+            map.set(normalized.id, normalized);
+            return;
+        }
+        const existingTs = new Date(existing.updatedAt || existing.createdAt || 0).getTime();
+        const nextTs = new Date(normalized.updatedAt || normalized.createdAt || 0).getTime();
+        if (nextTs >= existingTs) map.set(normalized.id, normalized);
+    });
+    return [...map.values()].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+}
+
 async function msHashPassword(password) {
     const value = String(password || '');
     if (!window.crypto?.subtle) throw new Error('Web Crypto API indisponível.');
@@ -375,11 +403,21 @@ async function doRegister() {
     }
     
     if(reqMaster) {
-        const request = { id: Date.now(), userId: newUser.id, username: user, createdAt: new Date().toISOString(), status: 'pending' };
-        requestsDB.push(request);
-        msWriteStorageJSON('mundosSombriosRequests', requestsDB);
-        if (window.MS_DB && window.MS_DB.ready) {
-            await window.MS_DB.saveAdminRequest(request);
+        const hasOpenRequest = requestsDB.some(r => {
+            const currentId = String(r.userId || r.user_id || '');
+            const currentName = String(r.username || '').trim().toLowerCase();
+            return (currentId && currentId === String(newUser.id)) ||
+                (currentName && currentName === user.toLowerCase() && String(r.status || 'pending').toLowerCase() === 'pending');
+        });
+
+        if (!hasOpenRequest) {
+            const request = { id: 'req-' + Date.now(), userId: newUser.id, username: user, createdAt: new Date().toISOString(), status: 'pending' };
+            requestsDB.push(request);
+            requestsDB = dedupeRequests(requestsDB);
+            msWriteStorageJSON('mundosSombriosRequests', requestsDB);
+            if (window.MS_DB && window.MS_DB.ready) {
+                await window.MS_DB.saveAdminRequest(request);
+            }
         }
     }
     
@@ -555,13 +593,12 @@ function renderAdminRequestsWindows() {
     const container = document.getElementById('admin-requests-container');
     if (!container) return false;
 
-    const uniqueRequests = [...new Map(
-        (Array.isArray(requestsDB) ? requestsDB : []).map(req => [String(req.id), req])
-    ).values()];
+    requestsDB = dedupeRequests(requestsDB);
+    const visibleRequests = requestsDB.filter(req => String(req.status || 'pending').toLowerCase() === 'pending');
 
     container.innerHTML = '';
 
-    uniqueRequests.forEach((req, idx) => {
+    visibleRequests.forEach((req, idx) => {
         const top = 100 + (idx * 30);
         const left = 100 + (idx * 30);
         const win = document.createElement('div');
@@ -598,7 +635,7 @@ function renderAdminRequestsWindows() {
         const text = document.createElement('p');
         text.style.marginBottom = '15px';
         text.style.fontSize = '0.9rem';
-        text.innerHTML = `<b>${req.username}</b> deseja forjar Fendas (Mestre).`;
+        text.innerHTML = `<b>${String(req.username || 'desconhecido')}</b> deseja forjar Fendas (Mestre).`;
 
         const actions = document.createElement('div');
         actions.style.display = 'flex';
@@ -642,31 +679,34 @@ function renderAdminRequestsWindows() {
 
 async function handleReq(reqId, approved) {
     if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
-    const req = requestsDB.find(r => String(r.id) === String(reqId));
+    const baseReq = (Array.isArray(requestsDB) ? requestsDB : []).find(r => String(r.id) === String(reqId));
+    const req = baseReq || (window.MS_DB && window.MS_DB.ready ? await window.MS_DB.fetchAdminRequests().then(items => (Array.isArray(items) ? items : []).find(r => String(r.id) === String(reqId))) : null);
     if (!req) return false;
 
-    const resolvedReq = { ...req, status: approved ? 'approved' : 'rejected', updatedAt: new Date().toISOString() };
+    const normalizedReq = normalizeRequestEntry(req);
+    const resolvedReq = { ...normalizedReq, status: approved ? 'approved' : 'rejected', updatedAt: new Date().toISOString() };
 
     if (approved) {
-        const u = usersDB.find(u => String(u.id) === String(req.userId || req.user_id));
-        if (u) {
-            u.role = 'mestre';
-            u.status = 'active';
-            u.banned = false;
+        const userCandidate = usersDB.find(u => String(u.id) === String(normalizedReq.userId || normalizedReq.user_id)) ||
+            usersDB.find(u => String(u.username || '').trim().toLowerCase() === String(normalizedReq.username || '').trim().toLowerCase());
+        if (userCandidate) {
+            userCandidate.role = 'mestre';
+            userCandidate.status = 'active';
+            userCandidate.banned = false;
             msWriteStorageJSON('mundosSombriosUsers', usersDB);
             if (window.MS_DB && window.MS_DB.ready) {
-                await window.MS_DB.saveProfile(u);
+                await window.MS_DB.saveProfile(userCandidate);
             }
         }
     }
 
-    requestsDB = requestsDB.filter(r => String(r.id) !== String(reqId));
+    requestsDB = dedupeRequests((Array.isArray(requestsDB) ? requestsDB : []).filter(r => String(r.id) !== String(reqId)));
     msWriteStorageJSON('mundosSombriosRequests', requestsDB);
 
     if (window.MS_DB && window.MS_DB.ready) {
         await window.MS_DB.saveAdminRequest(resolvedReq);
         const remoteReqs = await window.MS_DB.fetchAdminRequests();
-        requestsDB = Array.isArray(remoteReqs) ? remoteReqs.filter(r => String(r.status || 'pending') === 'pending') : [];
+        requestsDB = dedupeRequests(Array.isArray(remoteReqs) ? remoteReqs : []).filter(r => String(r.status || 'pending').toLowerCase() === 'pending');
         msWriteStorageJSON('mundosSombriosRequests', requestsDB);
     }
 
