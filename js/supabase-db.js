@@ -215,9 +215,16 @@
 
         async savePost(post) {
             if (!post) return null;
+            const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+            const id = String(post.id || 'post-' + suffix);
+            const rawSlug = String(post.slug || post.id || 'post-' + suffix).trim();
+            const slug = rawSlug
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '') || 'post-' + suffix;
             const payload = {
-                id: String(post.id || 'post-' + Date.now()),
-                slug: String(post.slug || post.id || 'post-' + Date.now()),
+                id,
+                slug: `${slug}-${suffix}`,
                 type: String(post.type || 'post'),
                 title: String(post.title || 'Post sem título'),
                 subtitle: post.subtitle || '',
@@ -265,6 +272,61 @@
             );
             if (error) return [];
             return Array.isArray(data) ? data : [];
+        },
+
+        async uploadPortalMedia(file) {
+            if (!file || typeof file === 'undefined') return null;
+            const type = String(file.type || '').toLowerCase();
+            const kind = type.startsWith('image/') ? 'image' : type.startsWith('video/') ? 'video' : null;
+            if (!kind) throw new Error('Selecione uma imagem ou vídeo válido.');
+            const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+            const safeName = String(file.name || `${kind}-${suffix}`).replace(/\s+/g, '-');
+            const path = `portal-media/${suffix}-${safeName}`;
+            const { data, error } = await supabase.storage.from('portal-media').upload(path, file, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: file.type || 'application/octet-stream'
+            });
+            if (error) {
+                console.warn('[Mundos Sombrios] uploadPortalMedia falhou:', error);
+                return null;
+            }
+            const publicUrl = supabase.storage.from('portal-media').getPublicUrl(path).data?.publicUrl || '';
+            return {
+                id: path,
+                path,
+                name: safeName,
+                kind,
+                type,
+                url: publicUrl,
+                createdAt: new Date().toISOString()
+            };
+        },
+
+        async removePortalMedia(path) {
+            if (!path) return true;
+            try {
+                const { error } = await supabase.storage.from('portal-media').remove([String(path)]);
+                if (error) {
+                    console.warn('[Mundos Sombrios] removePortalMedia falhou:', error);
+                    return false;
+                }
+                return true;
+            } catch (error) {
+                console.warn('[Mundos Sombrios] removePortalMedia falhou:', error);
+                return false;
+            }
+        },
+
+        async getPortalMediaUrl(path) {
+            if (!path) return '';
+            try {
+                const { data } = supabase.storage.from('portal-media').getPublicUrl(String(path));
+                return data?.publicUrl || '';
+            } catch (error) {
+                console.warn('[Mundos Sombrios] getPortalMediaUrl falhou:', error);
+                return '';
+            }
         },
 
         async syncUserState(snapshot) {

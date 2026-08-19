@@ -101,14 +101,15 @@
     const safeBody = String(entry?.body || safeSummary).trim();
     const safeCategory = String(entry?.category || entry?.kind || entry?.world || '').trim();
     const safeWorld = String(entry?.world || entry?.key || '').trim();
-    const slug = String(entry?.slug || safeId)
+    const safeSlugBase = String(entry?.slug || safeId)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || `${kind}-${Date.now().toString(36)}`;
+    const uniqueSlug = `${safeSlugBase}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
     return {
       id: safeId,
-      slug,
+      slug: uniqueSlug,
       type: String(kind),
       title: safeTitle,
       subtitle: String(entry?.subtitle || safeCategory || safeWorld || '').trim(),
