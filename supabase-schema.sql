@@ -102,63 +102,15 @@ create index if not exists idx_admin_requests_user on public.admin_requests(user
 create index if not exists idx_posts_status on public.posts(status, published);
 create index if not exists idx_site_content_updated_at on public.site_content(updated_at desc);
 
--- optional: enable public read/write for prototype only
-alter table public.profiles enable row level security;
-alter table public.tables enable row level security;
-alter table public.characters enable row level security;
-alter table public.admin_requests enable row level security;
-alter table public.site_content enable row level security;
-alter table public.posts enable row level security;
-alter table public.site_settings enable row level security;
-
-drop policy if exists "allow all public access profiles" on public.profiles;
-create policy "allow all public access profiles"
-on public.profiles
-for all
-using (true)
-with check (true);
-
-drop policy if exists "allow all public access tables" on public.tables;
-create policy "allow all public access tables"
-on public.tables
-for all
-using (true)
-with check (true);
-
-drop policy if exists "allow all public access characters" on public.characters;
-create policy "allow all public access characters"
-on public.characters
-for all
-using (true)
-with check (true);
-
-drop policy if exists "allow all public access admin_requests" on public.admin_requests;
-create policy "allow all public access admin_requests"
-on public.admin_requests
-for all
-using (true)
-with check (true);
-
-drop policy if exists "allow all public access site_content" on public.site_content;
-create policy "allow all public access site_content"
-on public.site_content
-for all
-using (true)
-with check (true);
-
-drop policy if exists "allow all public access posts" on public.posts;
-create policy "allow all public access posts"
-on public.posts
-for all
-using (true)
-with check (true);
-
-drop policy if exists "allow all public access site_settings" on public.site_settings;
-create policy "allow all public access site_settings"
-on public.site_settings
-for all
-using (true)
-with check (true);
+-- Prototype mode: disable RLS entirely so the browser anon key can read/write
+-- without recursive policy errors. Re-enable later with explicit, safe policies.
+alter table public.profiles disable row level security;
+alter table public.tables disable row level security;
+alter table public.characters disable row level security;
+alter table public.admin_requests disable row level security;
+alter table public.site_content disable row level security;
+alter table public.posts disable row level security;
+alter table public.site_settings disable row level security;
 
 create or replace function public.touch_updated_at()
 returns trigger as $$
