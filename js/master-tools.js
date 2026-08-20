@@ -7,23 +7,37 @@
   const FILES='mundosSombriosGMFilesV1', NOTES='mundosSombriosGMNotesV1', NPCS='mundosSombriosGMNPCsV1', VTT='mundosSombriosVttStateV1';
   const MAX_FILE=3*1024*1024;
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const read=(k,f)=>{console.warn('[Mundos Sombrios] Armazenamento local desativado nas ferramentas do mestre.'); return f;};
-  const write=(k,v)=>{console.warn('[Mundos Sombrios] Armazenamento local desativado nas ferramentas do mestre.'); return false;};
   const gm=()=>{try{return !!(currentUser&&(currentUser.role==='mestre'||currentUser.role==='admin'))}catch(_){return false}};
   const uid=()=>{try{return String(currentUser?.id||'')}catch(_){return ''}};
-  const scoped=(key)=>{const all=read(key,{});return (all&&typeof all==='object'&&!Array.isArray(all)&&Array.isArray(all[uid()]))?all[uid()]:[]};
-  const setScoped=(key,val)=>{const all=read(key,{});all[uid()]=Array.isArray(val)?val:[];write(key,all)};
   const tableId=()=>{try{return String(currentTableData?.id||'draft')}catch(_){return 'draft'}};
+  const online={notes:[],npcs:[],files:[],vtt:{chat:[],dice:[],gallery:[]},hydrated:false,unsubscribe:null};
+  const keyKind=k=>k===NOTES?'notes':k===NPCS?'npcs':k===FILES?'files':k===VTT?'vtt':null;
+  const scoped=(key)=>{const kind=keyKind(key); if(kind) return Array.isArray(online[kind])?online[kind]:[]; return [];};
+  async function persistScoped(key,val,previous=[]){
+    if(!window.MS_DB?.ready || !gm() || tableId()==='draft') return;
+    const kind=keyKind(key); const next=Array.isArray(val)?val:[]; const old=Array.isArray(previous)?previous:[];
+    if(kind==='notes'){ for(const n of next) await window.MS_DB.saveGMNote(tableId(),n); for(const n of old) if(!next.some(x=>String(x.id)===String(n.id))) await window.MS_DB.deleteGMNote(n.id); }
+    if(kind==='npcs'){ for(const n of next) await window.MS_DB.saveGMNpc(tableId(),n); for(const n of old) if(!next.some(x=>String(x.id)===String(n.id))) await window.MS_DB.deleteGMNpc(n.id); }
+  }
+  const setScoped=(key,val)=>{const kind=keyKind(key);const next=Array.isArray(val)?val:[];const prev=kind&&Array.isArray(online[kind])?online[kind].slice():[];if(kind) online[kind]=next;persistScoped(key,next,prev).catch(e=>console.warn('[Mundos Sombrios] persistência GM:',e));};
+  async function hydrateOnline(){
+    if(!window.MS_DB?.ready || !gm() || tableId()==='draft' || online.hydrated) return;
+    try{
+      const [notes,npcs,files,state]=await Promise.all([window.MS_DB.fetchGMNotes(tableId()),window.MS_DB.fetchGMNpcs(tableId()),window.MS_DB.fetchGMFiles(tableId()),window.MS_DB.fetchTableState(tableId())]);
+      online.notes=notes.data||[]; online.npcs=npcs.data||[]; online.files=files.data||[]; online.vtt=state.data||online.vtt||{chat:[],dice:[],gallery:[]}; online.hydrated=true;
+    }catch(e){console.warn('[Mundos Sombrios] hidratação das ferramentas do Mestre:',e);}
+  }
   const mode=()=>{try{return currentTableData?.gameMode || (typeof currentDraftGameMode!=='undefined'?currentDraftGameMode:null) || (typeof currentMode!=='undefined'?currentMode:'exodo')}catch(_){return 'exodo'}};
 
   const state={activeTool:'files', shield:null};
 
-  function renderMasterTools(root){
+  async function renderMasterTools(root){
     if(!gm()) return;
+    await hydrateOnline();
     const wrap=document.createElement('section');
     wrap.className='gm-tools-suite';
     wrap.innerHTML=`
-      <header class="gm-tools-head"><div><span class="mr-kicker">ACERVO PRIVADO</span><h3>Cofre do Mestre</h3><p>Arquivos, anotações e fichas de NPCs. Este espaço só é renderizado para Mestre/ADM.</p></div><span class="gm-tools-lock">♛ RESTRITO</span></header>
+      <header class="gm-tools-head"><div><span class="mr-kicker">ACERVO PRIVADO</span><h3>Cofre do Mestre</h3><p>Arquivos, anotações e fichas de NPCs. Este espaço é privado e persistido online por mesa. </p></div><span class="gm-tools-lock">♛ RESTRITO</span></header>
       <nav class="gm-tools-tabs" role="tablist" aria-label="Ferramentas privadas"><button type="button" class="gm-tools-tab active" data-tool="files">Arquivos</button><button type="button" class="gm-tools-tab" data-tool="notes">Bloco de Notas</button><button type="button" class="gm-tools-tab" data-tool="npcs">Fichas de NPC</button></nav>
       <div class="gm-tools-panel" id="gm-tools-panel"></div>`;
     root.appendChild(wrap);
@@ -40,24 +54,26 @@
 
   function renderFiles(panel){
     const files=scoped(FILES);
-    panel.innerHTML=`<div class="gm-tool-toolbar"><label class="gm-upload-btn">＋ ENVIAR ARQUIVOS<input id="gm-file-input" type="file" multiple hidden></label><span class="gm-storage-hint">Máx. ${Math.round(MAX_FILE/1024/1024)} MB por arquivo · armazenamento local</span></div><div id="gm-file-list" class="gm-file-list"></div>`;
-    const list=panel.querySelector('#gm-file-list');
-    if(!files.length){list.innerHTML='<div class="gm-empty">Nenhum arquivo privado protocolado.</div>';}
-    files.forEach(f=>{list.insertAdjacentHTML('beforeend',`<article class="gm-file-card"><div class="gm-file-icon">▣</div><div><b>${esc(f.name)}</b><small>${esc(f.type||'arquivo')} · ${Math.round((f.size||0)/1024)} KB</small></div><button type="button" data-download="${esc(f.id)}">BAIXAR</button><button type="button" class="danger" data-delete="${esc(f.id)}">EXCLUIR</button></article>`);});
+    panel.innerHTML=`<div class="gm-tool-toolbar"><label class="gm-upload-btn">＋ ENVIAR ARQUIVOS<input id="gm-file-input" type="file" multiple hidden></label><span class="gm-storage-hint">Máx. ${Math.round(MAX_FILE/1024/1024)} MB por arquivo · armazenamento privado online</span></div><div id="gm-file-list" class="gm-file-list"></div>`;
+    const list=panel.querySelector('#gm-file-list'); if(!files.length) list.innerHTML='<div class="gm-empty">Nenhum arquivo privado protocolado.</div>';
+    files.forEach(f=>{list.insertAdjacentHTML('beforeend',`<article class="gm-file-card"><div class="gm-file-icon">▣</div><div><b>${esc(f.name)}</b><small>${esc(f.mime_type||f.type||'arquivo')} · ${Math.round((f.size_bytes||f.size||0)/1024)} KB</small></div><button type="button" data-download="${esc(f.id)}">BAIXAR</button><button type="button" class="danger" data-delete="${esc(f.id)}">EXCLUIR</button></article>`);});
     panel.querySelector('#gm-file-input').addEventListener('change',e=>uploadFiles(e.target.files,panel));
     panel.querySelectorAll('[data-download]').forEach(b=>b.addEventListener('click',()=>downloadFile(b.dataset.download)));
     panel.querySelectorAll('[data-delete]').forEach(b=>b.addEventListener('click',()=>deleteFile(b.dataset.delete,panel)));
   }
-  function uploadFiles(fileList,panel){
-    const files=scoped(FILES); let changed=false;
-    [...(fileList||[])].forEach(file=>{
-      if(file.size>MAX_FILE){alert(`O arquivo ${file.name} excede ${Math.round(MAX_FILE/1024/1024)} MB.`);return;}
-      const reader=new FileReader(); reader.onload=()=>{files.push({id:crypto.randomUUID?crypto.randomUUID():String(Date.now()+Math.random()),name:file.name,type:file.type,size:file.size,data:String(reader.result||''),createdAt:Date.now()});setScoped(FILES,files);changed=true;renderFiles(panel);}; reader.readAsDataURL(file);
-    });
+  async function uploadFiles(fileList,panel){
+    if(!window.MS_DB?.ready || tableId()==='draft'){alert('Salve a Fenda antes de enviar arquivos.');return;}
+    for(const file of [...(fileList||[])]){
+      if(file.size>MAX_FILE){alert(`O arquivo ${file.name} excede ${Math.round(MAX_FILE/1024/1024)} MB.`);continue;}
+      try{const {data,error}=await window.MS_DB.uploadGMFile(tableId(),file);if(error)throw error;if(data){online.files.unshift(data);renderFiles(panel);}}catch(e){console.warn('[Mundos Sombrios] Upload GM:',e);alert(`Não foi possível enviar ${file.name}.`);}
+    }
   }
-  function downloadFile(id){if(!gm())return;const f=scoped(FILES).find(x=>String(x.id)===String(id));if(!f)return;const a=document.createElement('a');a.href=f.data;a.download=f.name;document.body.appendChild(a);a.click();a.remove();}
-  function deleteFile(id,panel){if(!gm()||!confirm('Excluir este arquivo privado?'))return;setScoped(FILES,scoped(FILES).filter(f=>String(f.id)!==String(id)));renderFiles(panel);}
-
+  async function downloadFile(id){
+    if(!gm())return; const f=scoped(FILES).find(x=>String(x.id)===String(id));if(!f)return;
+    if(f.path&&window.MS_DB?.createSignedGMFileUrl){const {data,error}=await window.MS_DB.createSignedGMFileUrl(f.path);if(!error&&data?.signedUrl){window.open(data.signedUrl,'_blank','noopener');return;}}
+    if(f.data){const a=document.createElement('a');a.href=f.data;a.download=f.name;document.body.appendChild(a);a.click();a.remove();}
+  }
+  async function deleteFile(id,panel){if(!gm()||!confirm('Excluir este arquivo privado?'))return;const f=scoped(FILES).find(x=>String(x.id)===String(id));if(!f)return;try{const {error}=await window.MS_DB.deleteGMFile(id,f.path);if(error)throw error;online.files=online.files.filter(x=>String(x.id)!==String(id));renderFiles(panel);}catch(e){console.warn('[Mundos Sombrios] Delete GM file:',e);alert('Não foi possível excluir o arquivo.');}}
   function renderNotes(panel){
     const notes=scoped(NOTES); const text=notes.length?notes[0].text:''; const title=notes.length?notes[0].title:'Caderno do Mestre';
     panel.innerHTML=`<div class="gm-note-editor"><input id="gm-note-title" value="${esc(title)}" maxlength="80" placeholder="Título"><textarea id="gm-note-body" rows="13" placeholder="Anote pistas, cenas, decisões, segredos...">${esc(text)}</textarea><div class="gm-note-actions"><button type="button" id="gm-note-save">SALVAR NOTA</button><span id="gm-note-status" class="gm-status"></span></div></div>`;
@@ -109,15 +125,29 @@
   }
   function unmountShield(){document.getElementById('master-shield-cube')?.remove();document.getElementById('master-shield-panel')?.remove();state.shield=null;try{window.__msVttIsGM=false}catch(_){}}
 
-  function vttState(){const all=read(VTT,{});if(!all[tableId()])all[tableId()]={chat:[],dice:[],gallery:[]};return all[tableId()];}
-  function saveVtt(s){const all=read(VTT,{});all[tableId()]=s;write(VTT,all)}
-  function onVttEnter(){if(!gm())return;}
-  function restoreVttState(){const s=vttState();const chat=document.getElementById('chat-messages');if(chat){chat.innerHTML='';s.chat.forEach(x=>{ if(typeof addChatMessage==='function') addChatMessage(x.sender,x.msg,x.color); });}if(typeof diceHistory!=='undefined'){diceHistory=Array.isArray(s.dice)?s.dice.slice():[];if(typeof renderDiceHistory==='function')renderDiceHistory();}const c=document.getElementById('camp-gallery-container');if(c){c.innerHTML='';(s.gallery||[]).forEach(f=>addGalleryDom(f));}}
-  function addGalleryDom(f){const c=document.getElementById('camp-gallery-container');if(!c)return;c.insertAdjacentHTML('beforeend',`<div class="gallery-thumb"><img src="${f.src}" alt="${esc(f.name||'Imagem')}" onclick="viewFullscreen(this.src)"><button type="button" class="delete-btn hide-on-view" data-gallery-src="${encodeURIComponent(f.src)}">X</button></div>`);c.querySelectorAll('[data-gallery-src]').forEach(b=>{if(!b.__bound){b.__bound=true;b.addEventListener('click',()=>removeGalleryImage(decodeURIComponent(b.dataset.gallerySrc||'')));}})}
-  function onChatMessage(sender,msg,isGM){const s=vttState();s.chat.push({sender,msg,color:isGM?'#ff00ff':'#00ffcc',at:Date.now()});s.chat=s.chat.slice(-150);saveVtt(s);}
-  function onDiceRoll(type,result,sender){const s=vttState();s.dice=Array.isArray(s.dice)?s.dice:[];s.dice.push({id:Date.now(),type,result,sender});s.dice=s.dice.slice(-100);saveVtt(s);}
+  function vttState(){return online.vtt||{chat:[],dice:[],gallery:[]};}
+  function saveVtt(state){online.vtt=state; if(window.MS_DB?.ready&&tableId()!=='draft'&&gm()) window.MS_DB.saveTableState(tableId(),state).catch(e=>console.warn('[Mundos Sombrios] Estado VTT:',e));}
+  async function onVttEnter(table,isGM){
+    if(online.unsubscribe){online.unsubscribe();online.unsubscribe=null;} online.hydrated=false; online.notes=[];online.npcs=[];online.files=[];
+    if(table?.id&&window.MS_DB?.ready){
+      try{ const [remote,events]=await Promise.all([window.MS_DB.fetchTableState(table.id),window.MS_DB.fetchTableEvents(table.id,200)]); online.vtt=remote.data||{chat:[],dice:[],gallery:[]};
+        (events.data||[]).forEach(ev=>applyRemoteEvent(ev)); online.hydrated=false; await hydrateOnline();
+        online.unsubscribe=window.MS_DB.subscribeTable(table.id,applyRemoteEvent);
+      }catch(e){console.warn('[Mundos Sombrios] Realtime da mesa:',e);}
+    }
+  }
+  function applyRemoteEvent(event){
+    if(!event||!event.event_type)return; const p=event.payload||{};
+    if(event.event_type==='chat'){const item={sender:p.sender,msg:p.msg,color:p.color||'#00ffcc',id:event.id};if(!online.vtt.chat.some(x=>String(x.id)===String(item.id))){online.vtt.chat.push(item);online.vtt.chat=online.vtt.chat.slice(-150);if(typeof addChatMessage==='function')addChatMessage(item.sender,item.msg,item.color);}}
+    if(event.event_type==='dice'){const item={id:event.id,type:p.type,result:p.result,sender:p.sender};if(!online.vtt.dice.some(x=>String(x.id)===String(item.id))){online.vtt.dice.push(item);diceHistory=online.vtt.dice.slice(-100);if(typeof renderDiceHistory==='function')renderDiceHistory();}}
+  }
+  function restoreVttState(){const s=vttState();const chat=document.getElementById('chat-messages');if(chat){chat.innerHTML='';(s.chat||[]).forEach(x=>{if(typeof addChatMessage==='function')addChatMessage(x.sender,x.msg,x.color);});}if(typeof diceHistory!=='undefined'){diceHistory=Array.isArray(s.dice)?s.dice.slice():[];if(typeof renderDiceHistory==='function')renderDiceHistory();}const c=document.getElementById('camp-gallery-container');if(c){c.innerHTML='';(s.gallery||[]).forEach(f=>addGalleryDom(f));}}
+  function addGalleryDom(f){const c=document.getElementById('camp-gallery-container');if(!c)return;c.insertAdjacentHTML('beforeend',`<div class="gallery-thumb"><img src="${f.src}" alt="${esc(f.name||'Imagem')}" onclick="viewFullscreen(this.src)"><button type="button" class="delete-btn hide-on-view" data-gallery-src="${encodeURIComponent(f.src||'')}">X</button></div>`);}
+  function onChatMessage(sender,msg,isGM){const s=vttState();s.chat=Array.isArray(s.chat)?s.chat:[];const local={id:'local-'+Date.now()+'-'+Math.random(),sender,msg,color:isGM?'#ff00ff':'#00ffcc',at:Date.now()};s.chat.push(local);s.chat=s.chat.slice(-150);saveVtt(s);if(window.MS_DB?.ready&&tableId()!=='draft')window.MS_DB.publishTableEvent(tableId(),'chat',{sender,msg,color:local.color});}
+  function onDiceRoll(type,result,sender){const s=vttState();s.dice=Array.isArray(s.dice)?s.dice:[];s.dice.push({id:'local-'+Date.now()+'-'+Math.random(),type,result,sender});s.dice=s.dice.slice(-100);saveVtt(s);if(window.MS_DB?.ready&&tableId()!=='draft')window.MS_DB.publishTableEvent(tableId(),'dice',{type,result,sender});}
   function syncDice(list){const s=vttState();s.dice=Array.isArray(list)?list.slice(-100):[];saveVtt(s);}
   function saveGalleryImage(src,name){if(!isVttGM())return;const s=vttState();s.gallery=Array.isArray(s.gallery)?s.gallery:[];s.gallery.push({src,name:name||'Imagem',at:Date.now()});s.gallery=s.gallery.slice(-40);saveVtt(s);}
+  function removeGalleryImage(src){const s=vttState();s.gallery=(s.gallery||[]).filter(f=>f.src!==src);saveVtt(s);}
   function isVttGM(){try{return !!window.__msVttIsGM}catch(_){return false;}}
   function removeGalleryImage(src){const s=vttState();s.gallery=(s.gallery||[]).filter(f=>f.src!==src);saveVtt(s);document.querySelectorAll('[data-gallery-src]').forEach(b=>{try{if(decodeURIComponent(b.dataset.gallerySrc||'')===src)b.parentElement?.remove()}catch(_){}})}
 

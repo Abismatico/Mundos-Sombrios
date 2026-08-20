@@ -42,7 +42,6 @@ function normalizeStoredUser(raw) {
     if (!raw || typeof raw !== 'object') return null;
     const normalized = { ...raw };
     normalized.role = normalizeUserRole(raw.role || raw.permission || 'jogador');
-    normalized.passwordHash = raw.passwordHash || raw.password_hash || raw.password || null;
     normalized.username = String(raw.username || '').trim();
     normalized.email = String(raw.email || '').trim();
     normalized.banned = !!(raw.banned || raw.isBanned || raw.status === 'banned');
@@ -121,47 +120,6 @@ function dedupeRequests(list) {
     return [...map.values()].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 }
 
-async function msHashPassword(password) {
-    const value = String(password || '');
-    if (!window.crypto?.subtle) throw new Error('Web Crypto API indisponível.');
-    const salt = crypto.getRandomValues(new Uint8Array(16));
-    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(value), 'PBKDF2', false, ['deriveBits']);
-    const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', salt, iterations:120000, hash:'SHA-256' }, key, 256);
-    const toHex = arr => Array.from(arr, b => b.toString(16).padStart(2,'0')).join('');
-    return `pbkdf2$120000$${toHex(salt)}$${toHex(new Uint8Array(bits))}`;
-}
-
-function msHexToBytes(hex) {
-    const out = new Uint8Array(hex.length / 2);
-    for (let i = 0; i < out.length; i++) out[i] = parseInt(hex.slice(i*2, i*2+2), 16);
-    return out;
-}
-
-async function msVerifyPassword(password, encoded) {
-    if (!encoded) return false;
-    const parts = String(encoded).split('$');
-    if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
-    const iterations = Number(parts[1]);
-    if (!Number.isFinite(iterations) || iterations < 10000) return false;
-    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(password || '')), 'PBKDF2', false, ['deriveBits']);
-    const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', salt:msHexToBytes(parts[2]), iterations, hash:'SHA-256' }, key, 256);
-    return `pbkdf2$${iterations}$${parts[2]}$${Array.from(new Uint8Array(bits), b => b.toString(16).padStart(2,'0')).join('')}` === encoded;
-}
-
-async function msMigrateLegacyPassword(account, plainPassword) {
-    // Migração transparente apenas para bases antigas deste protótipo.
-    account.passwordHash = await msHashPassword(plainPassword);
-    delete account.password;
-    msWriteStorageJSON('mundosSombriosUsers', usersDB);
-}
-
-function hasConfiguredAdmin() {
-    return usersDB.some(u => u && normalizeUserRole(u.role) === 'admin' && (u.passwordHash || u.password_hash));
-}
-
-function countAdmins() {
-    return usersDB.filter(u => u && normalizeUserRole(u.role) === 'admin').length;
-}
 
 function normalizeUserRole(role) {
     const next = String(role || 'jogador').trim().toLowerCase();
@@ -174,30 +132,18 @@ function isUserBanned(user) {
     return !!(user.banned || user.isBanned || user.status === 'banned');
 }
 
-function normalizeSingleAdminState() {
-    const admins = usersDB.filter(u => u && normalizeUserRole(u.role) === 'admin');
-    if (admins.length <= 1) return false;
-
-    const primaryAdminId = admins[0].id;
-    usersDB = usersDB.map(u => {
-        if (!u) return u;
-        if (normalizeUserRole(u.role) !== 'admin' || u.id === primaryAdminId) return u;
-        return { ...u, role: 'jogador' };
-    });
-
-    msWriteStorageJSON('mundosSombriosUsers', usersDB);
-    return true;
-}
-
-function refreshInitialSetupVisibility() {
-    const btn = document.getElementById('btn-initial-setup');
-    if (btn) btn.style.display = hasConfiguredAdmin() ? 'none' : 'inline-block';
+async function refreshInitialSetupVisibility() {
+    const btn=document.getElementById('btn-initial-setup');
+    if(!btn) return;
+    btn.style.display='none';
+    if(window.MS_DB?.ready){
+        try{const result=await window.MS_DB.adminExists();btn.style.display=result.error?'none':(result.data?'none':'inline-block');return;}catch(_){return;}
+    }
 }
 
 (async function bootstrapAdminProfile() {
     try {
         await hydrateAuthState();
-        normalizeSingleAdminState();
     } finally {
         refreshInitialSetupVisibility();
     }
@@ -216,10 +162,8 @@ async function msSyncOnlineState() {
             role: currentUser.role || 'jogador'
         });
         await window.MS_DB.syncUserState({
-            users: usersDB,
-            tables: allTablesDB,
-            characters: characters,
-            requests: requestsDB
+            currentUser,
+            characters: characters
         });
     } catch (error) {
         console.warn('[Mundos Sombrios] Falha na sincronização online:', error);
@@ -279,90 +223,83 @@ let selectedVttEquipmentCharId = null;
 // ==========================================
 // AUTHENTICATION LOGIC
 // ==========================================
-async function doLogin() {
-    const identifier = document.getElementById('login-user').value.trim();
-    const password = document.getElementById('login-pass').value;
-
-    if (!identifier || !password) {
-        alert('Preencha as credenciais.');
-        return false;
-    }
-
-    await hydrateAuthState();
-    const normalized = identifier.toLowerCase();
-    const account = usersDB.find(u =>
-        String(u?.username || '').toLowerCase() === normalized ||
-        String(u?.email || '').toLowerCase() === normalized
-    );
-
-    if (!account) {
-        alert('Login inválido.');
-        return false;
-    }
-
-    if (isUserBanned(account)) {
-        alert('Esta conta foi banida pelo Arconte.');
-        return false;
-    }
-
-    try {
-        let valid = false;
-        const passwordHash = account.passwordHash || account.password_hash || account.password;
-        if (passwordHash && typeof passwordHash === 'string') {
-            valid = await msVerifyPassword(password, passwordHash);
-        } else if (typeof account.password === 'string') {
-            valid = account.password === password;
-            if (valid) await msMigrateLegacyPassword(account, password);
-        }
-
-        if (!valid) {
-            alert('Login inválido.');
-            return false;
-        }
-
-        currentUser = {
-            id: account.id,
-            username: account.username,
-            email: account.email,
-            role: normalizeUserRole(account.role || 'jogador')
-        };
-        loadUserData();
-
-        const displayName = document.getElementById('display-username');
-        if (displayName) displayName.innerText = currentUser.username;
-
-        const emblem = document.getElementById('master-emblem');
-        if (emblem) emblem.style.display = (currentUser.role === 'mestre' || currentUser.role === 'admin') ? 'block' : 'none';
-
-        const adminButton = document.getElementById('btn-admin-panel');
-        if (adminButton) adminButton.style.display = currentUser.role === 'admin' ? 'block' : 'none';
-
-        const gmTab = document.getElementById('tab-btn-gm');
-        if (gmTab) gmTab.style.display = (currentUser.role === 'mestre' || currentUser.role === 'admin') ? 'inline-block' : 'none';
-
-        showScreen('screen-portal');
-        if (typeof window.renderOfficialPortal === 'function') window.renderOfficialPortal();
-        if (currentUser.role === 'admin') {
-            await hydrateAuthState();
-            renderAdminRequestsWindows();
-        }
-        await msSyncOnlineState();
-        return true;
-    } catch (error) {
-        console.error('[Mundos Sombrios] Falha no login local:', error);
-        alert('Não foi possível validar a credencial. Tente novamente.');
-        return false;
-    }
+async function msBuildCurrentUser(profileOverride = null) {
+    if (!window.MS_DB?.ready) return null;
+    const session = await window.MS_DB.getSession();
+    if (!session.user) return null;
+    const remote = profileOverride || (await window.MS_DB.fetchMyProfile()).data;
+    const profile = remote || { id: session.user.id, username: session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'jogador', email: session.user.email || '', role: 'jogador', banned: false, status: 'active' };
+    if (profile.banned || profile.status === 'banned') { await window.MS_DB.signOut(); alert('Esta conta foi banida pelo Arconte.'); return null; }
+    return { id:String(profile.id || session.user.id), authUserId:session.user.id, username:String(profile.username || 'jogador'), email:String(profile.email || session.user.email || ''), role:normalizeUserRole(profile.role || 'jogador'), banned:!!profile.banned, status:profile.status || 'active' };
 }
 
-function doLogout() {
-    if(confirm("Deseja desconectar do Vazio?")) {
-        currentUser = null;
-        document.getElementById('master-emblem').style.display = 'none';
-        document.getElementById('admin-requests-container').innerHTML = '';
-        if (typeof window.openOfficialPortal === 'function') window.openOfficialPortal();
-        else showScreen('screen-portal');
+async function msHydrateRemoteGameState() {
+    if (!window.MS_DB?.ready || !currentUser) return;
+    try {
+        const [remoteChars, remoteTables] = await Promise.all([window.MS_DB.fetchCharacters(), window.MS_DB.fetchTables()]);
+        if (Array.isArray(remoteChars)) {
+            const mine=remoteChars.filter(c=>String(c.user_id||c.owner_id)===String(currentUser.id)).map(c=>{
+                const payload=(c.payload&&typeof c.payload==='object')?msClone(c.payload):{};
+                payload.id=c.id; payload.ownerId=currentUser.id; payload.createdAt=payload.createdAt||c.created_at; payload.updatedAt=c.updated_at;
+                return payload;
+            });
+            const store=msEnsureRepoStore(); store[currentUser.id]=store[currentUser.id]||{characters:[],joinedTables:[],ownedTables:[]}; store[currentUser.id].characters=mine;
+            msWriteJSON(MS_REPO_KEY,store); characters=msClone(mine);
+        }
+        if (Array.isArray(remoteTables)) {
+            allTablesDB=remoteTables.map(t=>msNormalizeTable({id:t.id,code:t.code,name:t.name,theme:t.theme,gameMode:t.game_mode,ownerId:t.owner_id,participants:t.participants||[],banned:t.banned||[],settings:t.settings||{},createdAt:t.created_at,updatedAt:t.updated_at}));
+            msWriteJSON('mundosSombriosTables',allTablesDB);
+        }
+        msSyncCurrentUserView();
+    } catch(error) { console.warn('[Mundos Sombrios] Falha ao hidratar mesas/fichas:',error); }
+}
+
+async function msApplyAuthenticatedSession(profileOverride = null) {
+    currentUser = await msBuildCurrentUser(profileOverride);
+    if (!currentUser) return false;
+    if(sessionStorage.getItem('ms-bootstrap-admin-request')==='1'){
+        try{const {data,error}=await window.MS_DB.client.rpc('bootstrap_first_admin',{p_username:currentUser.username});if(!error&&data){currentUser.role='admin';sessionStorage.removeItem('ms-bootstrap-admin-request');}}catch(e){console.warn('[Mundos Sombrios] Bootstrap pendente:',e);}
     }
+    usersDB = await window.MS_DB.fetchUsers();
+    loadUserData();
+    await msHydrateRemoteGameState();
+    const displayName=document.getElementById('display-username'); if(displayName) displayName.innerText=currentUser.username;
+    const emblem=document.getElementById('master-emblem'); if(emblem) emblem.style.display=(currentUser.role==='mestre'||currentUser.role==='admin')?'block':'none';
+    const adminButton=document.getElementById('btn-admin-panel'); if(adminButton) adminButton.style.display=currentUser.role==='admin'?'block':'none';
+    const gmTab=document.getElementById('tab-btn-gm'); if(gmTab) gmTab.style.display=(currentUser.role==='mestre'||currentUser.role==='admin')?'inline-block':'none';
+    showScreen('screen-portal');
+    if(typeof window.renderOfficialPortal==='function') window.renderOfficialPortal();
+    return true;
+}
+
+async function msBootstrapAuthSession() {
+    if (!window.MS_DB?.ready) return;
+    try { const session=await window.MS_DB.getSession(); if(session.user){ const profile=(await window.MS_DB.fetchMyProfile()).data; await msApplyAuthenticatedSession(profile); } }
+    catch(error){ console.warn('[Mundos Sombrios] Não foi possível restaurar a sessão:', error); }
+}
+
+window.addEventListener('ms-auth-state', async (event)=>{
+    const type=event.detail?.event;
+    if(type==='SIGNED_OUT'){ currentUser=null; return; }
+    if(type==='PASSWORD_RECOVERY'){ try{ const next=window.prompt('Digite a nova senha (mínimo 10 caracteres):'); if(next){ if(String(next).length<10) throw new Error('Senha muito curta.'); const result=await window.MS_DB.updatePassword(next); if(result.error) throw result.error; alert('Senha atualizada com sucesso.'); } }catch(e){ alert(e.message||'Não foi possível atualizar a senha.'); } return; }
+    if(type==='SIGNED_IN' && !currentUser){ try{ await msApplyAuthenticatedSession(); }catch(e){ console.warn('[Mundos Sombrios] Falha ao aplicar sessão:',e); } }
+});
+
+document.addEventListener('DOMContentLoaded',()=>{ refreshInitialSetupVisibility(); msBootstrapAuthSession(); });
+
+async function doLogin() {
+    const identifier=document.getElementById('login-user').value.trim(); const password=document.getElementById('login-pass').value;
+    if(!identifier||!password){alert('Preencha as credenciais.');return false;}
+    if(!window.MS_DB?.ready){alert('O serviço online de autenticação não está disponível.');return false;}
+    try{ const {error}=await window.MS_DB.signIn(identifier,password); if(error){console.warn('[Mundos Sombrios] Login:',error);alert('Login inválido ou conta ainda não confirmada.');return false;} const ok=await msApplyAuthenticatedSession(); if(!ok){await window.MS_DB.signOut();alert('Perfil de usuário não encontrado ou bloqueado.');return false;} await msSyncOnlineState(); return true; }
+    catch(error){console.error('[Mundos Sombrios] Falha no login online:',error);alert('Não foi possível autenticar. Verifique o e-mail, senha e conexão.');return false;}
+}
+
+async function doLogout() {
+    if(!confirm('Deseja desconectar do Vazio?')) return;
+    try{if(window.MS_DB?.ready) await window.MS_DB.signOut();}catch(error){console.warn('[Mundos Sombrios] Logout:',error);}
+    currentUser=null; const emblem=document.getElementById('master-emblem'); if(emblem) emblem.style.display='none'; const req=document.getElementById('admin-requests-container'); if(req) req.innerHTML='';
+    if(typeof window.openOfficialPortal==='function') window.openOfficialPortal(); else showScreen('screen-portal');
 }
 
 function openRegister() {
@@ -378,51 +315,12 @@ function closeRegister() {
 }
 
 async function doRegister() {
-    const user = document.getElementById('reg-user').value.trim();
-    const email = document.getElementById('reg-email').value.trim();
-    const pass = document.getElementById('reg-pass').value.trim();
-    const reqMaster = document.getElementById('reg-req-master').checked;
-    
-    if(!user || !pass || !email) { alert("Preencha todos os campos."); return; }
-    await hydrateAuthState();
-    if(usersDB.find(u => String(u.username || '').toLowerCase() === user.toLowerCase() || String(u.email || '').toLowerCase() === email.toLowerCase())) { alert("Nome ou e-mail já reclamados por outra alma."); return; }
-    
-    const newUser = {
-        id: 'u' + Date.now(),
-        username: user,
-        email: email,
-        passwordHash: await msHashPassword(pass),
-        role: 'jogador',
-        banned: false,
-        status: 'active'
-    };
-    usersDB.push(newUser);
-    msWriteStorageJSON('mundosSombriosUsers', usersDB);
-    if (window.MS_DB && window.MS_DB.ready) {
-        await window.MS_DB.saveProfile(newUser);
-    }
-    
-    if(reqMaster) {
-        const hasOpenRequest = requestsDB.some(r => {
-            const currentId = String(r.userId || r.user_id || '');
-            const currentName = String(r.username || '').trim().toLowerCase();
-            return (currentId && currentId === String(newUser.id)) ||
-                (currentName && currentName === user.toLowerCase() && String(r.status || 'pending').toLowerCase() === 'pending');
-        });
-
-        if (!hasOpenRequest) {
-            const request = { id: 'req-' + Date.now(), userId: newUser.id, username: user, createdAt: new Date().toISOString(), status: 'pending' };
-            requestsDB.push(request);
-            requestsDB = dedupeRequests(requestsDB);
-            msWriteStorageJSON('mundosSombriosRequests', requestsDB);
-            if (window.MS_DB && window.MS_DB.ready) {
-                await window.MS_DB.saveAdminRequest(request);
-            }
-        }
-    }
-    
-    alert("Alma Despertada! Agora você pode atravessar o portal (Login).");
-    closeRegister();
+    const user=document.getElementById('reg-user').value.trim(); const email=document.getElementById('reg-email').value.trim(); const pass=document.getElementById('reg-pass').value; const reqMaster=document.getElementById('reg-req-master').checked;
+    if(!user||!pass||!email){alert('Preencha todos os campos.');return;}
+    if(user.length<3||pass.length<10||!email.includes('@')){alert('Use usuário com pelo menos 3 caracteres, e-mail válido e senha com pelo menos 10 caracteres.');return;}
+    if(!window.MS_DB?.ready){alert('O serviço online de cadastro não está disponível.');return;}
+    try{ const {data,error}=await window.MS_DB.signUp({username:user,email,password:pass,requestMaster:reqMaster}); if(error) throw error; closeRegister(); if(data?.session){await msApplyAuthenticatedSession(); alert('Alma despertada e autenticada.');}else{alert('Alma despertada. Verifique o e-mail para confirmar a conta antes de atravessar o portal.');} }
+    catch(error){console.error('[Mundos Sombrios] Cadastro online:',error);alert(error.message||'Não foi possível criar a conta.');}
 }
 
 function openRecover() {
@@ -434,20 +332,15 @@ function closeRecover() {
     document.getElementById('recover-modal').style.display = 'none';
 }
 
-function doRecover() {
-    const email = document.getElementById('rec-email').value.trim().toLowerCase();
-    const acc = usersDB.find(u => String(u.email || '').toLowerCase() === email);
-    if(acc) {
-        alert('A recuperação automática de senha não está disponível nesta instalação. Solicite ao ADM a redefinição da credencial.');
-    } else {
-        alert("E-mail inexistente no Vazio.");
-    }
-    closeRecover();
+async function doRecover() {
+    const email=document.getElementById('rec-email').value.trim().toLowerCase(); if(!email){alert('Informe o e-mail da conta.');return;}
+    if(!window.MS_DB?.ready){alert('O serviço online de recuperação não está disponível.');return;}
+    try{const {error}=await window.MS_DB.resetPasswordForEmail(email,window.location.href.split('#')[0]);if(error)throw error;alert('Enviamos as instruções de recuperação para o e-mail informado, caso exista uma conta.');closeRecover();}
+    catch(error){console.warn('[Mundos Sombrios] Recuperação:',error);alert('Não foi possível solicitar a recuperação agora.');}
 }
 
 async function openInitialSetup() {
     await hydrateAuthState();
-    if (hasConfiguredAdmin()) { alert('O ADM inicial já foi configurado nesta instalação.'); return; }
     document.getElementById('setup-admin-user').value = '';
     document.getElementById('setup-admin-email').value = '';
     document.getElementById('setup-admin-pass').value = '';
@@ -462,27 +355,11 @@ function closeInitialSetup() {
 }
 
 async function createInitialAdmin() {
-    await hydrateAuthState();
-    if (countAdmins() >= 1) { alert('Apenas um administrador pode existir nesta instalação.'); return; }
-    const username = document.getElementById('setup-admin-user').value.trim();
-    const email = document.getElementById('setup-admin-email').value.trim();
-    const password = document.getElementById('setup-admin-pass').value;
-    if (username.length < 3 || password.length < 10 || !email.includes('@')) {
-        alert('Use usuário com pelo menos 3 caracteres, e-mail válido e senha com pelo menos 10 caracteres.');
-        return;
-    }
-    if (usersDB.some(u => String(u.username || '').toLowerCase() === username.toLowerCase())) {
-        alert('Este usuário já existe.'); return;
-    }
-    const newAdmin = { id:'u' + Date.now(), username, email, passwordHash: await msHashPassword(password), role:'admin', createdAt:new Date().toISOString(), banned: false, status: 'active' };
-    usersDB.push(newAdmin);
-    msWriteStorageJSON('mundosSombriosUsers', usersDB);
-    if (window.MS_DB && window.MS_DB.ready) {
-        await window.MS_DB.saveProfile(newAdmin);
-    }
-    refreshInitialSetupVisibility();
-    closeInitialSetup();
-    alert('ADM inicial criado e salvo no Supabase. Nenhuma credencial fica embutida no código.');
+    const username=document.getElementById('setup-admin-user').value.trim(); const email=document.getElementById('setup-admin-email').value.trim(); const password=document.getElementById('setup-admin-pass').value;
+    if(username.length<3||password.length<10||!email.includes('@')){alert('Use usuário com pelo menos 3 caracteres, e-mail válido e senha com pelo menos 10 caracteres.');return;}
+    if(!window.MS_DB?.ready){alert('O serviço online de autenticação não está disponível.');return;}
+    try{ const {data,error}=await window.MS_DB.signUp({username,email,password,requestMaster:false}); if(error)throw error; if(!data?.session){sessionStorage.setItem('ms-bootstrap-admin-request','1');alert('Conta de ADM criada. Confirme o e-mail e faça login; o primeiro usuário será elevado com segurança pelo banco.');closeInitialSetup();return;} const {data:profile,error:bootError}=await window.MS_DB.client.rpc('bootstrap_first_admin',{p_username:username}); if(bootError)throw bootError; await msApplyAuthenticatedSession(profile); closeInitialSetup(); alert('ADM inicial criado com segurança pelo banco.'); }
+    catch(error){console.error('[Mundos Sombrios] Bootstrap ADM:',error);alert(error.message||'Não foi possível criar o ADM inicial.');}
 }
 
 // ==========================================
@@ -501,7 +378,7 @@ async function openAdminPanel() {
         }
         if (!isCurrentAdmin()) {
             const liveCurrent = usersDB.find(u => String(u.id) === String(currentUser?.id || '')) || null;
-            if (liveCurrent) currentUser = { ...liveCurrent, passwordHash: liveCurrent.passwordHash || liveCurrent.password_hash || liveCurrent.password || null };
+            if (liveCurrent) currentUser = { ...liveCurrent };
         }
         if (!isCurrentAdmin()) {
             alert('Acesso restrito ao ADM.');
@@ -531,7 +408,6 @@ function renderAdminPanel() {
             <tr>
                 <td>${u.id}</td>
                 <td><input type="text" id="edit-user-${index}" value="${u.username}"></td>
-                <td><input type="password" id="edit-pass-${index}" placeholder="Nova senha (opcional)" autocomplete="new-password"></td>
                 <td>
                     <select id="edit-role-${index}">
                         <option value="jogador" ${role==='jogador'?'selected':''}>Jogador</option>
@@ -553,58 +429,24 @@ function renderAdminPanel() {
 }
 
 async function saveUserRow(index) {
-    if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
-    if (!Number.isInteger(index) || !usersDB[index]) { alert('Usuário inválido.'); return false; }
-
-    const nextRole = normalizeUserRole(document.getElementById(`edit-role-${index}`).value);
-    const targetUser = usersDB[index];
-    const hasAnotherAdmin = usersDB.some(u => u && u.id !== targetUser.id && normalizeUserRole(u.role) === 'admin');
-
-    if (nextRole === 'admin' && hasAnotherAdmin) {
-        alert('Apenas um administrador pode existir nesta instalação.');
-        renderAdminPanel();
-        return false;
-    }
-
-    if (targetUser.id === currentUser.id && nextRole !== 'admin' && usersDB.filter(u => normalizeUserRole(u.role) === 'admin').length <= 1) {
-        alert('Não é permitido remover o único Arconte ativo.');
-        renderAdminPanel();
-        return false;
-    }
-
-    targetUser.username = document.getElementById(`edit-user-${index}`).value.trim();
-    const newPassword = document.getElementById(`edit-pass-${index}`).value;
-    if (newPassword) targetUser.passwordHash = await msHashPassword(newPassword);
-    delete targetUser.password;
-    targetUser.role = nextRole;
-    targetUser.banned = !!targetUser.banned;
-    targetUser.status = targetUser.banned ? 'banned' : 'active';
-    msWriteStorageJSON('mundosSombriosUsers', usersDB);
-    if (window.MS_DB && window.MS_DB.ready) {
-        await window.MS_DB.saveProfile(targetUser);
-    }
-    renderAdminPanel();
-    alert("Registro Akáshico alterado.");
-    return true;
+    if(!isCurrentAdmin()){alert('Acesso restrito ao ADM.');return false;}
+    const targetUser=usersDB[index]; if(!targetUser){alert('Usuário inválido.');return false;}
+    const nextRole=normalizeUserRole(document.getElementById(`edit-role-${index}`).value);
+    const nextUsername=document.getElementById(`edit-user-${index}`).value.trim();
+    if(!nextUsername){alert('O nome do usuário não pode ficar vazio.');return false;}
+    try{
+        const nameResult=await window.MS_DB.adminUpdateUsername(targetUser.id,nextUsername); if(nameResult.error)throw nameResult.error;
+        if(nextRole!==normalizeUserRole(targetUser.role)){ const roleResult=await window.MS_DB.adminSetUserRole(targetUser.id,nextRole); if(roleResult.error)throw roleResult.error; }
+        usersDB=await window.MS_DB.fetchUsers(); renderAdminPanel(); alert('Registro Akáshico alterado com segurança.'); return true;
+    }catch(error){console.error('[Mundos Sombrios] Alteração administrativa:',error);alert(error.message||'Não foi possível alterar o usuário.');return false;}
 }
 
-function toggleUserBan(index) {
-    if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
-    const targetUser = usersDB[index];
-    if (!targetUser) { alert('Usuário inválido.'); return false; }
-    if (targetUser.role === 'admin' && targetUser.id === currentUser.id) {
-        alert('O Arconte principal não pode ser banido.');
-        return false;
-    }
-
-    targetUser.banned = !isUserBanned(targetUser);
-    targetUser.status = targetUser.banned ? 'banned' : 'active';
-    msWriteStorageJSON('mundosSombriosUsers', usersDB);
-    if (window.MS_DB && window.MS_DB.ready) {
-        window.MS_DB.saveProfile(targetUser);
-    }
-    renderAdminPanel();
-    return true;
+async function toggleUserBan(index) {
+    if(!isCurrentAdmin()){alert('Acesso restrito ao ADM.');return false;}
+    const targetUser=usersDB[index]; if(!targetUser){alert('Usuário inválido.');return false;}
+    if(targetUser.role==='admin'&&targetUser.id===currentUser.id){alert('O Arconte principal não pode ser banido.');return false;}
+    try{ const result=await window.MS_DB.adminSetUserBanned(targetUser.id,!isUserBanned(targetUser)); if(result.error)throw result.error; usersDB=await window.MS_DB.fetchUsers(); renderAdminPanel(); return true; }
+    catch(error){console.error('[Mundos Sombrios] Banimento administrativo:',error);alert(error.message||'Não foi possível alterar o status do usuário.');return false;}
 }
 
 function renderAdminRequestsWindows() {
@@ -711,13 +553,13 @@ async function handleReq(reqId, approved) {
         const userCandidate = usersDB.find(u => String(u.id) === String(normalizedReq.userId || normalizedReq.user_id)) ||
             usersDB.find(u => String(u.username || '').trim().toLowerCase() === String(normalizedReq.username || '').trim().toLowerCase());
         if (userCandidate) {
-            userCandidate.role = 'mestre';
-            userCandidate.status = 'active';
-            userCandidate.banned = false;
-            msWriteStorageJSON('mundosSombriosUsers', usersDB);
-            if (window.MS_DB && window.MS_DB.ready) {
-                await window.MS_DB.saveProfile(userCandidate);
-            }
+            if(window.MS_DB?.ready){
+                const roleResult=await window.MS_DB.adminSetUserRole(userCandidate.id,'mestre');
+                if(roleResult.error) throw roleResult.error;
+                const banResult=await window.MS_DB.adminSetUserBanned(userCandidate.id,false);
+                if(banResult.error) throw banResult.error;
+                usersDB=await window.MS_DB.fetchUsers();
+            } else { alert('O serviço online administrativo não está disponível.'); return false; }
         }
     }
 
@@ -3788,8 +3630,8 @@ function msUpsertTable(table) {
     if (idx >= 0) allTablesDB[idx] = normalized;
     else allTablesDB.push(normalized);
     msWriteJSON('mundosSombriosTables', allTablesDB);
-    if (window.MS_DB && window.MS_DB.ready) {
-        window.MS_DB.saveTable(normalized);
+    if (window.MS_DB && window.MS_DB.ready && currentUser && String(normalized.ownerId) === String(currentUser.id)) {
+        window.MS_DB.saveTable(normalized).catch?.(()=>{});
     }
     return normalized;
 }
@@ -3947,50 +3789,26 @@ function confirmCreateTable() {
     enterVTT('draft', true, name);
 }
 
-function saveDraftTable() {
-    if (!currentUser) return;
-    const code = generateRoomCode();
-    const newTable = {
-        id: Date.now().toString(),
-        name: document.getElementById('vtt-table-name').innerText,
-        code: code,
-        theme: currentVttTheme,
-        gameMode: currentDraftGameMode,
-        ownerId: currentUser.id,
-        banned: [],
-        participants: [{
-            userId: currentUser.id,
-            charId: null,
-            charName: currentUser.username,
-            ownerId: currentUser.id,
-            isOwner: true,
-            linkedAt: Date.now()
-        }]
-    };
-
-    msUpsertTable(newTable);
-    if (window.MS_DB && window.MS_DB.ready) {
-        window.MS_DB.saveTable(newTable);
-    }
-    myTables = (allTablesDB || []).filter(t => String(t.ownerId) === String(currentUser.id)).map(msClone);
-    isDraftMode = false;
-    currentTableData = msClone(newTable);
-    document.getElementById('btn-save-table').style.display = 'none';
-    alert(`Fenda Imortalizada com sucesso!\nCódigo de Acesso para os Jogadores: ${code}`);
-    renderAncoragem();
+async function saveDraftTable() {
+    if(!currentUser)return;
+    const code=generateRoomCode();
+    const draft={id:Date.now().toString(),name:document.getElementById('vtt-table-name').innerText,code,theme:currentVttTheme,gameMode:currentDraftGameMode,ownerId:currentUser.id,banned:[],participants:[],settings:{}};
+    try{
+        const remoteResult=await window.MS_DB.createTableRemote(draft);
+        if(remoteResult?.error) throw remoteResult.error;
+        const remote=remoteResult?.data||remoteResult;
+        const newTable=remote?.id?msNormalizeTable({id:remote.id,code:remote.code,name:remote.name,theme:remote.theme,gameMode:remote.game_mode,ownerId:remote.owner_id,participants:remote.participants||[],banned:remote.banned||[],settings:remote.settings||{}}):draft;
+        msUpsertTable(newTable); myTables=(allTablesDB||[]).filter(t=>String(t.ownerId)===String(currentUser.id)).map(msClone); isDraftMode=false; currentTableData=msClone(newTable);
+        document.getElementById('btn-save-table').style.display='none'; alert(`Fenda Imortalizada com sucesso!\nCódigo de Acesso para os Jogadores: ${newTable.code}`); renderAncoragem();
+    }catch(error){console.error('[Mundos Sombrios] Criação de mesa online:',error);alert(error.message||'Não foi possível criar a Fenda online.');}
 }
 
-function deleteTable(id) {
-    if (confirm("Tem certeza que deseja apagar essa Fenda para sempre? O mundo será destruído.")) {
-        allTablesDB = (allTablesDB || []).filter(t => String(t.id) !== String(id));
-        msWriteJSON('mundosSombriosTables', allTablesDB);
-        if (currentUser) {
-            const repo = msEnsureUserRepo(currentUser.id);
-            repo.ownedTables = (repo.ownedTables || []).filter(t => String(t.id) !== String(id));
-            msSyncRepoStore(currentUser.id, repo);
-        }
-        renderAncoragem();
-    }
+async function deleteTable(id) {
+    if(!confirm('Tem certeza que deseja apagar essa Fenda para sempre? O mundo será destruído.'))return;
+    try{
+        const {error}=await window.MS_DB.client.from('tables').delete().eq('id',String(id)); if(error)throw error;
+        allTablesDB=(allTablesDB||[]).filter(t=>String(t.id)!==String(id)); msWriteJSON('mundosSombriosTables',allTablesDB); renderAncoragem();
+    }catch(error){console.error('[Mundos Sombrios] Exclusão de mesa:',error);alert(error.message||'Não foi possível excluir a Fenda.');}
 }
 
 function leaveJoinedTable(code) {
@@ -4013,55 +3831,22 @@ function openJoinTableModal() {
     document.getElementById('join-modal').style.display = 'flex';
 }
 
-function confirmJoinTable() {
-    const code = document.getElementById('join-code-input').value.trim().toUpperCase();
-    const charIndexRaw = document.getElementById('join-char-select-vtt').value;
-    const charIndex = charIndexRaw === '' ? null : Number(charIndexRaw);
-
-    if (!code || charIndex === null || Number.isNaN(charIndex)) {
-        alert("Preencha o código e selecione uma alma.");
-        return;
-    }
-
-    document.getElementById('join-modal').style.display = 'none';
-    myVttCharIndex = charIndex;
-
-    const selectedChar = characters[charIndex] ? msClone(characters[charIndex]) : null;
-    const table = msGetTableByCodeOrId(code);
-    if (!table) {
-        alert('Código de mesa inválido.');
-        return;
-    }
-
-    if (String(table.ownerId) === String(currentUser.id)) {
-        if (selectedChar) {
-            msLinkParticipantToTable(table.code, {
-                userId: currentUser.id,
-                charId: selectedChar.id,
-                charName: selectedChar.name,
-                ownerId: currentUser.id,
-                isOwner: true
-            });
-            msPersistJoinedTableRepo(currentUser.id, table.code, table.name, table.id);
-        }
-        alert("Você é o Mestre desta mesa! Entrando como Mestre.");
-        enterVTT(table.id, true);
-        return;
-    }
-
-    if (selectedChar) {
-        msLinkParticipantToTable(table.code, {
-            userId: currentUser.id,
-            charId: selectedChar.id,
-            charName: selectedChar.name,
-            ownerId: currentUser.id,
-            isOwner: false
-        });
-        msPersistJoinedTableRepo(currentUser.id, table.code, table.name, table.id);
-    }
-
-    joinedTables = (allTablesDB || []).filter(t => (t.participants || []).some(p => String(p.userId) === String(currentUser.id)) && String(t.ownerId) !== String(currentUser.id)).map(msClone);
-    enterVTT(code, false);
+async function confirmJoinTable() {
+    const code=document.getElementById('join-code-input').value.trim().toUpperCase(); const raw=document.getElementById('join-char-select-vtt').value; const charIndex=raw===''?null:Number(raw);
+    if(!code||charIndex===null||Number.isNaN(charIndex)){alert('Preencha o código e selecione uma alma.');return;}
+    const selectedChar=characters[charIndex]?msClone(characters[charIndex]):null;
+    if(!window.MS_DB?.ready){alert('A mesa online não está disponível.');return;}
+    try{
+        const result=await window.MS_DB.joinTableRemote(code,selectedChar?.id||null); if(result.error)throw result.error;
+        document.getElementById('join-modal').style.display='none'; myVttCharIndex=charIndex;
+        const remote=result.data; const table=remote?.id?msNormalizeTable({id:remote.id,code:remote.code,name:remote.name,theme:remote.theme,gameMode:remote.game_mode,ownerId:remote.owner_id,participants:remote.participants||[],banned:remote.banned||[],settings:remote.settings||{}}):msGetTableByCodeOrId(code);
+        if(!table){alert('Código de mesa inválido.');return;}
+        msUpsertTable(table);
+        if(String(table.ownerId)===String(currentUser.id)){alert('Você é o Mestre desta mesa! Entrando como Mestre.');enterVTT(table.id,true);return;}
+        msPersistJoinedTableRepo(currentUser.id,table.code,table.name,table.id);
+        joinedTables=(allTablesDB||[]).filter(t=>(t.participants||[]).some(p=>String(p.userId)===String(currentUser.id))&&String(t.ownerId)!==String(currentUser.id)).map(msClone);
+        enterVTT(table.id,false);
+    }catch(error){console.error('[Mundos Sombrios] Entrada na mesa:',error);alert(error.message||'Não foi possível entrar nessa Fenda.');}
 }
 
 function enterVTT(tableIdOrCode, asGM, draftName = null) {

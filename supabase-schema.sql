@@ -5,7 +5,6 @@ create table if not exists public.profiles (
   username text not null,
   email text,
   role text not null default 'jogador',
-  password_hash text,
   banned boolean not null default false,
   status text not null default 'active',
   created_at timestamptz not null default now(),
@@ -102,15 +101,10 @@ create index if not exists idx_admin_requests_user on public.admin_requests(user
 create index if not exists idx_posts_status on public.posts(status, published);
 create index if not exists idx_site_content_updated_at on public.site_content(updated_at desc);
 
--- Prototype mode: disable RLS entirely so the browser anon key can read/write
--- without recursive policy errors. Re-enable later with explicit, safe policies.
-alter table public.profiles disable row level security;
-alter table public.tables disable row level security;
-alter table public.characters disable row level security;
-alter table public.admin_requests disable row level security;
-alter table public.site_content disable row level security;
-alter table public.posts disable row level security;
-alter table public.site_settings disable row level security;
+-- ATENÇÃO: esta definição histórica não deve ser usada sozinha em produção.
+-- Execute `supabase-online-migration.sql` imediatamente após este arquivo.
+-- A migração habilita RLS, cria as policies e muda autenticação para Supabase Auth.
+-- Não desabilite RLS para publicar este projeto.
 
 create or replace function public.touch_updated_at()
 returns trigger as $$
