@@ -134,7 +134,7 @@
             const { data, error } = await supabase.auth.signInWithPassword({ email, password });
             return { data, error };
         },
-
+ 
         async signUp({ username, email, password, requestMaster = false }) {
             const { data, error } = await supabase.auth.signUp({
                 email: String(email || '').trim(),
