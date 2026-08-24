@@ -8,11 +8,11 @@ Este projeto não deve conter nenhum usuário, senha ou credencial fixa embutida
 
 A autenticação do administrador deve acontecer via Supabase:
 
-1. o perfil do admin é criado no banco em `public.profiles`;
-2. o campo `role` deve ser `admin`;
-3. o campo `password_hash` deve ser gerado pelo próprio app usando PBKDF2;
-4. o login valida a senha no browser com o hash salvo no banco;
-5. o painel administrativo é liberado somente quando `currentUser.role === 'admin'`.
+1. as contas são criadas pelo Supabase Auth;
+2. um trigger cria o perfil correspondente em `public.profiles`;
+3. o primeiro administrador é promovido pela RPC `bootstrap_first_admin` após autenticação;
+4. o login é validado pelo Supabase Auth, sem senha ou hash salvo no front-end;
+5. o painel administrativo é liberado conforme o perfil autenticado e as permissões do banco.
 
 > Nenhuma conta padrão como `kaue-admin` deve existir no código. Qualquer usuário administrador precisa ser cadastrado no banco ou no primeiro fluxo de criação do painel.
 

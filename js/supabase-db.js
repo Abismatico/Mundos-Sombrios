@@ -1,7 +1,7 @@
 (function () {
     const config = window.MS_DB_CONFIG || {
-  url: 'https://mectcbsmhmyefsllbope.supabase.co',
-  anonKey: 'sb_publishable_b_MyJE3_glRlR5VEyFCZ4g_ZU3xzkeS'
+  url: 'https://xhcunksjrksdzdtabfxt.supabase.co',
+  anonKey: 'sb_publishable_Yq3SDfQEaX_vxdZKvADyMQ_evvVDqdi'
 };
 
     if (!window.supabase || typeof window.supabase.createClient !== 'function') {

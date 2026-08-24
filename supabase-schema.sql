@@ -16,8 +16,6 @@ alter table public.profiles add column if not exists data jsonb not null default
 alter table public.profiles add column if not exists banned boolean not null default false;
 alter table public.profiles add column if not exists status text not null default 'active';
 
-alter table public.admin_requests add column if not exists data jsonb not null default '{}'::jsonb;
-
 -- 2) tables
 create table if not exists public.tables (
   id text primary key,
@@ -57,6 +55,8 @@ create table if not exists public.admin_requests (
   updated_at timestamptz not null default now(),
   data jsonb not null default '{}'::jsonb
 );
+
+alter table public.admin_requests add column if not exists data jsonb not null default '{}'::jsonb;
 
 -- 5) site_content (portal content and content blocks moved from JS to Supabase)
 create table if not exists public.site_content (

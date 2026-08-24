@@ -335,13 +335,13 @@ create policy ms_characters_update on public.characters for update using (user_i
 create policy ms_characters_delete on public.characters for delete using (user_id=auth.uid()::text);
 
 create policy ms_tables_select on public.tables for select using (
-  owner_id=auth.uid()::text or exists(select 1 from public.table_members tm where tm.table_id=tables.id and tm.user_id=auth.uid() and tm.status='active') or exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false)
+  owner_id=auth.uid()::text or exists(select 1 from public.table_members tm where tm.table_id=tables.id and tm.user_id=auth.uid() and tm.status='active') or public.current_profile_role()='admin'
 );
-create policy ms_tables_update on public.tables for update using (owner_id=auth.uid()::text or exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false));
-create policy ms_tables_delete on public.tables for delete using (owner_id=auth.uid()::text or exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false));
+create policy ms_tables_update on public.tables for update using (owner_id=auth.uid()::text or public.current_profile_role()='admin');
+create policy ms_tables_delete on public.tables for delete using (owner_id=auth.uid()::text or public.current_profile_role()='admin');
 
 create policy ms_table_members_select on public.table_members for select using (
-  user_id=auth.uid() or exists(select 1 from public.tables tb where tb.id=table_members.table_id and tb.owner_id=auth.uid()::text) or exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false)
+  user_id=auth.uid() or exists(select 1 from public.tables tb where tb.id=table_members.table_id and tb.owner_id=auth.uid()::text) or public.current_profile_role()='admin'
 );
 
 create policy ms_table_state_select on public.table_state for select using (
@@ -357,16 +357,16 @@ create policy ms_table_events_insert on public.table_events for insert with chec
   actor_id=auth.uid() and (exists(select 1 from public.table_members tm where tm.table_id=table_events.table_id and tm.user_id=auth.uid() and tm.status='active') or exists(select 1 from public.tables tb where tb.id=table_events.table_id and tb.owner_id=auth.uid()::text))
 );
 
-create policy ms_admin_requests_select on public.admin_requests for select using (user_id=auth.uid()::text or exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false));
+create policy ms_admin_requests_select on public.admin_requests for select using (user_id=auth.uid()::text or public.current_profile_role()='admin');
 create policy ms_admin_requests_insert on public.admin_requests for insert with check (user_id=auth.uid()::text);
-create policy ms_admin_requests_update on public.admin_requests for update using (exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false));
+create policy ms_admin_requests_update on public.admin_requests for update using (public.current_profile_role()='admin');
 
 create policy ms_site_content_select on public.site_content for select using (true);
-create policy ms_site_content_write on public.site_content for all using (exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false)) with check (exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false));
-create policy ms_posts_select on public.posts for select using (published=true or exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false));
-create policy ms_posts_write on public.posts for all using (exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false)) with check (exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false));
+create policy ms_site_content_write on public.site_content for all using (public.current_profile_role()='admin') with check (public.current_profile_role()='admin');
+create policy ms_posts_select on public.posts for select using (published=true or public.current_profile_role()='admin');
+create policy ms_posts_write on public.posts for all using (public.current_profile_role()='admin') with check (public.current_profile_role()='admin');
 create policy ms_site_settings_select on public.site_settings for select using (true);
-create policy ms_site_settings_write on public.site_settings for all using (exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false)) with check (exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false));
+create policy ms_site_settings_write on public.site_settings for all using (public.current_profile_role()='admin') with check (public.current_profile_role()='admin');
 
 create policy ms_gm_notes_all on public.gm_notes for all using (exists(select 1 from public.tables tb where tb.id=gm_notes.table_id and tb.owner_id=auth.uid()::text)) with check (exists(select 1 from public.tables tb where tb.id=gm_notes.table_id and tb.owner_id=auth.uid()::text));
 create policy ms_gm_npcs_all on public.gm_npcs for all using (exists(select 1 from public.tables tb where tb.id=gm_npcs.table_id and tb.owner_id=auth.uid()::text)) with check (exists(select 1 from public.tables tb where tb.id=gm_npcs.table_id and tb.owner_id=auth.uid()::text));
@@ -424,5 +424,5 @@ drop policy if exists ms_portal_media_select on storage.objects;
 drop policy if exists ms_portal_media_insert on storage.objects;
 drop policy if exists ms_portal_media_delete on storage.objects;
 create policy ms_portal_media_select on storage.objects for select using (bucket_id='portal-media');
-create policy ms_portal_media_insert on storage.objects for insert with check (bucket_id='portal-media' and exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false));
-create policy ms_portal_media_delete on storage.objects for delete using (bucket_id='portal-media' and exists(select 1 from public.profiles p where p.auth_user_id=auth.uid() and p.role='admin' and p.banned=false));
+create policy ms_portal_media_insert on storage.objects for insert with check (bucket_id='portal-media' and public.current_profile_role()='admin');
+create policy ms_portal_media_delete on storage.objects for delete using (bucket_id='portal-media' and public.current_profile_role()='admin');
