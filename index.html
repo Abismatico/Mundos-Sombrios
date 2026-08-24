@@ -856,5 +856,19 @@
     <script src="js/power-registry.js"></script>
 
 
+    <!-- MODAL GLOBAL: configuração inicial do ADM; mantido fora de qualquer .screen para evitar sobreposição/stacking context -->
+    <div id="initial-setup-modal" class="modal">
+            <div class="modal-content" style="max-width: 450px;">
+                <h3 style="color:#ff9a44; font-family:'Cinzel',serif; margin-bottom:15px;">Configuração Inicial do Arconte</h3>
+                <p style="font-size:.82rem; color:#aaa; margin-bottom:15px;">Crie manualmente o primeiro ADM desta instalação. A senha nunca é exibida novamente e é armazenada como hash local neste protótipo.</p>
+                <div class="form-group"><input id="setup-admin-user" type="text" placeholder="Usuário ADM"></div>
+                <div class="form-group"><input id="setup-admin-email" type="email" placeholder="E-mail do ADM"></div>
+                <div class="form-group"><input id="setup-admin-pass" type="password" placeholder="Senha forte (mín. 10 caracteres)" autocomplete="new-password"></div>
+                <div class="modal-actions">
+                    <button class="souls-btn small-btn" style="border-color:#ff9a44;color:#ff9a44;" onclick="createInitialAdmin()">CRIAR ADM</button>
+                    <button class="souls-btn small-btn" style="border-color:#777;color:#aaa;" onclick="closeInitialSetup()">Cancelar</button>
+                </div>
+            </div>
+        </div>
 </body>
 </html>

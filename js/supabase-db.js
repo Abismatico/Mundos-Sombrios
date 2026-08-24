@@ -134,7 +134,7 @@
             const { data, error } = await supabase.auth.signInWithPassword({ email, password });
             return { data, error };
         },
- 
+
         async signUp({ username, email, password, requestMaster = false }) {
             const { data, error } = await supabase.auth.signUp({
                 email: String(email || '').trim(),
@@ -157,6 +157,11 @@
 
         async updatePassword(password) {
             return supabase.auth.updateUser({ password: String(password || '') });
+        },
+
+        async adminExists() {
+            const { data, error } = await supabase.rpc('admin_exists');
+            return { data: !!data, error };
         },
 
         async fetchMyProfile() {
