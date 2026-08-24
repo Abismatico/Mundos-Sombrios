@@ -132,21 +132,8 @@ function isUserBanned(user) {
     return !!(user.banned || user.isBanned || user.status === 'banned');
 }
 
-async function refreshInitialSetupVisibility() {
-    const btn=document.getElementById('btn-initial-setup');
-    if(!btn) return;
-    btn.style.display='none';
-    if(window.MS_DB?.ready){
-        try{const result=await window.MS_DB.adminExists();btn.style.display=result.error?'none':(result.data?'none':'inline-block');return;}catch(_){return;}
-    }
-}
-
 (async function bootstrapAdminProfile() {
-    try {
-        await hydrateAuthState();
-    } finally {
-        refreshInitialSetupVisibility();
-    }
+    await hydrateAuthState();
 })();
 
 let currentUser = null;
@@ -257,9 +244,7 @@ async function msHydrateRemoteGameState() {
 async function msApplyAuthenticatedSession(profileOverride = null) {
     currentUser = await msBuildCurrentUser(profileOverride);
     if (!currentUser) return false;
-    if(sessionStorage.getItem('ms-bootstrap-admin-request')==='1'){
-        try{const {data,error}=await window.MS_DB.client.rpc('bootstrap_first_admin',{p_username:currentUser.username});if(!error&&data){currentUser.role='admin';sessionStorage.removeItem('ms-bootstrap-admin-request');}}catch(e){console.warn('[Mundos Sombrios] Bootstrap pendente:',e);}
-    }
+
     usersDB = await window.MS_DB.fetchUsers();
     loadUserData();
     await msHydrateRemoteGameState();
@@ -285,8 +270,9 @@ window.addEventListener('ms-auth-state', async (event)=>{
     if(type==='SIGNED_IN' && !currentUser){ try{ await msApplyAuthenticatedSession(); }catch(e){ console.warn('[Mundos Sombrios] Falha ao aplicar sessão:',e); } }
 });
 
-document.addEventListener('DOMContentLoaded',()=>{ refreshInitialSetupVisibility(); msBootstrapAuthSession(); });
-
+document.addEventListener('DOMContentLoaded',()=>{
+    msBootstrapAuthSession();
+});
 async function doLogin() {
     const identifier=document.getElementById('login-user').value.trim(); const password=document.getElementById('login-pass').value;
     if(!identifier||!password){alert('Preencha as credenciais.');return false;}
@@ -328,6 +314,7 @@ function openRecover() {
     document.getElementById('recover-modal').style.display = 'flex';
 }
 
+
 function closeRecover() {
     document.getElementById('recover-modal').style.display = 'none';
 }
@@ -352,14 +339,6 @@ function closeInitialSetup() {
     const modal = document.getElementById('initial-setup-modal');
     if (modal) modal.style.display = 'none';
     document.body.classList.remove('admin-setup-open');
-}
-
-async function createInitialAdmin() {
-    const username=document.getElementById('setup-admin-user').value.trim(); const email=document.getElementById('setup-admin-email').value.trim(); const password=document.getElementById('setup-admin-pass').value;
-    if(username.length<3||password.length<10||!email.includes('@')){alert('Use usuário com pelo menos 3 caracteres, e-mail válido e senha com pelo menos 10 caracteres.');return;}
-    if(!window.MS_DB?.ready){alert('O serviço online de autenticação não está disponível.');return;}
-    try{ const {data,error}=await window.MS_DB.signUp({username,email,password,requestMaster:false}); if(error)throw error; if(!data?.session){sessionStorage.setItem('ms-bootstrap-admin-request','1');alert('Conta de ADM criada. Confirme o e-mail e faça login; o primeiro usuário será elevado com segurança pelo banco.');closeInitialSetup();return;} const {data:profile,error:bootError}=await window.MS_DB.client.rpc('bootstrap_first_admin',{p_username:username}); if(bootError)throw bootError; await msApplyAuthenticatedSession(profile); closeInitialSetup(); alert('ADM inicial criado com segurança pelo banco.'); }
-    catch(error){console.error('[Mundos Sombrios] Bootstrap ADM:',error);alert(error.message||'Não foi possível criar o ADM inicial.');}
 }
 
 // ==========================================
