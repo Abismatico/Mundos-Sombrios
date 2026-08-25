@@ -158,12 +158,6 @@
         async updatePassword(password) {
             return supabase.auth.updateUser({ password: String(password || '') });
         },
-
-        async adminExists() {
-            const { data, error } = await supabase.rpc('admin_exists');
-            return { data: !!data, error };
-        },
-
         async fetchMyProfile() {
             const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
             if (sessionError || !sessionData?.session?.user) return { data: null, error: sessionError || new Error('Sessão ausente.') };
