@@ -1,0 +1,23 @@
+/* Escudo do Mestre — extensão visual usando a identidade do Mundos Sombrios original */
+.master-shield-screen{padding:28px 18px 70px;min-height:70vh;background:transparent}
+.master-shield-head{display:flex;gap:18px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;margin-bottom:18px}
+.master-shield-kicker{font-family:'Cinzel',serif;letter-spacing:2px;color:#d4af37;font-size:12px;text-transform:uppercase}
+.master-shield-head h1{margin:5px 0;color:#f1e5bd;font-family:'Cinzel',serif;letter-spacing:2px}
+.master-shield-head p{margin:0;color:#aaa;max-width:850px}
+.master-shield-badge{border:1px solid #7a5d17;color:#d4af37;padding:8px 12px;font-family:monospace;font-size:11px;background:rgba(0,0,0,.2)}
+.master-shield-nav{display:flex;gap:7px;flex-wrap:wrap;margin:18px 0;border-top:1px solid #333;border-bottom:1px solid #333;padding:10px 0}
+.master-shield-nav button{background:#121212;border:1px solid #333;color:#aaa;padding:9px 12px;font-family:'Cinzel',serif;cursor:pointer;text-transform:uppercase;font-size:11px}
+.master-shield-nav button:hover,.master-shield-nav button.active{border-color:#d4af37;color:#f0d778;background:#19160e}
+.master-shield-body{position:relative}
+.master-shield-body .ms-view{display:none;animation:msFade .25s ease}
+.master-shield-body .ms-view.active{display:block}
+@keyframes msFade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.master-shield-body .stamp,.master-shield-body h1.vt,.master-shield-body .sub,.master-shield-body .panel,.master-shield-body .grid2,.master-shield-body .grid3,.master-shield-body .card,.master-shield-body table.data,.master-shield-body details.bloco{max-width:100%}
+.master-shield-map-editor{border:1px solid #3b3020;background:rgba(12,12,12,.75);padding:16px;margin:18px 0}
+.master-shield-map-editor h3{font-family:'Cinzel',serif;color:#d4af37;margin-bottom:8px}
+.ms-map-edit-row{display:grid;grid-template-columns:1.3fr .7fr .7fr .7fr auto;gap:8px;align-items:center;margin:7px 0}
+.ms-map-edit-row input,.ms-map-edit-row select,.ms-json-editor{background:#090909;border:1px solid #444;color:#ddd;padding:8px;font-family:monospace;min-width:0}
+.ms-map-edit-row button{white-space:nowrap}
+.ms-map-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.ms-map-note{font-size:12px;color:#888;margin:7px 0 12px}
+@media(max-width:800px){.ms-map-edit-row{grid-template-columns:1fr 1fr}.ms-map-edit-row button{grid-column:1/-1}.master-shield-screen{padding-left:10px;padding-right:10px}}

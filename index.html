@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="css/world-codices.css">
     <link rel="stylesheet" href="css/master-room.css">
     <link rel="stylesheet" href="css/master-tools.css">
+    <link rel="stylesheet" href="css/master-shield.css">
     <link rel="stylesheet" href="css/portal/portal.css">
     <link rel="stylesheet" href="css/archetype-art-direction-v0.63.css">
     <link rel="stylesheet" href="css/portal/portal-visual-v0.62.css">
@@ -118,6 +119,9 @@
                 <button id="btn-admin-panel" class="souls-btn" onclick="openAdminPanel()" style="display:none; border-color:#00ffcc; color:#00ffcc; padding: 10px 30px; font-size: 1rem;">
                     SISTEMA DO ARCONTE (ADM)
                 </button>
+                <button id="btn-master-shield" class="souls-btn" onclick="openMasterShield()" style="display:none; border-color:#d4af37; color:#d4af37; padding: 10px 30px; font-size: 1rem;">
+                    🛡️ ESCUDO DO MESTRE
+                </button>
             </div>
         </section>
 
@@ -168,6 +172,42 @@
                     <div class="portals-grid" id="player-tables-list"></div>
                 </div>
                 <div id="ancoragem-gm-tab" class="ancoragem-content" style="display:none" role="tabpanel"></div>
+            </div>
+        </section>
+
+        <!-- TELA ESCUDO DO MESTRE — integrado ao site original -->
+        <section id="screen-master-shield" class="screen master-shield-screen" aria-hidden="true">
+            <div class="screen-nav-actions" role="navigation" aria-label="Navegação do Escudo do Mestre">
+                <button class="back-btn" type="button" onclick="showScreen('screen-mode-select')">&#8592; VOLTAR</button>
+            </div>
+            <div class="master-shield-head">
+                <div><span class="master-shield-kicker">PROTOCOLO RESTRITO</span><h1>Escudo do Mestre</h1><p>Enciclopédia, mapa, economia, regras e arquivos reunidos em uma página privada para Mestres e ADM.</p></div>
+                <div id="master-shield-role" class="master-shield-badge">ACESSO RESTRITO</div>
+            </div>
+            <div id="master-shield-content">
+                <div class="master-shield-nav" role="tablist">
+                    <button type="button" data-ms-view="linha" class="active">Cronologia</button>
+                    <button type="button" data-ms-view="mapa">Mapa</button>
+                    <button type="button" data-ms-view="economia">Economia</button>
+                    <button type="button" data-ms-view="exodo">Êxodo</button>
+                    <button type="button" data-ms-view="ocultatun">Ocultatun</button>
+                    <button type="button" data-ms-view="ordem">Ordem</button>
+                    <button type="button" data-ms-view="envolto">Envolto</button>
+                    <button type="button" data-ms-view="arvores">Árvores</button>
+                    <button type="button" data-ms-view="arquivos">Arquivos</button>
+                </div>
+                <div class="master-shield-body">
+                    <section id="ms-v-linha" class="ms-view active"></section>
+                    <section id="ms-v-mapa" class="ms-view"></section>
+                    <section id="ms-v-economia" class="ms-view"></section>
+                    <section id="ms-v-exodo" class="ms-view"></section>
+                    <section id="ms-v-ocultatun" class="ms-view"></section>
+                    <section id="ms-v-ordem" class="ms-view"></section>
+                    <section id="ms-v-envolto" class="ms-view"></section>
+                    <section id="ms-v-arvores" class="ms-view"></section>
+                    <section id="ms-v-arquivos" class="ms-view"></section>
+                    <div id="ms-tooltip" style="position:fixed;display:none;z-index:99999"></div>
+                </div>
             </div>
         </section>
 
@@ -842,6 +882,8 @@
     <script src="js/hermetico-rituais.js"></script>
     <script src="js/archetype-art-direction.js"></script>
     <script src="js/supabase-db.js"></script>
+    <script src="js/master-shield-data.js"></script>
+    <script src="js/master-shield.js"></script>
     <script src="js/script.js"></script>
     <script src="js/linhagem-tree.js"></script>
     <script src="js/exodo-nexo.js"></script>
@@ -860,7 +902,7 @@
     <div id="initial-setup-modal" class="modal">
             <div class="modal-content" style="max-width: 450px;">
                 <h3 style="color:#ff9a44; font-family:'Cinzel',serif; margin-bottom:15px;">Configuração Inicial do Arconte</h3>
-                <p style="font-size:.82rem; color:#aaa; margin-bottom:15px;">Crie o primeiro Arconte (ADM) desta instalação. A conta é registrada com segurança no Supabase Auth — nenhuma senha fica no código ou no navegador.</p>
+                <p style="font-size:.82rem; color:#aaa; margin-bottom:15px;">Crie manualmente o primeiro ADM desta instalação. A senha nunca é exibida novamente e é gerenciada pelo Supabase Auth nesta instalação.</p>
                 <div class="form-group"><input id="setup-admin-user" type="text" placeholder="Usuário ADM"></div>
                 <div class="form-group"><input id="setup-admin-email" type="email" placeholder="E-mail do ADM"></div>
                 <div class="form-group"><input id="setup-admin-pass" type="password" placeholder="Senha forte (mín. 10 caracteres)" autocomplete="new-password"></div>

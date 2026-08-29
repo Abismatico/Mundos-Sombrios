@@ -151,19 +151,6 @@
             return supabase.auth.signOut();
         },
 
-        async adminExists() {
-            try {
-                const { data, error } = await supabase.rpc('admin_exists');
-                if (error) return null;
-                return !!data;
-            } catch (_e) { return null; }
-        },
-
-        async bootstrapFirstAdmin(username) {
-            const { data, error } = await supabase.rpc('bootstrap_first_admin', { p_username: String(username || '').trim() });
-            return { data, error };
-        },
-
         async resetPasswordForEmail(email, redirectTo) {
             return supabase.auth.resetPasswordForEmail(String(email || '').trim(), { redirectTo });
         },
@@ -436,18 +423,16 @@
 
         async savePost(post) {
             if (!post) return null;
-            const id = String(post.id || 'post-' + Date.now().toString(36));
-            const slugify = (v) => String(v || '')
+            const suffix = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+            const id = String(post.id || 'post-' + suffix);
+            const rawSlug = String(post.slug || post.id || 'post-' + suffix).trim();
+            const slug = rawSlug
                 .toLowerCase()
-                .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
                 .replace(/[^a-z0-9]+/g, '-')
-                .replace(/^-+|-+$/g, '');
-            // Slug ESTÁVEL: derivado do slug informado ou do ID. Editar o mesmo
-            // post atualiza o registro em vez de criar duplicados.
-            const slug = slugify(post.slug) || slugify(id) || ('post-' + Date.now().toString(36));
+                .replace(/^-+|-+$/g, '') || 'post-' + suffix;
             const payload = {
                 id,
-                slug,
+                slug: `${slug}-${suffix}`,
                 type: String(post.type || 'post'),
                 title: String(post.title || 'Post sem título'),
                 subtitle: post.subtitle || '',
@@ -455,12 +440,12 @@
                 body: post.body || '',
                 category: post.category || '',
                 world: post.world || '',
-                status: post.status || (post.published === false ? 'draft' : 'published'),
+                status: post.status || 'draft',
                 published: !!post.published,
                 metadata: post.metadata || {},
+                created_at: post.createdAt || new Date().toISOString(),
                 updated_at: new Date().toISOString()
             };
-            if (post.createdAt) payload.created_at = post.createdAt;
             const { data, error } = await runQuery(tableNames.posts, (tableName) =>
                 supabase.from(tableName).upsert(payload, { onConflict: 'id' }).select()
             );
@@ -468,21 +453,13 @@
             return data && data[0] ? data[0] : null;
         },
 
-        async fetchPublishedPosts() {
-            const { data, error } = await runQuery(tableNames.posts, (tableName) =>
-                supabase.from(tableName).select('*').eq('published', true).order('created_at', { ascending: false })
-            );
-            if (error) return [];
-            return Array.isArray(data) ? data : [];
-        },
-
         async deletePost(id) {
-            if (!id) return { data: null, error: new Error('ID ausente.') };
-            const { data, error } = await runQuery(tableNames.posts, (tableName) =>
+            if (!id) return false;
+            const { error } = await runQuery(tableNames.posts, (tableName) =>
                 supabase.from(tableName).delete().eq('id', String(id))
             );
-            if (error) console.warn('[Mundos Sombrios] deletePost falhou:', error);
-            return { data, error };
+            if (error) { console.warn('[Mundos Sombrios] deletePost falhou:', error); return false; }
+            return true;
         },
 
         async fetchPosts() {

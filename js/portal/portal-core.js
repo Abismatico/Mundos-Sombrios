@@ -1,4 +1,4 @@
-/* Mundos Sombrios — Portal Oficial V2.0
+/* Mundos Sombrios — Portal Oficial V0.61.3
    Fonte única de navegação e renderização pública do portal.
 */
 (function(){
@@ -20,7 +20,6 @@
     const r=root();if(!r)return;
     r.setAttribute('aria-busy','true');
     r.innerHTML='<div class="portal-loading" role="status">Abrindo os arquivos do Portal…</div>';
-    try{ if(window.PortalContent && typeof PortalContent.hydrate==='function' && !PortalContent.isHydrated()) await PortalContent.hydrate(); }catch(_){ }
     const c=PortalContent.read();
     try{mediaUrls=await PortalMedia.prepareContent(c);}catch(_){mediaUrls={};}
     let html;
@@ -81,9 +80,6 @@
     r.querySelectorAll('[data-act]').forEach(b=>b.addEventListener('click',()=>handleAction(b.dataset.act)));
   }
   function handleAction(act){if(act==='login'){openLogin();return;}if(act==='logout'){if(typeof window.doLogout==='function')window.doLogout();return;}if(act==='game'){if(user())show('screen-mode-select');else openLogin();return;}if(act==='codex'){show('screen-codex');if(typeof window.renderWorldCodex==='function')window.renderWorldCodex();return;}if(act==='masters'){if(!user()){openLogin();return;}show('screen-ancoragem');if(typeof window.switchAncoragemTab==='function')window.switchAncoragemTab(role()==='jogador'?'player':'gm');return;}if(act==='admin'){window.openPortalAdmin&&window.openPortalAdmin();return;}if(act==='back'||act==='top'){backToPortal();}}
-  window.renderOfficialPortal=render;window.openOfficialPortal=()=>{state.section='home';render();show('screen-portal');};window.returnToOfficialPortal=backToPortal;window.backToOfficialPortal=backToPortal;
-  if(window.PortalContent && typeof PortalContent.onHydrated==='function'){
-    PortalContent.onHydrated(()=>{ try{ render(); }catch(_){ } });
-  }
+  window.renderOfficialPortal=render;window.openOfficialPortal=async()=>{state.section='home';await PortalContent.hydrate();await render();show('screen-portal');};window.returnToOfficialPortal=backToPortal;window.backToOfficialPortal=backToPortal;
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>window.openOfficialPortal());else window.openOfficialPortal();
 })();
