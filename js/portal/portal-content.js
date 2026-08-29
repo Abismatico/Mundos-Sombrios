@@ -1,209 +1,239 @@
-﻿/* Mundos Sombrios — Portal Oficial / Conteúdo V0.61.3
-   Fonte única de conteúdo público administrável pelo ADM.
+/* Mundos Sombrios — Portal Oficial / Conteúdo V2.0 (Supabase-first)
+   Fonte única de conteúdo público. NÃO possui posts/anúncios hardcoded.
+   Tudo vem de public.site_content (blocos fixos: hero/featured) e
+   public.posts (anúncios, eventos, classes, expansões, comunidade,
+   histórias e mundos publicados pelo ADM).
 */
 (function () {
   'use strict';
 
   const KEY = 'portal-official';
+  const VERSION = 'V2.0';
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const now = Date.now();
 
-  const defaults = {
+  // Estrutura base VAZIA — sem nenhuma postagem embutida no código.
+  const empty = {
     hero: {
       eyebrow: 'PORTAL OFICIAL',
       title: 'Mundos Sombrios',
-      subtitle: 'Dois mundos. Dois abismos. Uma história que não deveria ter sido aberta.',
-      description: 'Conheça o cenário, acompanhe as novidades, descubra classes e expansões e entre no sistema de criação de fichas quando estiver pronto.',
-      primaryLabel: 'ENTRAR NO JOGO'
+      subtitle: '',
+      description: '',
+      primaryLabel: 'ENTRAR NO JOGO',
+      media: null
     },
-    featured: {
-      title: 'A Ordem dos Sete Arcanjos',
-      subtitle: 'Nova expansão em destaque',
-      description: 'Novos registros, caminhos e ameaças chegam ao acervo oficial.',
-      category: 'Expansão',
-      world: 'Ocultatun',
-      status: 'featured'
-    },
-    announcements: [
-      { id: 'ann-1', title: 'Portal Oficial Mundos Sombrios', date: '2026-08-16', category: 'Comunicado', summary: 'O portal do cenário agora reúne notícias, eventos, classes, expansões, Códices e acesso às ferramentas de jogo.', published: true },
-      { id: 'ann-2', title: 'Mesa dos Mestres', date: '2026-08-16', category: 'Atualização', summary: 'Nova central para mesas, ferramentas privadas, NPCs, arquivos e o Escudo do Mestre.', published: true }
-    ],
-    events: [
-      { id: 'evt-1', title: 'A Noite do Envolto', date: '2026-08-28T21:00', world: 'Ocultatun', description: 'Sessão especial focada nas anomalias e nos ritos do Envolto.', published: true },
-      { id: 'evt-2', title: 'Primeiro Contato', date: '2026-09-05T20:00', world: 'Êxodo', description: 'Evento de apresentação para novas mesas de Êxodo: Assimilação.', published: true }
-    ],
-    classes: [
-      { id: 'cls-1', title: 'Esotérico', subtitle: 'O Cientista do Abismo', world: 'Ocultatun', description: 'Enxertos, cirurgia paranormal e covis. Transforme o impossível em ferramenta.', status: 'Destaque' },
-      { id: 'cls-2', title: 'Alquerino', subtitle: 'O Laboratório do Impossível', world: 'Ocultatun', description: 'Caminhos, ingredientes e síntese alquímica em um laboratório vivo.', status: 'Destaque' },
-      { id: 'cls-3', title: 'Mercador da Morte', subtitle: 'O Arsenal em Movimento', world: 'Êxodo', description: 'Bioenergia, força-tarefa, arsenal e operações sob pressão.', status: 'Destaque' },
-      { id: 'cls-4', title: 'Hermético', subtitle: 'O Códice Vivo', world: 'Ocultatun', description: 'Rituais, símbolos e conhecimento selado.', status: 'Destaque' }
-    ],
-    community: [
-      { id: 'com-1', title: 'Campanha em destaque — Ecos do Abismo', kind: 'Campanha', description: 'Uma mesa da comunidade atravessa os registros do Envolto e transforma o Códice em história.', date: '2026-08-16', published: true },
-      { id: 'com-2', title: 'Arquivo da Comunidade — Primeiros relatos', kind: 'Destaque', description: 'Espaço reservado para fan art, relatos de campanha e criações aprovadas.', date: '2026-08-16', published: true }
-    ],
-    expansions: [
-      { id: 'exp-1', title: 'A Corrupção Antológica — O Envolto', world: 'Ocultatun', description: 'Uma camada de horror cósmico, cânticos, rituais e a árvore de habilidades do Envolto.', date: '2026-08-16', status: 'Disponível' },
-      { id: 'exp-2', title: 'A Ordem dos Sete Arcanjos', world: 'Ocultatun', description: 'Uma expansão dedicada aos registros da Ordem e seus caminhos.', date: '2026-08-16', status: 'Disponível' },
-      { id: 'exp-3', title: 'Projeto Player', world: 'Êxodo', description: 'Aprimore a experiência de personagens e evolução.', date: '2026-08-16', status: 'Disponível' }
-    ],
-    stories: [
-      { id: 'story-1', title: 'O Primeiro Eco', subtitle: 'Conto oficial', world: 'Ocultatun', description: 'Um registro encontrado entre as páginas seladas descreve o primeiro sinal de que algo estava respondendo do outro lado.', body: 'Naquela noite, o arquivo respondeu antes que alguém tocasse a página. O som veio de dentro do lacre, como uma respiração presa havia séculos. Quando o selo se partiu, nenhuma voz foi ouvida — apenas o eco de algo que já conhecia os nomes dos presentes.', date: '2026-08-16', kind: 'Conto', published: true },
-      { id: 'story-2', title: 'Registro 07 — Atravessar', subtitle: 'História de Êxodo', world: 'Êxodo', description: 'Um fragmento de relatório narra o momento em que uma equipe percebe que o caminho de volta deixou de existir.', body: 'O marcador de retorno desapareceu do visor às 03:17. O operador tentou recalibrar o protocolo, mas a própria sala passou a responder com coordenadas que não pertenciam ao mapa. Às 03:21, a equipe recebeu uma última instrução: não olhar para trás.', date: '2026-08-16', kind: 'História', published: true }
-    ],
+    featured: { title: '', subtitle: '', description: '', category: '', world: '', status: 'featured', media: null },
+    announcements: [],
+    events: [],
+    classes: [],
+    expansions: [],
+    community: [],
+    stories: [],
     worlds: [
-      { id: 'world-1', key: 'exodo', title: 'Êxodo: Assimilação', eyebrow: 'SALA DE REGISTROS SECRETOS', description: 'Um mundo de protocolos, assimilação e sobrevivência entre registros que deveriam permanecer fechados.', accent: 'tech' },
-      { id: 'world-2', key: 'ocultatun', title: 'Ocultatun Ecos', eyebrow: 'BIBLIOTECA DOS SELOS', description: 'Um mundo de rituais, anomalias, símbolos e ecos que atravessam o conhecimento proibido.', accent: 'arcane' }
+      { id: 'world-exodo', key: 'exodo', title: 'Êxodo: Assimilação', eyebrow: 'SALA DE REGISTROS SECRETOS', description: 'Um mundo de protocolos, assimilação e sobrevivência entre registros que deveriam permanecer fechados.', accent: 'tech', media: null },
+      { id: 'world-ocultatun', key: 'ocultatun', title: 'Ocultatun Ecos', eyebrow: 'BIBLIOTECA DOS SELOS', description: 'Um mundo de rituais, anomalias, símbolos e ecos que atravessam o conhecimento proibido.', accent: 'arcane', media: null }
     ],
-    portalVersion: 'V0.61.3'
+    portalVersion: VERSION
   };
 
-  let current = JSON.parse(JSON.stringify(defaults));
+  const LIST_KEYS = ['announcements', 'events', 'classes', 'expansions', 'community', 'stories', 'worlds'];
+  const TYPE_TO_LIST = {
+    announcement: 'announcements',
+    event: 'events',
+    class: 'classes',
+    expansion: 'expansions',
+    community: 'community',
+    story: 'stories',
+    world: 'worlds'
+  };
 
-  function clone(value) {
-    return JSON.parse(JSON.stringify(value));
+  let current = JSON.parse(JSON.stringify(empty));
+  let hydrated = false;
+  let hydrating = null;
+  const listeners = new Set();
+
+  function clone(value) { return JSON.parse(JSON.stringify(value)); }
+
+  function notify() {
+    hydrated = true;
+    listeners.forEach((fn) => { try { fn(clone(current)); } catch (_) {} });
   }
 
-  function merge(base, extra) {
-    const out = { ...base, ...(extra || {}) };
-    ['announcements', 'events', 'classes', 'expansions', 'community', 'stories', 'worlds'].forEach((k) => {
-      out[k] = Array.isArray(extra?.[k]) ? extra[k] : clone(base[k]);
-    });
-    out.hero = { ...base.hero, ...(extra?.hero || {}) };
-    out.featured = { ...base.featured, ...(extra?.featured || {}) };
-    return out;
+  function postToEntry(post) {
+    if (!post || typeof post !== 'object') return null;
+    const meta = (post.metadata && typeof post.metadata === 'object') ? post.metadata : {};
+    const entry = {
+      id: String(post.id),
+      slug: String(post.slug || ''),
+      type: String(post.type || 'post'),
+      title: String(post.title || ''),
+      subtitle: String(post.subtitle || ''),
+      summary: String(post.summary || ''),
+      body: String(post.body || ''),
+      description: String(meta.description || post.summary || ''),
+      category: String(post.category || ''),
+      world: String(post.world || ''),
+      kind: String(meta.kind || post.category || ''),
+      key: String(meta.key || ''),
+      accent: String(meta.accent || ''),
+      eyebrow: String(meta.eyebrow || ''),
+      status: String(meta.status || ''),
+      date: String(meta.date || post.created_at || ''),
+      published: post.published !== false && String(post.status || 'published') !== 'draft',
+      media: meta.media && typeof meta.media === 'object' ? meta.media : null,
+      createdAt: post.created_at || null,
+      updatedAt: post.updated_at || null
+    };
+    return entry;
   }
 
-  function hydrateFromSupabase() {
-    if (!window.MS_DB || !window.MS_DB.ready) return current;
-
-    window.MS_DB.fetchSiteContent(KEY)
-      .then((remote) => {
-        if (remote && typeof remote === 'object') {
-          current = merge(defaults, remote);
-        }
-      })
-      .catch(() => {
-        current = clone(defaults);
-      });
-
-    return current;
-  }
-
-  function read() {
-    return clone(current);
-  }
-
-  async function portalEntryToPost(entry, kind = 'portal') {
-    const safeId = String(entry?.id || `${kind}-${Date.now().toString(36)}`);
-    const safeTitle = String(entry?.title || 'Registro sem título').trim();
-    const safeSummary = String(entry?.summary || entry?.description || entry?.subtitle || entry?.body || '').trim();
-    const safeBody = String(entry?.body || safeSummary).trim();
-    const safeCategory = String(entry?.category || entry?.kind || entry?.world || '').trim();
-    const safeWorld = String(entry?.world || entry?.key || '').trim();
-    const safeSlugBase = String(entry?.slug || safeId)
+  function entryToPost(entry, type) {
+    const id = String(entry.id || `${type}-${Date.now().toString(36)}`);
+    const slugBase = String(entry.slug || `${type}-${entry.title || id}`)
       .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '') || `${kind}-${Date.now().toString(36)}`;
-    const uniqueSlug = `${safeSlugBase}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-
+      .replace(/^-+|-+$/g, '') || id;
+    const metadata = { ...(entry.metadata && typeof entry.metadata === 'object' ? entry.metadata : {}) };
+    if (entry.media) metadata.media = entry.media;
+    if (entry.kind) metadata.kind = entry.kind;
+    if (entry.key) metadata.key = entry.key;
+    if (entry.accent) metadata.accent = entry.accent;
+    if (entry.eyebrow) metadata.eyebrow = entry.eyebrow;
+    if (entry.status && type !== 'story') metadata.status = entry.status;
+    if (entry.date) metadata.date = entry.date;
+    if (entry.description) metadata.description = entry.description;
     return {
-      id: safeId,
-      slug: uniqueSlug,
-      type: String(kind),
-      title: safeTitle,
-      subtitle: String(entry?.subtitle || safeCategory || safeWorld || '').trim(),
-      summary: safeSummary,
-      body: safeBody,
-      category: safeCategory,
-      world: safeWorld,
-      status: entry?.published === false ? 'draft' : 'published',
-      published: entry?.published !== false,
-      metadata: {
-        ...(entry && typeof entry === 'object' ? entry : {}),
-        source: 'portal-official',
-        savedAt: new Date().toISOString()
-      },
-      createdAt: entry?.createdAt || new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      id,
+      slug: slugBase,
+      type: String(type),
+      title: String(entry.title || 'Sem título'),
+      subtitle: String(entry.subtitle || ''),
+      summary: String(entry.summary || entry.description || ''),
+      body: String(entry.body || ''),
+      category: String(entry.category || entry.kind || ''),
+      world: String(entry.world || ''),
+      status: entry.published === false ? 'draft' : 'published',
+      published: entry.published !== false,
+      metadata
     };
   }
 
-  async function syncPortalContentToPosts(next) {
-    if (!window.MS_DB || !window.MS_DB.ready || !next || typeof next !== 'object') return true;
-    try {
-      const groups = [
-        ['announcements', 'announcement'],
-        ['events', 'event'],
-        ['classes', 'class'],
-        ['expansions', 'expansion'],
-        ['community', 'community'],
-        ['stories', 'story'],
-        ['worlds', 'world']
-      ];
-
-      const tasks = [];
-      for (const [key, kind] of groups) {
-        const items = Array.isArray(next[key]) ? next[key] : [];
-        for (const it of items) {
-          if (!it || typeof it !== 'object') continue;
-          tasks.push(window.MS_DB.savePost(portalEntryToPost(it, kind)));
+  // Hidratação completa a partir do Supabase: blocos fixos + posts publicados.
+  async function hydrateFromSupabase() {
+    if (!window.MS_DB || !window.MS_DB.ready) { notify(); return current; }
+    if (hydrating) return hydrating;
+    hydrating = (async () => {
+      const next = clone(empty);
+      try {
+        const [remote, posts] = await Promise.all([
+          window.MS_DB.fetchSiteContent(KEY),
+          (window.MS_DB.fetchPublishedPosts ? window.MS_DB.fetchPublishedPosts() : window.MS_DB.fetchPosts())
+        ]);
+        if (remote && typeof remote === 'object') {
+          if (remote.hero && typeof remote.hero === 'object') next.hero = { ...next.hero, ...remote.hero };
+          if (remote.featured && typeof remote.featured === 'object') next.featured = { ...next.featured, ...remote.featured };
+          if (typeof remote.portalVersion === 'string') next.portalVersion = remote.portalVersion;
         }
+        const worldOverrides = new Map();
+        (Array.isArray(posts) ? posts : []).forEach((post) => {
+          if (!post || post.published === false || String(post.status || '') === 'draft') return;
+          const entry = postToEntry(post);
+          if (!entry || !entry.title) return;
+          const listKey = TYPE_TO_LIST[entry.type];
+          if (!listKey) return;
+          if (listKey === 'worlds') { worldOverrides.set(entry.key || entry.id, entry); return; }
+          next[listKey].push(entry);
+        });
+        // Mundos: sobrescreve descrição/mídia dos mundos base se houver posts do tipo "world".
+        if (worldOverrides.size) {
+          next.worlds = next.worlds.map((w) => {
+            const o = worldOverrides.get(w.key);
+            return o ? { ...w, ...o, id: w.id, key: w.key, accent: w.accent } : w;
+          });
+        }
+        LIST_KEYS.forEach((k) => {
+          next[k].sort((a, b) => String(b.date || b.createdAt || '').localeCompare(String(a.date || a.createdAt || '')));
+        });
+        current = next;
+      } catch (error) {
+        console.warn('[Mundos Sombrios] Falha ao hidratar conteúdo do Supabase:', error);
       }
+      hydrating = null;
+      notify();
+      return current;
+    })();
+    return hydrating;
+  }
 
-      await Promise.all(tasks);
-      return true;
+  function read() { return clone(current); }
+
+  // Persiste blocos fixos (hero/featured) em site_content. Listas vivem em `posts`.
+  async function writeBlocks(data) {
+    if (!window.MS_DB || !window.MS_DB.ready) return false;
+    const payload = {
+      hero: data?.hero || current.hero,
+      featured: data?.featured || current.featured,
+      portalVersion: VERSION
+    };
+    if (data?.hero) current.hero = { ...current.hero, ...data.hero };
+    if (data?.featured) current.featured = { ...current.featured, ...data.featured };
+    current.portalVersion = VERSION;
+    try {
+      const result = await window.MS_DB.saveSiteContent(payload, KEY);
+      return !!result;
     } catch (error) {
-      console.warn('[Mundos Sombrios] Falha ao sincronizar conteúdo do portal para posts:', error);
+      console.warn('[Mundos Sombrios] Falha ao salvar blocos do portal:', error);
       return false;
     }
   }
 
-  async function write(data) {
-    const next = merge(defaults, data || {});
-    current = next;
+  // Salva um item de lista como post (id estável → sem duplicação).
+  async function saveItem(type, entry) {
+    if (!window.MS_DB || !window.MS_DB.ready) return { data: null, error: new Error('offline') };
+    const post = entryToPost(entry, type);
+    const result = await window.MS_DB.savePost(post);
+    if (result && result.error) return { data: null, error: result.error };
+    await hydrateFromSupabase();
+    return { data: result, error: null };
+  }
 
-    if (window.MS_DB && window.MS_DB.ready) {
-      try {
-        const result = await window.MS_DB.saveSiteContent(next, KEY);
-        if (result === null || result === undefined) {
-          console.warn('[Mundos Sombrios] saveSiteContent retornou nulo; o conteúdo pode não ter sido persistido no Supabase.');
-          return false;
-        }
-        await syncPortalContentToPosts(next);
-        return true;
-      } catch (error) {
-        console.warn('[Mundos Sombrios] Falha ao salvar conteúdo em Supabase:', error);
-        return false;
-      }
+  async function deleteItem(listKey, id) {
+    if (!window.MS_DB || !window.MS_DB.ready) return false;
+    try {
+      if (window.MS_DB.deletePost) await window.MS_DB.deletePost(id);
+      await hydrateFromSupabase();
+      return true;
+    } catch (error) {
+      console.warn('[Mundos Sombrios] Falha ao excluir post:', error);
+      return false;
     }
-
-    return true;
   }
 
   function isAdmin() {
-    try {
-      return !!(window.currentUser && window.currentUser.role === 'admin');
-    } catch (_error) {
-      return false;
-    }
+    try { return !!(window.currentUser && window.currentUser.role === 'admin'); } catch (_) { return false; }
   }
 
   function published(list) {
     return (Array.isArray(list) ? list : []).filter((x) => x && x.published !== false);
   }
 
+  function onHydrated(fn) { if (typeof fn === 'function') listeners.add(fn); return () => listeners.delete(fn); }
+
   hydrateFromSupabase();
 
   window.PortalContent = {
     KEY,
-    defaults,
+    VERSION,
+    defaults: clone(empty),
     read,
-    write,
+    write: writeBlocks,
+    saveItem,
+    deleteItem,
     isAdmin,
     published,
     escapeHtml: esc,
-    now,
-    hydrate: hydrateFromSupabase
+    hydrate: hydrateFromSupabase,
+    onHydrated,
+    isHydrated: () => hydrated
   };
 })();

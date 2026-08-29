@@ -133,7 +133,9 @@ function isUserBanned(user) {
 }
 
 let currentUser = null;
-Object.defineProperty(window, 'currentUser', { configurable:true, get:()=>currentUser });
+// Expõe o usuário autenticado como window.currentUser (somente leitura) para que
+// os módulos do Portal (portal-core/portal-content/portal-admin) detectem login e papel de ADM.
+Object.defineProperty(window, 'currentUser', { configurable: true, get: () => currentUser });
 
 async function msSyncOnlineState() {
     if (!window.MS_DB || !window.MS_DB.ready || !currentUser) return;
@@ -268,6 +270,7 @@ window.addEventListener('ms-auth-state', async (event)=>{
 
 document.addEventListener('DOMContentLoaded',()=>{
     msBootstrapAuthSession();
+    msRefreshInitialSetupButton();
 });
 async function doLogin() {
     const identifier=document.getElementById('login-user').value.trim(); const password=document.getElementById('login-pass').value;
@@ -281,7 +284,7 @@ async function doLogout() {
     if(!confirm('Deseja desconectar do Vazio?')) return;
     try{if(window.MS_DB?.ready) await window.MS_DB.signOut();}catch(error){console.warn('[Mundos Sombrios] Logout:',error);}
     currentUser=null; const emblem=document.getElementById('master-emblem'); if(emblem) emblem.style.display='none'; const req=document.getElementById('admin-requests-container'); if(req) req.innerHTML='';
-    if(typeof window.openOfficialPortal==='function') window.openOfficialPortal(); else showScreen('screen-portal');
+    if(typeof window.openOfficialPortal==='function') window.openOfficialPortal(); else showScreen('screen-portal'); msRefreshInitialSetupButton();
 }
 
 function openRegister() {
@@ -334,6 +337,72 @@ function closeInitialSetup() {
     const modal = document.getElementById('initial-setup-modal');
     if (modal) modal.style.display = 'none';
     document.body.classList.remove('admin-setup-open');
+}
+
+// Mostra/oculta o botão "CONFIGURAR ADM INICIAL" na tela de login:
+// só aparece quando o Supabase responde que AINDA NÃO existe administrador.
+async function msRefreshInitialSetupButton() {
+    const btn = document.getElementById('btn-initial-setup');
+    if (!btn) return;
+    if (!window.MS_DB?.ready || typeof window.MS_DB.adminExists !== 'function') { btn.style.display = 'none'; return; }
+    const exists = await window.MS_DB.adminExists();
+    // null = não foi possível verificar -> esconde por segurança
+    btn.style.display = exists === false ? 'inline-block' : 'none';
+}
+
+// Cria o primeiro ADM: cadastra no Supabase Auth, faz login e promove via RPC
+// bootstrap_first_admin (só funciona enquanto não existir nenhum admin).
+async function createInitialAdmin() {
+    const user = document.getElementById('setup-admin-user').value.trim();
+    const email = document.getElementById('setup-admin-email').value.trim();
+    const pass = document.getElementById('setup-admin-pass').value;
+    if (!user || !email || !pass) { alert('Preencha usuário, e-mail e senha.'); return false; }
+    if (user.length < 3 || !email.includes('@') || pass.length < 10) {
+        alert('Use usuário com pelo menos 3 caracteres, e-mail válido e senha com pelo menos 10 caracteres.');
+        return false;
+    }
+    if (!window.MS_DB?.ready) { alert('O serviço online não está disponível.'); return false; }
+    try {
+        const exists = typeof window.MS_DB.adminExists === 'function' ? await window.MS_DB.adminExists() : null;
+        if (exists === true) { alert('Já existe um Arconte configurado. Faça login normalmente.'); closeInitialSetup(); msRefreshInitialSetupButton(); return false; }
+
+        // 1) Cria a conta no Supabase Auth
+        const { data: signData, error: signError } = await window.MS_DB.signUp({ username: user, email, password: pass, requestMaster: false });
+        if (signError) throw signError;
+
+        // 2) Garante sessão ativa (se a confirmação de e-mail estiver desligada, signUp já retorna sessão)
+        if (!signData?.session) {
+            const { error: loginError } = await window.MS_DB.signIn(email, pass);
+            if (loginError) {
+                closeInitialSetup();
+                alert('Conta criada! Confirme o e-mail e faça login: ao entrar, esta conta poderá ser promovida a Arconte.');
+                return false;
+            }
+        }
+
+        // 3) Garante o perfil e promove a ADM via RPC seguro
+        await window.MS_DB.ensureMyProfile({ username: user, email });
+        const { error: bootError } = await window.MS_DB.bootstrapFirstAdmin(user);
+        if (bootError) {
+            if (String(bootError.message || '').includes('ADMIN_ALREADY_EXISTS')) {
+                alert('Já existe um Arconte configurado. Faça login normalmente.');
+            } else {
+                throw bootError;
+            }
+            closeInitialSetup(); msRefreshInitialSetupButton(); return false;
+        }
+
+        closeInitialSetup();
+        msRefreshInitialSetupButton();
+        const ok = await msApplyAuthenticatedSession();
+        if (ok) alert('Arconte inicial configurado e autenticado. O portal é seu.');
+        else alert('Arconte criado. Faça login para assumir o portal.');
+        return true;
+    } catch (error) {
+        console.error('[Mundos Sombrios] Setup inicial do ADM:', error);
+        alert(error.message || 'Não foi possível criar o Arconte inicial.');
+        return false;
+    }
 }
 
 // ==========================================
