@@ -336,7 +336,7 @@ function baixarDoc(id){
 /* ══════════ EDITOR VISUAL DO ADM ══════════ */
 (function(){
   const isAdmin = !!(window.currentUser && String(window.currentUser.role || '').toLowerCase() === 'admin');
-  if(!isAdmin){ setTimeout(()=>{ if(window.currentUser && String(window.currentUser.role||'').toLowerCase()==='admin' && !qs('#ms-admin-editor')) location.reload(); },1200); return; }
+  if(!isAdmin){ return; }
   const host = root;
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const num = v => Number.isFinite(Number(v)) ? Number(v) : 0;
