@@ -3,6 +3,18 @@
   'use strict';
   const root=document.getElementById('master-shield-content');
   if(!root)return;
+  window.openMasterShield = function(){
+    if(typeof window.showScreen==='function'){
+      window.showScreen('screen-master-shield');
+    }else{
+      const screen=document.getElementById('screen-master-shield');
+      if(screen){
+        document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active','overlay');s.setAttribute('aria-hidden','true');});
+        screen.classList.add('active');
+        screen.setAttribute('aria-hidden','false');
+      }
+    }
+  };
   const qs=s=>root.querySelector(s);
   const qsa=s=>root.querySelectorAll(s);
   const tt=qs('#ms-tooltip');
@@ -291,19 +303,31 @@ function abrirDoc(id){ msGo('arquivos'); const d=qs('#ms-doc-'+id); if(d){ d.ope
     <div class="corpo"><button class="btn ghost" style="margin:8px 0 12px" onclick="baixarDoc('${d.id}')">▼ BAIXAR ESTE DOCUMENTO (.TXT)</button><div class="txt-doc">${d.texto.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div></div></details>`;
   });
   h += `</div>`;
-  qs('#ms-v-arquivos').innerHTML = h;
-  qs('#doc-busca').addEventListener('input',e=>{
-    const q = e.target.value.trim().toLowerCase();
-    if(q.length<3){ qsa('#doc-list details').forEach(d=>d.style.display=''); qs('#doc-hits').textContent=''; return; }
-    let hits=0;
-    DOCS.forEach(d=>{
-      const el = qs('#ms-doc-'+d.id);
-      const ok = d.titulo.toLowerCase().includes(q) || d.texto.toLowerCase().includes(q);
-      el.style.display = ok?'':'none';
-      if(ok){ el.open = true; hits += (d.texto.toLowerCase().split(q).length-1); }
+  const arquivosView = qs('#ms-v-arquivos');
+  if(!arquivosView) return;
+  arquivosView.innerHTML = h;
+  const docBusca = arquivosView.querySelector('#doc-busca');
+  const docList = arquivosView.querySelector('#doc-list');
+  const docHits = arquivosView.querySelector('#doc-hits');
+  if(docBusca){
+    docBusca.addEventListener('input',e=>{
+      const q = e.target.value.trim().toLowerCase();
+      if(q.length<3){
+        if(docList) docList.querySelectorAll('details').forEach(d=>d.style.display='');
+        if(docHits) docHits.textContent='';
+        return;
+      }
+      let hits=0;
+      DOCS.forEach(d=>{
+        const el = arquivosView.querySelector('#doc-'+d.id);
+        if(!el) return;
+        const ok = d.titulo.toLowerCase().includes(q) || d.texto.toLowerCase().includes(q);
+        el.style.display = ok?'':'none';
+        if(ok){ el.open = true; hits += (d.texto.toLowerCase().split(q).length-1); }
+      });
+      if(docHits) docHits.textContent = hits+' ocorrências';
     });
-    qs('#doc-hits').textContent = hits+' ocorrências';
-  });
+  }
 })();
 function baixarDoc(id){
   const d = DOCS.find(x=>x.id===id);
