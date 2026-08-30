@@ -44,9 +44,8 @@
     Array.from({length:9},(_,i)=>`<line x1="0" y1="${(i+1)*50}" x2="1000" y2="${(i+1)*50}"/>`).join('')
   }</g>
   <text x="955" y="36" text-anchor="middle" fill="#c9a227" font-size="9" font-family="monospace">☾ ÁPICE</text>`;
-  const renderMap=(points)=>{
   let pts='';
-  (Array.isArray(points)?points:NACOES).forEach((n,i)=>{
+  NACOES.forEach((n,i)=>{
     const c = ALN[n.al][0];
     pts += `<g class="nacao" data-i="${i}">
       <circle cx="${n.x}" cy="${n.y}" r="14" fill="${c}" opacity="0.14"/>
@@ -70,7 +69,7 @@
   <div class="panel" style="margin-top:18px"><h3>▣ Leitura Estratégica (Ano 100)</h3>
   <p style="color:var(--ink-dim)">A Paz do Terror: com os <b style="color:var(--red-hi)">Angels de Voglaskov</b> como dissuasão absoluta, as guerras migraram para a espionagem e o mercado de mercenários nas fronteiras da Europa Oriental. <b style="color:var(--cyan)">Hakuré (Brasil)</b> ancora o bloco Pró-Nexo com biotecnologia hiper-avançada; o <b style="color:var(--red-hi)">Dólar Federal</b> apodrece em estado policial; e a <b style="color:var(--amber-hi)">Libra Colonial</b> só existe porque a Protheus Corp a injeta artificialmente. Na órbita, a <b>Base Lunar Ápice</b> vigia o vácuo — e algo no vácuo começou a responder.</p></div>`;
   qsa('.nacao').forEach(g=>{
-    const n = (Array.isArray(points)?points:NACOES)[+g.dataset.i];
+    const n = NACOES[+g.dataset.i];
     g.addEventListener('mouseenter',()=>tipShow(`<b>${n.n}</b><span>≈ ${n.real} · ${ALN[n.al][1]}</span><span class="moeda">${n.moeda} — ${n.cot}</span>`));
     g.addEventListener('mouseleave',tipHide);
     g.addEventListener('click',()=>{
@@ -85,9 +84,6 @@
       qs('#ms-nacao-det').scrollIntoView({behavior:'smooth',block:'center'});
     });
   });
-  };
-  window.msShieldRenderMap=renderMap;
-  renderMap(NACOES);
 })();
 
 /* ══════════ ECONOMIA ══════════ */
@@ -296,9 +292,9 @@ function abrirDoc(id){ msGo('arquivos'); const d=qs('#ms-doc-'+id); if(d){ d.ope
   });
   h += `</div>`;
   qs('#ms-v-arquivos').innerHTML = h;
-  qs('#doc-busca').addEventListener('input',e=>{
+  qs('#ms-doc-busca').addEventListener('input',e=>{
     const q = e.target.value.trim().toLowerCase();
-    if(q.length<3){ qsa('#doc-list details').forEach(d=>d.style.display=''); qs('#doc-hits').textContent=''; return; }
+    if(q.length<3){ qsa('#ms-doc-list details').forEach(d=>d.style.display=''); qs('#ms-doc-hits').textContent=''; return; }
     let hits=0;
     DOCS.forEach(d=>{
       const el = qs('#ms-doc-'+d.id);
@@ -306,7 +302,7 @@ function abrirDoc(id){ msGo('arquivos'); const d=qs('#ms-doc-'+id); if(d){ d.ope
       el.style.display = ok?'':'none';
       if(ok){ el.open = true; hits += (d.texto.toLowerCase().split(q).length-1); }
     });
-    qs('#doc-hits').textContent = hits+' ocorrências';
+    qs('#ms-doc-hits').textContent = hits+' ocorrências';
   });
 })();
 function baixarDoc(id){
@@ -318,97 +314,4 @@ function baixarDoc(id){
   root.querySelectorAll('.ms-shield-nav button').forEach(b=>b.addEventListener('click',()=>msGo(b.dataset.msView)));
   window.msShieldNavigate=msGo;
   msGo('linha');
-})();
-
-/* Controle de acesso + editor de pontos do mapa */
-(function(){
-  'use strict';
-  function role(){ try{return String(window.currentUser?.role||'').toLowerCase();}catch(_){return '';} }
-  function canGM(){ return role()==='mestre'||role()==='admin'; }
-  function isAdmin(){ return role()==='admin'; }
-  function shieldVisible(){ return canGM(); }
-  function setButton(){ const b=document.getElementById('btn-master-shield'); if(b)b.style.display=canGM()?'inline-block':'none'; }
-  window.openMasterShield=function(){
-    if(!canGM()){ alert('Acesso restrito a Mestres e ADM.'); return; }
-    if(typeof window.showScreen==='function') window.showScreen('screen-master-shield');
-    setTimeout(()=>window.msShieldInit?.(),0);
-  };
-  async function loadMapOverrides(){
-    if(!window.MS_DB?.fetchSiteSettings) return null;
-    try{
-      const rows=await window.MS_DB.fetchSiteSettings();
-      const row=rows.find(x=>x.key==='master_shield_map_points');
-      return Array.isArray(row?.value?.points)?row.value.points:null;
-    }catch(e){ console.warn('[Escudo] mapa:',e); return null; }
-  }
-  function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-  async function mountMapEditor(){
-    const host=document.querySelector('#ms-v-mapa'); if(!host||!isAdmin())return;
-    host.querySelectorAll('.master-shield-map-editor').forEach(x=>x.remove());
-    const base=Array.isArray(window.NACOES)?window.NACOES:[];
-    let points=base.map(n=>({...n}));
-    const saved=await loadMapOverrides(); if(saved) points=saved;
-    if(saved && typeof window.msShieldRenderMap==='function') window.msShieldRenderMap(points);
-
-    const editorId='ms-map-edit-list';
-    let html='<div class="master-shield-map-editor"><h3>Editor de Pontos do Mapa — ADM</h3>'+
-      '<p class="ms-map-note">Aqui você controla os pontos exibidos no mapa do Escudo. As alterações são gravadas no Supabase em <b>site_settings</b>.</p>'+
-      '<div class="ms-map-toolbar"><input id="ms-map-search" type="search" placeholder="Filtrar por nome ou região...">'+
-      '<button type="button" class="souls-btn small-btn" id="ms-map-add">+ ADICIONAR PONTO</button>'+
-      '<button type="button" class="souls-btn small-btn" id="ms-map-reset">RESTAURAR BASE</button></div>'+
-      `<div id="${editorId}"></div>`+
-      '<div class="ms-map-actions"><button type="button" class="souls-btn small-btn" id="ms-map-save">SALVAR NO SUPABASE</button></div></div>';
-    host.insertAdjacentHTML('afterbegin',html);
-    const editor=host.querySelector('.master-shield-map-editor');
-    const list=host.querySelector('#'+editorId);
-    const search=host.querySelector('#ms-map-search');
-    let working=points.map(n=>({...n}));
-
-    const renderEditor=()=>{
-      const q=String(search?.value||'').trim().toLowerCase();
-      list.innerHTML='';
-      working.forEach((n,i)=>{
-        const hay=`${n.n||''} ${n.real||''} ${n.moeda||''}`.toLowerCase();
-        if(q && !hay.includes(q)) return;
-        list.insertAdjacentHTML('beforeend',`<div class="ms-map-edit-row" data-i="${i}">
-          <input data-k="n" value="${esc(n.n)}" placeholder="Nome">
-          <input data-k="real" value="${esc(n.real)}" placeholder="Região/país">
-          <input data-k="x" type="number" min="0" max="1000" value="${Number(n.x)||0}" placeholder="X">
-          <input data-k="y" type="number" min="0" max="500" value="${Number(n.y)||0}" placeholder="Y">
-          <select data-k="al"><option value="pro" ${n.al==='pro'?'selected':''}>PRÓ</option><option value="ant" ${n.al==='ant'?'selected':''}>ANT</option><option value="neu" ${n.al==='neu'?'selected':''}>NEU</option></select>
-          <button type="button" class="souls-btn small-btn" data-del="${i}">EXCLUIR</button>
-          <input data-k="moeda" value="${esc(n.moeda)}" placeholder="Moeda">
-          <input data-k="cot" value="${esc(n.cot)}" placeholder="Cotação">
-          <input data-k="nota" class="ms-map-note-input" value="${esc(n.nota)}" placeholder="Descrição / nota">
-        </div>`);
-      });
-      list.querySelectorAll('.ms-map-edit-row').forEach(row=>{
-        row.querySelectorAll('[data-k]').forEach(el=>el.addEventListener('input',()=>{
-          const i=Number(row.dataset.i), k=el.dataset.k;
-          working[i][k]=el.type==='number'?Number(el.value):el.value;
-        }));
-        row.querySelector('[data-del]')?.addEventListener('click',()=>{
-          working.splice(Number(row.dataset.i),1); renderEditor();
-        });
-      });
-    };
-    renderEditor();
-    search?.addEventListener('input',renderEditor);
-    host.querySelector('#ms-map-add').onclick=()=>{working.push({n:'Novo ponto',x:500,y:250,al:'neu',real:'',moeda:'',cot:'',nota:''});renderEditor();};
-    host.querySelector('#ms-map-reset').onclick=()=>{if(confirm('Restaurar os 50 pontos originais? As alterações atuais ainda não salvas serão descartadas.')){working=base.map(n=>({...n}));renderEditor();if(window.msShieldRenderMap)window.msShieldRenderMap(working);}};
-    host.querySelector('#ms-map-save').onclick=async()=>{
-      const clean=working.map(n=>({...n,x:Number(n.x)||0,y:Number(n.y)||0}));
-      if(!window.MS_DB?.saveSiteSetting){alert('Supabase indisponível.');return;}
-      const saved=await window.MS_DB.saveSiteSetting('master_shield_map_points',{points:clean});
-      if(saved){working=clean;points=clean;if(window.msShieldRenderMap)window.msShieldRenderMap(clean);await mountMapEditor();alert('Pontos do mapa salvos no Supabase.');}
-      else alert('Não foi possível salvar. Verifique a RLS e a sessão ADM.');
-    };
-  }
-  window.msShieldInit=async function(){
-    setButton();
-    const roleEl=document.getElementById('master-shield-role'); if(roleEl)roleEl.textContent=isAdmin()?'ACESSO: ARCONTE / ADM':'ACESSO: MESTRE';
-    if(shieldVisible()) await mountMapEditor();
-  };
-  document.addEventListener('DOMContentLoaded',()=>{setButton(); setTimeout(()=>{if(canGM())window.msShieldInit?.();},500);});
-  window.addEventListener('ms-auth-state',()=>{setButton();});
 })();
