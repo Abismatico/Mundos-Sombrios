@@ -1,8 +1,15 @@
 // Mundos Sombrios — Escudo do Mestre (integrado ao design original)
 (function(){
   'use strict';
+  window.openMasterShield=function(){
+    const role=String(window.currentUser?.role||'').toLowerCase();
+    if(role!=='mestre' && role!=='admin'){ alert('Acesso restrito a Mestres e ADM.'); return; }
+    if(typeof window.showScreen==='function') window.showScreen('screen-master-shield');
+    setTimeout(()=>window.msShieldInit?.(),50);
+  };
   const root=document.getElementById('master-shield-content');
-  if(!root)return;
+  if(!root){ console.warn('[Escudo] container master-shield-content ainda não existe.'); return; }
+  window.msShieldInit=window.msShieldInit||function(){};
   const qs=s=>root.querySelector(s);
   const qsa=s=>root.querySelectorAll(s);
   const tt=qs('#ms-tooltip');
