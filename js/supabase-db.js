@@ -216,6 +216,70 @@
             return { data, error };
         },
 
+        async deleteTableSecure(tableId) {
+            const { data, error } = await supabase.rpc('delete_table_secure', { p_table_id: String(tableId) });
+            return { data, error };
+        },
+
+        async updateTableSettingsSecure(tableId, settings) {
+            const { data, error } = await supabase.rpc('update_table_settings_secure', { p_table_id: String(tableId), p_settings: settings || {} });
+            return { data, error };
+        },
+
+        async fetchTableRoster(tableId) {
+            const { data, error } = await supabase.rpc('fetch_table_roster', { p_table_id: String(tableId) });
+            return { data: Array.isArray(data) ? data : [], error };
+        },
+
+        async fetchTableCharacters(tableId) {
+            const { data, error } = await supabase.rpc('fetch_table_characters', { p_table_id: String(tableId) });
+            return { data: Array.isArray(data) ? data : [], error };
+        },
+
+        async setTableMemberStatus(tableId, userId, status) {
+            const { data, error } = await supabase.rpc('set_table_member_status', { p_table_id: String(tableId), p_user_id: String(userId), p_status: String(status) });
+            return { data, error };
+        },
+
+        async linkTableCharacter(tableId, characterId) {
+            const { data, error } = await supabase.rpc('link_table_character', { p_table_id: String(tableId), p_character_id: String(characterId) });
+            return { data, error };
+        },
+
+        async createTableInvite(tableId, expiresAt = null, maxUses = 0) {
+            const { data, error } = await supabase.rpc('create_table_invite', { p_table_id: String(tableId), p_expires_at: expiresAt, p_max_uses: Number(maxUses) || 0 });
+            return { data, error };
+        },
+
+        async fetchCampaign(tableId) {
+            const { data, error } = await supabase.from('campaigns').select('*').eq('table_id', String(tableId)).maybeSingle();
+            return { data: data || null, error };
+        },
+
+        async createCampaign(tableId, name, description = '') {
+            const { data, error } = await supabase.from('campaigns').insert({ table_id: String(tableId), name: String(name || 'Campanha'), description: String(description || '') }).select().maybeSingle();
+            return { data, error };
+        },
+
+        async fetchSessions(tableId) {
+            const { data, error } = await supabase.from('game_sessions').select('*').eq('table_id', String(tableId)).order('created_at', { ascending: false });
+            return { data: Array.isArray(data) ? data : [], error };
+        },
+
+        async createSession(tableId, title, campaignId = null) {
+            const { data, error } = await supabase.from('game_sessions').insert({ table_id: String(tableId), campaign_id: campaignId, title: String(title || 'Sessão'), status: 'planned' }).select().maybeSingle();
+            return { data, error };
+        },
+
+        async updateSessionStatus(sessionId, status) {
+            const nextStatus = String(status);
+            const patch = { status: nextStatus };
+            if (nextStatus === 'active') patch.started_at = new Date().toISOString();
+            if (nextStatus === 'ended') patch.ended_at = new Date().toISOString();
+            const { data, error } = await supabase.from('game_sessions').update(patch).eq('id', String(sessionId)).select().maybeSingle();
+            return { data, error };
+        },
+
         async fetchMyTables() {
             const { data, error } = await supabase.from(tableNames.tables).select('*').order('updated_at', { ascending: false });
             return { data: Array.isArray(data) ? data : [], error };
@@ -234,9 +298,13 @@
         },
 
         subscribeTable(tableId, handler) {
-            const channel = supabase.channel(`table:${String(tableId)}`)
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: tableNames.table_events, filter: `table_id=eq.${String(tableId)}` }, payload => {
+            const id = String(tableId);
+            const channel = supabase.channel(`table:${id}`)
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: tableNames.table_events, filter: `table_id=eq.${id}` }, payload => {
                     try { handler(payload?.new || null); } catch (e) { console.warn('[Mundos Sombrios] handler Realtime:', e); }
+                })
+                .on('postgres_changes', { event: '*', schema: 'public', table: tableNames.table_state, filter: `table_id=eq.${id}` }, payload => {
+                    try { handler({ event_type: 'table_state', payload: payload?.new || {}, actor_id: null }); } catch (e) { console.warn('[Mundos Sombrios] handler Realtime state:', e); }
                 })
                 .subscribe();
             return () => { try { supabase.removeChannel(channel); } catch (_) {} };
@@ -334,32 +402,55 @@
             return Array.isArray(data) ? data : [];
         },
 
-        async saveTable(table) {
-            const payload = normalizeTablePayload(table);
-            if (!payload) return null;
-            const { data, error } = await runQuery(tableNames.tables, (tableName) =>
-                supabase.from(tableName).upsert(payload, { onConflict: 'id' }).select()
-            );
-            if (error) console.warn('[Mundos Sombrios] saveTable falhou:', error);
-            return data && data[0] ? data[0] : null;
+        async updateCharacterAsGM(tableId, character) {
+            if (!tableId || !character?.id) return null;
+            const { data, error } = await supabase.rpc('gm_update_character', {
+                p_table_id: String(tableId),
+                p_character_id: String(character.id),
+                p_name: String(character.name || ''),
+                p_mode: String(character.mode || 'exodo'),
+                p_nature: character.nature || null,
+                p_class_name: character.className || null,
+                p_payload: character
+            });
+            if (error) {
+                console.warn('[Mundos Sombrios] updateCharacterAsGM falhou:', error);
+                return null;
+            }
+            return data || null;
         },
 
-        async fetchTables() {
-            const { data, error } = await runQuery(tableNames.tables, (tableName) =>
-                supabase.from(tableName).select('*').order('updated_at', { ascending: false })
-            );
-            if (error) return [];
-            return Array.isArray(data) ? data : [];
+        async fetchMyCharacters() {
+            const session = await this.getSession();
+            if (!session.user) return { data: [], error: new Error('Sessão ausente.') };
+            const { data, error } = await supabase.from(tableNames.characters).select('*').eq('user_id', session.user.id).order('updated_at', { ascending: false });
+            return { data: Array.isArray(data) ? data : [], error };
         },
 
         async saveCharacter(character) {
             const payload = normalizeCharacterPayload(character);
             if (!payload) return null;
-            const { data, error } = await runQuery(tableNames.characters, (tableName) =>
-                supabase.from(tableName).upsert(payload, { onConflict: 'id' }).select()
-            );
+            const { data, error } = await supabase.rpc('save_character_secure', {
+                p_id: payload.id, p_name: payload.name, p_mode: payload.mode, p_nature: payload.nature || null,
+                p_class_name: payload.class_name || null, p_payload: payload.payload || {}
+            });
             if (error) console.warn('[Mundos Sombrios] saveCharacter falhou:', error);
-            return data && data[0] ? data[0] : null;
+            return data || null;
+        },
+
+        async deleteMyCharacter(characterId) {
+            const { data, error } = await supabase.rpc('delete_my_character', { p_character_id: String(characterId) });
+            return { data, error };
+        },
+
+        async fetchCharacterVersions(characterId) {
+            const { data, error } = await supabase.from('character_versions').select('*').eq('character_id', String(characterId)).order('version_no', { ascending: false });
+            return { data: Array.isArray(data) ? data : [], error };
+        },
+
+        async restoreCharacterVersion(characterId, versionId) {
+            const { data, error } = await supabase.rpc('restore_character_version', { p_character_id: String(characterId), p_version_id: String(versionId) });
+            return { data, error };
         },
 
         async fetchCharacters() {
@@ -377,34 +468,16 @@
                 user_id: String(request.userId || request.user_id || 'system'),
                 username: String(request.username || 'desconhecido'),
                 status: request.status || 'pending',
-                created_at: request.createdAt || request.created_at || new Date().toISOString(),
+                created_at: request.createdAt || new Date().toISOString(),
                 updated_at: new Date().toISOString()
             };
             if (request.data && typeof request.data === 'object' && Object.keys(request.data).length) {
                 payload.data = request.data;
             }
-
-            // Solicitações de Mestre são criadas pelo trigger de cadastro.
-            // Quando o ADM resolve uma solicitação existente, devemos fazer
-            // UPDATE, e não UPSERT: o RLS permite UPDATE para ADM, mas o
-            // INSERT exige que user_id seja o próprio auth.uid().
-            const existingId = String(request.id || '').trim();
-            if (existingId) {
-                const { data, error } = await runQuery(tableNames.admin_requests, (tableName) =>
-                    supabase.from(tableName)
-                        .update({ status: payload.status, updated_at: payload.updated_at, ...(payload.data ? { data: payload.data } : {}) })
-                        .eq('id', existingId)
-                        .select()
-                );
-                if (error) console.warn('[Mundos Sombrios] saveAdminRequest (UPDATE) falhou:', error);
-                if (!error && data && data[0]) return data[0];
-                return null;
-            }
-
             const { data, error } = await runQuery(tableNames.admin_requests, (tableName) =>
-                supabase.from(tableName).insert(payload).select()
+                supabase.from(tableName).upsert(payload, { onConflict: 'id' }).select()
             );
-            if (error) console.warn('[Mundos Sombrios] saveAdminRequest (INSERT) falhou:', error);
+            if (error) console.warn('[Mundos Sombrios] saveAdminRequest falhou:', error);
             return data && data[0] ? data[0] : null;
         },
 
@@ -571,17 +644,12 @@
         },
 
         async syncUserState(snapshot) {
+            // Login/hidratação é uma operação de leitura. Não regravamos fichas automaticamente,
+            // pois isso criaria versões artificiais sem que o jogador tivesse alterado o personagem.
             if (!snapshot) return null;
-            const tasks = [];
             const session = await this.getSession();
-            if (session.user && snapshot.currentUser) tasks.push(this.saveProfile(snapshot.currentUser));
-            if (session.user && Array.isArray(snapshot.characters)) {
-                for (const character of snapshot.characters) {
-                    if (String(character.userId || character.ownerId || '') === String(session.user.id)) tasks.push(this.saveCharacter(character));
-                }
-            }
-            const results = await Promise.allSettled(tasks);
-            return results;
+            if (session.user && snapshot.currentUser) return this.saveProfile(snapshot.currentUser);
+            return null;
         }
     };
 

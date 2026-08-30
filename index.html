@@ -9,6 +9,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/ms-platform.css">
+    <link rel="stylesheet" href="css/ms-online.css">
     <link rel="stylesheet" href="css/esoterico-surgery.css">
     <link rel="stylesheet" href="css/world-codices.css">
     <link rel="stylesheet" href="css/master-room.css">
@@ -216,9 +218,11 @@
             <div class="builder-header">
                 <button class="back-btn hide-on-pdf" onclick="closeBuilder()">&#8592; Fechar Ficha</button>
                 <h2 id="builder-title">Forja da Alma</h2>
+                <span class="ms-sync-status" data-ms-status="persistence" aria-live="polite"></span>
                 <div class="builder-tools hide-on-pdf">
                     <button class="souls-btn small-btn" id="btn-toggle-edit" onclick="toggleEditMode()">SALVAR EDIÇÃO</button>
                     <button class="souls-btn small-btn" onclick="exportCharacterJSON()" style="border-color:#00ffcc; color:#00ffcc;">EXPORTAR JSON</button>
+                    <button class="souls-btn small-btn" type="button" onclick="openCharacterPreview()">PRÉ-VISUALIZAR</button>
                     <button class="souls-btn small-btn" onclick="downloadPDF()">BAIXAR PDF</button>
                 </div>
             </div>
@@ -235,6 +239,7 @@
                 </div>
 
                 <form id="char-form" onsubmit="saveCharacter(event)">
+                    <div id="character-validation-panel" class="ms-validation-panel" data-valid="true" aria-live="polite" hidden></div>
                     <input type="hidden" id="char-mode" name="mode">
                     
                     <div id="tab-identity" class="tab-content active">
@@ -680,7 +685,7 @@
         <div id="recover-modal" class="modal">
             <div class="modal-content" style="max-width: 400px;">
                 <h3 style="color: #aaa; font-family: 'Cinzel', serif; margin-bottom: 15px;">Recuperar Fragmentos (Senha)</h3>
-                <p style="font-size:0.8rem; color:#888; margin-bottom:15px;">Insira seu e-mail. A versão local não envia e-mails nem revela senhas. O ADM deve redefinir a credencial.</p>
+                <p style="font-size:0.8rem; color:#888; margin-bottom:15px;">Insira seu e-mail. A recuperação é gerenciada pelo Supabase Auth; nenhuma senha é armazenada pelo cliente.</p>
                 <div class="form-group">
                     <input type="email" id="rec-email" placeholder="E-mail de registro...">
                 </div>
@@ -692,6 +697,13 @@
         </div>
 
         <div id="portal-admin-modal" class="portal-admin-modal" aria-hidden="true"></div>
+
+        <div id="character-preview-modal" class="modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="character-preview-title">
+            <div class="modal-content character-preview-shell">
+                <div class="character-preview-head"><h3 id="character-preview-title">Manifestação da Alma</h3><button type="button" class="souls-btn small-btn" onclick="closeCharacterPreview()" aria-label="Fechar pré-visualização">Fechar</button></div>
+                <div id="character-preview-content" class="character-preview-content"></div>
+            </div>
+        </div>
 
         <div id="admin-panel-modal" class="modal">
             <div class="modal-content" style="max-width: 800px; width:90%;">
@@ -873,6 +885,7 @@
         <img id="fs-img" src="" alt="Fullscreen">
     </div>
 
+    <script src="js/ms-platform.js"></script>
     <script src="js/codex-catalog.js"></script>
     <script src="js/world-codices.js"></script>
     <script src="js/portal/portal-content.js"></script>
@@ -882,6 +895,7 @@
     <script src="js/hermetico-rituais.js"></script>
     <script src="js/archetype-art-direction.js"></script>
     <script src="js/supabase-db.js"></script>
+    <script src="js/ms-services.js"></script>
     <script src="js/master-shield-data.js"></script>
     <script src="js/master-shield.js"></script>
     <script src="js/script.js"></script>
@@ -896,6 +910,7 @@
     <script src="js/master-tools.js"></script>
     <script src="js/ordem-sete.js"></script>
     <script src="js/power-registry.js"></script>
+    <script src="js/ms-online-ui.js"></script>
 
 
     <!-- MODAL GLOBAL: configuração inicial do ADM; mantido fora de qualquer .screen para evitar sobreposição/stacking context -->
