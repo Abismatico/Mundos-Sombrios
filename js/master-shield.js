@@ -1,8 +1,23 @@
 // Mundos Sombrios — Escudo do Mestre (integrado ao design original)
-(function(){
+(async function(){
   'use strict';
   const root=document.getElementById('master-shield-content');
   if(!root)return;
+
+  // Carrega personalizações persistidas pelo ADM antes de renderizar o Escudo.
+  async function loadShieldOverrides(){
+    try{
+      if(!window.MS_DB?.ready) return;
+      const saved=await window.MS_DB.fetchSiteContent('master-shield');
+      if(!saved || typeof saved!=='object') return;
+      if(Array.isArray(saved.timeline) && Array.isArray(window.TIMELINE)){ window.TIMELINE.splice(0,window.TIMELINE.length,...saved.timeline); }
+      if(Array.isArray(saved.nacoes) && Array.isArray(window.NACOES)){ window.NACOES.splice(0,window.NACOES.length,...saved.nacoes); }
+      if(saved.economia && typeof saved.economia==='object' && window.ECON){ Object.assign(window.ECON,saved.economia); }
+      if(saved.arvores && typeof saved.arvores==='object' && window.ARVORES){ Object.keys(saved.arvores).forEach(k=>window.ARVORES[k]=saved.arvores[k]); }
+      if(Array.isArray(saved.docs) && Array.isArray(window.DOCS)){ window.DOCS.splice(0,window.DOCS.length,...saved.docs); }
+    }catch(e){ console.warn('[Mundos Sombrios] Falha ao carregar personalizações do Escudo:',e); }
+  }
+  await loadShieldOverrides();
   const qs=s=>root.querySelector(s);
   const qsa=s=>root.querySelectorAll(s);
   const tt=qs('#ms-tooltip');
@@ -312,21 +327,79 @@ function baixarDoc(id){
   a.download = id+'.txt'; a.click(); URL.revokeObjectURL(a.href);
 }
   root.querySelectorAll('.master-shield-nav button').forEach(b=>b.addEventListener('click',()=>msGo(b.dataset.msView)));
-  window.msShieldNavigate=msGo;
+  // ───────────── EDITOR DO ADM ─────────────
+  function isAdmin(){ return String(window.currentUser?.role||'').toLowerCase()==='admin'; }
+  function safeJson(value){ return JSON.stringify(value,null,2); }
+  async function saveShieldOverrides(overrides){
+    if(!window.MS_DB?.ready){ alert('Supabase não está disponível.'); return false; }
+    const saved=await window.MS_DB.saveSiteContent(overrides,'master-shield');
+    if(!saved){ alert('Não foi possível salvar no Supabase.'); return false; }
+    return true;
+  }
+  function addAdminEditor(){
+    if(!isAdmin()) return;
+    const nav=root.querySelector('.master-shield-nav');
+    if(!nav || root.querySelector('#ms-admin-editor')) return;
+    const box=document.createElement('div');
+    box.id='ms-admin-editor';
+    box.className='panel amb';
+    box.innerHTML=`<h3>ADMIN — EDIÇÃO DO ESCUDO</h3>
+      <p style="color:var(--ink-dim);margin-bottom:12px">O ADM pode alterar os dados persistentes do Escudo. As alterações são gravadas no Supabase e substituem os dados padrão.</p>
+      <div class="ms-admin-tabs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="btn ghost" data-edit="nacoes">Mapa / Nações</button>
+        <button class="btn ghost" data-edit="timeline">Cronologia</button>
+        <button class="btn ghost" data-edit="economia">Economia</button>
+        <button class="btn ghost" data-edit="arvores">Árvores</button>
+        <button class="btn ghost" data-edit="docs">Arquivos</button>
+      </div>
+      <textarea id="ms-admin-json" spellcheck="false" style="width:100%;min-height:360px;resize:vertical;font-family:var(--font-mono);font-size:12px"></textarea>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn" id="ms-admin-save">SALVAR NO SUPABASE</button>
+        <button class="btn ghost" id="ms-admin-reload">RECARREGAR DADOS SALVOS</button>
+      </div>
+      <div id="ms-admin-status" class="pts" style="margin-top:8px"></div>`;
+    root.insertBefore(box,nav);
+    const area=box.querySelector('#ms-admin-json'), status=box.querySelector('#ms-admin-status');
+    let current='nacoes';
+    const values={nacoes:window.NACOES,timeline:window.TIMELINE,economia:window.ECON,arvores:window.ARVORES,docs:window.DOCS};
+    function select(k){ current=k; area.value=safeJson(values[k]); status.textContent=`Editando: ${k}`; }
+    box.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>select(b.dataset.edit)));
+    box.querySelector('#ms-admin-reload').addEventListener('click',async()=>{
+      const saved=await window.MS_DB.fetchSiteContent('master-shield');
+      if(!saved){status.textContent='Nenhum conteúdo personalizado salvo.';return;}
+      if(saved.nacoes) values.nacoes=saved.nacoes;
+      if(saved.timeline) values.timeline=saved.timeline;
+      if(saved.economia) values.economia=saved.economia;
+      if(saved.arvores) values.arvores=saved.arvores;
+      if(saved.docs) values.docs=saved.docs;
+      select(current); status.textContent='Dados salvos carregados.';
+    });
+    box.querySelector('#ms-admin-save').addEventListener('click',async()=>{
+      try{
+        const parsed=JSON.parse(area.value);
+        const payload={};
+        if(current==='nacoes') payload.nacoes=parsed;
+        if(current==='timeline') payload.timeline=parsed;
+        if(current==='economia') payload.economia=parsed;
+        if(current==='arvores') payload.arvores=parsed;
+        if(current==='docs') payload.docs=parsed;
+        const existing=await window.MS_DB.fetchSiteContent('master-shield')||{};
+        Object.assign(existing,payload);
+        if(!await saveShieldOverrides(existing)) return;
+        status.textContent='SALVO. Recarregando o Escudo...';
+        sessionStorage.setItem('ms-shield-view',document.querySelector('.ms-view.active')?.id?.replace('ms-v-','')||'linha');
+        location.reload();
+      }catch(e){ status.textContent='JSON inválido: '+e.message; }
+    });
+    select('nacoes');
+  }
   window.openMasterShield=function(){
-    const screen=document.getElementById('screen-master-shield');
+    if(!['mestre','admin'].includes(String(window.currentUser?.role||'').toLowerCase())){ alert('Acesso restrito a Mestres e ADM.'); return; }
     if(typeof window.showScreen==='function') window.showScreen('screen-master-shield');
-    else if(screen){
-      document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active','overlay');s.setAttribute('aria-hidden','true');});
-      screen.classList.add('active'); screen.setAttribute('aria-hidden','false');
-    }
-    const badge=document.getElementById('master-shield-role');
-    if(badge){
-      let role='MESTRE';
-      try{ const u=JSON.parse(localStorage.getItem('ms_user')||'null'); if(u&&u.role) role=String(u.role).toUpperCase(); }catch(e){}
-      badge.textContent='ACESSO: '+role;
-    }
-    msGo('linha');
+    const role=document.getElementById('master-shield-role'); if(role) role.textContent=String(window.currentUser?.role||'').toUpperCase();
+    setTimeout(()=>{ addAdminEditor(); msGo(sessionStorage.getItem('ms-shield-view')||'linha'); },0);
   };
-  msGo('linha');
+  window.msShieldNavigate=msGo;
+  addAdminEditor();
+  msGo(sessionStorage.getItem('ms-shield-view')||'linha');
 })();
