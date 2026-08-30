@@ -313,5 +313,20 @@ function baixarDoc(id){
 }
   root.querySelectorAll('.master-shield-nav button').forEach(b=>b.addEventListener('click',()=>msGo(b.dataset.msView)));
   window.msShieldNavigate=msGo;
+  window.openMasterShield=function(){
+    const screen=document.getElementById('screen-master-shield');
+    if(typeof window.showScreen==='function') window.showScreen('screen-master-shield');
+    else if(screen){
+      document.querySelectorAll('.screen').forEach(s=>{s.classList.remove('active','overlay');s.setAttribute('aria-hidden','true');});
+      screen.classList.add('active'); screen.setAttribute('aria-hidden','false');
+    }
+    const badge=document.getElementById('master-shield-role');
+    if(badge){
+      let role='MESTRE';
+      try{ const u=JSON.parse(localStorage.getItem('ms_user')||'null'); if(u&&u.role) role=String(u.role).toUpperCase(); }catch(e){}
+      badge.textContent='ACESSO: '+role;
+    }
+    msGo('linha');
+  };
   msGo('linha');
 })();
