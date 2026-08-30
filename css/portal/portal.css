@@ -20,5 +20,5 @@
 .portal-story-body{font-family:Georgia,serif;color:#c8c0b5;font-size:1.06rem;line-height:1.9;margin:28px 0}.portal-story-body p{margin:0 0 20px}.portal-story-body-input{min-height:260px!important}
 
 /* Escudo do Mestre — entrada restrita, mantendo o design original */
-.portal-nav .portal-shield-link{border-color:rgba(212,175,55,.45);color:#d4af37;}
-.portal-nav .portal-shield-link:hover{color:#f0d46a;border-color:#d4af37;}
+.portal-nav .portal-shield-link{color:#69e8ff;border:1px solid rgba(105,232,255,.24);border-radius:6px;}
+.portal-nav .portal-shield-link:hover{color:#b8f6ff;border-color:rgba(105,232,255,.7);background:rgba(105,232,255,.06);}

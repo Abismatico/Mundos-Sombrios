@@ -296,9 +296,9 @@ function abrirDoc(id){ msGo('arquivos'); const d=qs('#ms-doc-'+id); if(d){ d.ope
   });
   h += `</div>`;
   qs('#ms-v-arquivos').innerHTML = h;
-  qs('#ms-doc-busca').addEventListener('input',e=>{
+  qs('#doc-busca').addEventListener('input',e=>{
     const q = e.target.value.trim().toLowerCase();
-    if(q.length<3){ qsa('#ms-doc-list details').forEach(d=>d.style.display=''); qs('#ms-doc-hits').textContent=''; return; }
+    if(q.length<3){ qsa('#doc-list details').forEach(d=>d.style.display=''); qs('#doc-hits').textContent=''; return; }
     let hits=0;
     DOCS.forEach(d=>{
       const el = qs('#ms-doc-'+d.id);
@@ -306,7 +306,7 @@ function abrirDoc(id){ msGo('arquivos'); const d=qs('#ms-doc-'+id); if(d){ d.ope
       el.style.display = ok?'':'none';
       if(ok){ el.open = true; hits += (d.texto.toLowerCase().split(q).length-1); }
     });
-    qs('#ms-doc-hits').textContent = hits+' ocorrências';
+    qs('#doc-hits').textContent = hits+' ocorrências';
   });
 })();
 function baixarDoc(id){
