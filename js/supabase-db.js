@@ -377,16 +377,34 @@
                 user_id: String(request.userId || request.user_id || 'system'),
                 username: String(request.username || 'desconhecido'),
                 status: request.status || 'pending',
-                created_at: request.createdAt || new Date().toISOString(),
+                created_at: request.createdAt || request.created_at || new Date().toISOString(),
                 updated_at: new Date().toISOString()
             };
             if (request.data && typeof request.data === 'object' && Object.keys(request.data).length) {
                 payload.data = request.data;
             }
+
+            // Solicitações de Mestre são criadas pelo trigger de cadastro.
+            // Quando o ADM resolve uma solicitação existente, devemos fazer
+            // UPDATE, e não UPSERT: o RLS permite UPDATE para ADM, mas o
+            // INSERT exige que user_id seja o próprio auth.uid().
+            const existingId = String(request.id || '').trim();
+            if (existingId) {
+                const { data, error } = await runQuery(tableNames.admin_requests, (tableName) =>
+                    supabase.from(tableName)
+                        .update({ status: payload.status, updated_at: payload.updated_at, ...(payload.data ? { data: payload.data } : {}) })
+                        .eq('id', existingId)
+                        .select()
+                );
+                if (error) console.warn('[Mundos Sombrios] saveAdminRequest (UPDATE) falhou:', error);
+                if (!error && data && data[0]) return data[0];
+                return null;
+            }
+
             const { data, error } = await runQuery(tableNames.admin_requests, (tableName) =>
-                supabase.from(tableName).upsert(payload, { onConflict: 'id' }).select()
+                supabase.from(tableName).insert(payload).select()
             );
-            if (error) console.warn('[Mundos Sombrios] saveAdminRequest falhou:', error);
+            if (error) console.warn('[Mundos Sombrios] saveAdminRequest (INSERT) falhou:', error);
             return data && data[0] ? data[0] : null;
         },
 

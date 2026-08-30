@@ -610,7 +610,11 @@ async function handleReq(reqId, approved) {
     msWriteStorageJSON('mundosSombriosRequests', requestsDB);
 
     if (window.MS_DB && window.MS_DB.ready) {
-        await window.MS_DB.saveAdminRequest(resolvedReq);
+        const saveResult = await window.MS_DB.saveAdminRequest(resolvedReq);
+        if (!saveResult) {
+            alert('Não foi possível atualizar a solicitação no Supabase. A alteração não foi concluída.');
+            return false;
+        }
         const remoteReqs = await window.MS_DB.fetchAdminRequests();
         requestsDB = dedupeRequests(Array.isArray(remoteReqs) ? remoteReqs : []).filter(r => String(r.status || 'pending').toLowerCase() === 'pending');
         msWriteStorageJSON('mundosSombriosRequests', requestsDB);
