@@ -6,7 +6,7 @@
   const qs=s=>root.querySelector(s);
   const qsa=s=>root.querySelectorAll(s);
   const tt=qs('#ms-tooltip');
-  const msGo=v=>{ qsa('.ms-view').forEach(x=>x.classList.remove('active')); const el=qs('#ms-v-'+v); if(el)el.classList.add('active'); qsa('.master-shield-nav button').forEach(b=>b.classList.toggle('active',b.dataset.msView===v)); window.scrollTo({top:0,behavior:'smooth'}); };
+  const msGo=v=>{ qsa('.ms-view').forEach(x=>x.classList.remove('active')); const el=qs('#ms-v-'+v); if(el)el.classList.add('active'); qsa('.ms-shield-nav button').forEach(b=>b.classList.toggle('active',b.dataset.msView===v)); window.scrollTo({top:0,behavior:'smooth'}); };
   const tipMove=e=>{if(tt){tt.style.left=(e.clientX+16)+'px';tt.style.top=(e.clientY+12)+'px';}};
   const tipShow=html=>{if(tt){tt.innerHTML=html;tt.style.display='block';}};
   const tipHide=()=>{if(tt)tt.style.display='none';};
@@ -311,78 +311,91 @@ function baixarDoc(id){
   const a = document.createElement('a'); a.href = URL.createObjectURL(b);
   a.download = id+'.txt'; a.click(); URL.revokeObjectURL(a.href);
 }
-  root.querySelectorAll('.master-shield-nav button').forEach(b=>b.addEventListener('click',()=>msGo(b.dataset.msView)));
 
-  function isAdmin(){
-    const role=String(window.currentUser?.role||'').trim().toLowerCase();
-    return role==='admin';
+/* ══════════ EDITOR VISUAL DO ADM ══════════ */
+(function(){
+  const isAdmin = !!(window.currentUser && String(window.currentUser.role || '').toLowerCase() === 'admin');
+  if(!isAdmin){ setTimeout(()=>{ if(window.currentUser && String(window.currentUser.role||'').toLowerCase()==='admin' && !qs('#ms-admin-editor')) location.reload(); },1200); return; }
+  const host = root;
+  const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const num = v => Number.isFinite(Number(v)) ? Number(v) : 0;
+  const state = { timeline: [], nations: [], economy: [], estigmas: [] };
+  const key = 'master-shield-visual-v1';
+  const clone = (x) => JSON.parse(JSON.stringify(x));
+  function seed(){
+    state.timeline = clone(Array.isArray(window.TIMELINE) ? window.TIMELINE : []);
+    state.nations = clone(Array.isArray(window.NACOES) ? window.NACOES : []);
+    state.economy = clone(window.ECON && Array.isArray(window.ECON.moedas) ? window.ECON.moedas : []);
+    state.estigmas = clone(Array.isArray(window.ESTIGMAS) ? window.ESTIGMAS : []);
   }
-
-  function ensureAdminEditor(){
-    if(!isAdmin()) return;
-    const head=document.querySelector('.master-shield-head');
-    if(!head || document.getElementById('ms-admin-editor')) return;
-    const box=document.createElement('div');
-    box.id='ms-admin-editor';
-    box.className='master-shield-map-editor';
-    box.style.margin='0 0 18px';
-    box.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-      <div><h3>ADMIN — CONTROLE DO ESCUDO</h3><p style="color:var(--ink-dim);margin:0">Área exclusiva do ADM para editar os dados do Escudo.</p></div>
-      <button type="button" class="btn amb" id="ms-admin-toggle">EDITAR CONTEÚDO</button>
+  seed();
+  function box(){
+    if(qs('#ms-admin-editor')) return qs('#ms-admin-editor');
+    const el=document.createElement('section');
+    el.id='ms-admin-editor';
+    el.style.cssText='margin:0 0 24px;background:#101216;border:1px solid #3a4250;border-left:3px solid #a4131c;padding:20px 22px;position:relative;z-index:5';
+    el.innerHTML=`<div style="display:flex;justify-content:space-between;gap:15px;align-items:flex-start;flex-wrap:wrap">
+      <div><div class="stamp">CONTROLE ADMINISTRATIVO</div><h2 style="font-family:var(--font-cond);font-size:28px;color:#eef1f5;text-transform:uppercase;letter-spacing:2px">Editor Visual do Escudo</h2>
+      <p style="color:var(--ink-dim);margin-top:4px">ADM: edite os dados sem escrever JSON. As alterações são gravadas no Supabase.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost" id="ms-adm-load">CARREGAR DO SUPABASE</button><button class="btn" id="ms-adm-save">SALVAR ALTERAÇÕES</button></div>
     </div>
-    <div id="ms-admin-panel" style="display:none;margin-top:14px">
-      <label style="display:block;font-family:var(--font-mono);font-size:11px;color:var(--ink-dim);margin-bottom:6px">CHAVE DO CONTEÚDO</label>
-      <input id="ms-admin-key" value="master-shield" style="width:100%;margin-bottom:10px">
-      <label style="display:block;font-family:var(--font-mono);font-size:11px;color:var(--ink-dim);margin-bottom:6px">JSON DO CONTEÚDO ADMINISTRÁVEL</label>
-      <textarea id="ms-admin-json" spellcheck="false" style="width:100%;min-height:220px;resize:vertical;font-family:var(--font-mono);font-size:12px">{}</textarea>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-        <button type="button" class="btn" id="ms-admin-save">SALVAR NO SUPABASE</button>
-        <button type="button" class="btn ghost" id="ms-admin-load">CARREGAR DO SUPABASE</button>
-      </div>
-      <div id="ms-admin-status" class="pts" style="margin-top:8px"></div>
-    </div>`;
-    head.insertAdjacentElement('afterend',box);
-    const panel=box.querySelector('#ms-admin-panel');
-    const status=box.querySelector('#ms-admin-status');
-    box.querySelector('#ms-admin-toggle').addEventListener('click',()=>{
-      panel.style.display=panel.style.display==='none'?'block':'none';
-    });
-    box.querySelector('#ms-admin-load').addEventListener('click',async()=>{
-      if(!window.MS_DB?.ready || typeof window.MS_DB.fetchSiteContent!=='function'){
-        status.textContent='Supabase indisponível.'; return;
-      }
-      status.textContent='Carregando…';
-      const data=await window.MS_DB.fetchSiteContent(box.querySelector('#ms-admin-key').value.trim()||'master-shield');
-      box.querySelector('#ms-admin-json').value=JSON.stringify(data||{},null,2);
-      status.textContent='Conteúdo carregado.';
-    });
-    box.querySelector('#ms-admin-save').addEventListener('click',async()=>{
-      if(!window.MS_DB?.ready || typeof window.MS_DB.saveSiteContent!=='function'){
-        status.textContent='Supabase indisponível.'; return;
-      }
-      let data;
-      try{ data=JSON.parse(box.querySelector('#ms-admin-json').value||'{}'); }
-      catch(e){ status.textContent='JSON inválido.'; return; }
-      status.textContent='Salvando…';
-      const result=await window.MS_DB.saveSiteContent(data,box.querySelector('#ms-admin-key').value.trim()||'master-shield');
-      status.textContent=result?'Salvo no Supabase.':'Falha ao salvar.';
-    });
+    <div id="ms-adm-status" style="font-family:var(--font-mono);font-size:11px;color:var(--ink-dim);margin:12px 0"></div>
+    <div class="ms-adm-tabs" style="display:flex;gap:6px;flex-wrap:wrap;margin:12px 0"></div>
+    <div id="ms-adm-form"></div>`;
+    host.insertBefore(el, host.firstChild);
+    return el;
   }
+  const panel=box(), tabs=panel.querySelector('.ms-adm-tabs'), form=panel.querySelector('#ms-adm-form'), status=panel.querySelector('#ms-adm-status');
+  const sections=[['timeline','CRONOLOGIA'],['nations','MAPA'],['economy','ECONOMIA'],['estigmas','ÊXODO / ESTIGMAS']];
+  let active='timeline';
+  function setStatus(t,ok=false){status.textContent=t;status.style.color=ok?'var(--cyan)':'var(--ink-dim)';}
+  function input(label,name,value,extra=''){return `<label style="display:block;font-family:var(--font-mono);font-size:10px;color:var(--ink-dim);letter-spacing:1px;text-transform:uppercase;margin:9px 0 4px">${label}</label><input data-field="${name}" value="${esc(value)}" ${extra} style="width:100%">`;}
+  function textarea(label,name,value){return `<label style="display:block;font-family:var(--font-mono);font-size:10px;color:var(--ink-dim);letter-spacing:1px;text-transform:uppercase;margin:9px 0 4px">${label}</label><textarea data-field="${name}" rows="5" style="width:100%;resize:vertical">${esc(value)}</textarea>`;}
+  function renderTimeline(){
+    form.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="color:var(--amber-hi);font-family:var(--font-mono);font-size:13px;letter-spacing:2px">EVENTOS DA CRONOLOGIA</h3><button class="btn ghost" data-add="timeline">+ NOVO EVENTO</button></div><div id="ms-adm-list" style="display:grid;gap:10px;margin-top:12px"></div>`;
+    const list=form.querySelector('#ms-adm-list');
+    state.timeline.forEach((x,i)=>{const c=document.createElement('div');c.style.cssText='background:#0a0b0d;border:1px solid #242932;padding:14px';c.innerHTML=`<div style="display:grid;grid-template-columns:150px 1fr;gap:10px">${input('Ano','ano',x.ano)}${input('Título','titulo',x.titulo)}</div>${textarea('Descrição','txt',x.txt)}<button class="btn ghost" data-del="${i}" style="margin-top:8px">EXCLUIR EVENTO</button>`;list.appendChild(c);});
+    bindRows();
+  }
+  function renderNations(){
+    form.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="color:var(--amber-hi);font-family:var(--font-mono);font-size:13px;letter-spacing:2px">PONTOS / NAÇÕES DO MAPA</h3><button class="btn ghost" data-add="nations">+ NOVO PONTO</button></div><p style="font-size:12px;color:var(--ink-dim);margin:7px 0">X e Y controlam a posição do ponto no mapa.</p><div id="ms-adm-list" style="display:grid;gap:10px;margin-top:12px"></div>`;
+    const list=form.querySelector('#ms-adm-list');
+    state.nations.forEach((x,i)=>{const c=document.createElement('div');c.style.cssText='background:#0a0b0d;border:1px solid #242932;padding:14px';c.innerHTML=`<div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:10px">${input('Nome','n',x.n)}${input('X','x',x.x,'type="number"')}${input('Y','y',x.y,'type="number"')}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${input('Equivalente real','real',x.real)}${input('Alinhamento (pro/ant/neu)','al',x.al)}</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${input('Moeda','moeda',x.moeda)}${input('Cotação','cot',x.cot)}</div>${textarea('Nota / descrição','nota',x.nota)}<button class="btn ghost" data-del="${i}" style="margin-top:8px">EXCLUIR PONTO</button>`;list.appendChild(c);});
+    bindRows();
+  }
+  function renderEconomy(){
+    form.innerHTML=`<h3 style="color:var(--amber-hi);font-family:var(--font-mono);font-size:13px;letter-spacing:2px">MOEDAS / COTAÇÕES</h3><div id="ms-adm-list" style="display:grid;gap:10px;margin-top:12px"></div>`;
+    const list=form.querySelector('#ms-adm-list');
+    state.economy.forEach((x,i)=>{const c=document.createElement('div');c.style.cssText='background:#0a0b0d;border:1px solid #242932;padding:14px';c.innerHTML=`${input('Nome','nome',x.nome)}${input('Nota / análise','nota',x.nota)}${input('Cor','cor',x.cor)}<label style="display:block;font-family:var(--font-mono);font-size:10px;color:var(--ink-dim);margin:9px 0 4px">COTAÇÕES</label><input data-field="cota" value="${esc((x.cota||[]).join(', '))}" style="width:100%">`;list.appendChild(c);});bindRows();
+  }
+  function renderEstigmas(){
+    form.innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h3 style="color:var(--amber-hi);font-family:var(--font-mono);font-size:13px;letter-spacing:2px">ESTIGMAS DO ÊXODO</h3><button class="btn ghost" data-add="estigmas">+ NOVO ESTIGMA</button></div><div id="ms-adm-list" style="display:grid;gap:10px;margin-top:12px"></div>`;
+    const list=form.querySelector('#ms-adm-list');state.estigmas.forEach((x,i)=>{const c=document.createElement('div');c.style.cssText='background:#0a0b0d;border:1px solid #242932;padding:14px';c.innerHTML=`${input('Nome','nome',x.nome)}${textarea('Descrição','desc',x.desc)}${input('Custo','custo',x.custo)}${textarea('Bônus','bonus',x.bonus)}${textarea('Risco / Assimilação','risco',x.risco)}<button class="btn ghost" data-del="${i}" style="margin-top:8px">EXCLUIR ESTIGMA</button>`;list.appendChild(c);});bindRows();
+  }
+  function render(){
+    tabs.innerHTML=sections.map(s=>`<button class="btn ghost" data-tab="${s[0]}" style="${active===s[0]?'border-color:var(--red);color:#fff':''}">${s[1]}</button>`).join('');
+    tabs.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{collect();active=b.dataset.tab;render();});
+    if(active==='timeline')renderTimeline(); if(active==='nations')renderNations(); if(active==='economy')renderEconomy(); if(active==='estigmas')renderEstigmas();
+    form.querySelector('[data-add]')?.addEventListener('click',()=>{collect(); if(active==='timeline')state.timeline.push({ano:'',titulo:'Novo evento',txt:''}); if(active==='nations')state.nations.push({n:'Novo ponto',x:500,y:250,real:'',al:'neu',moeda:'',cot:'',nota:''}); if(active==='estigmas')state.estigmas.push({nome:'Novo estigma',desc:'',custo:'',bonus:'',risco:''}); render();});
+  }
+  function collect(){
+    const cards=[...form.querySelectorAll('#ms-adm-list > div')];
+    cards.forEach((c,i)=>{const get=f=>c.querySelector(`[data-field="${f}"]`)?.value ?? ''; if(active==='timeline'&&state.timeline[i])Object.assign(state.timeline[i],{ano:get('ano'),titulo:get('titulo'),txt:get('txt')}); if(active==='nations'&&state.nations[i])Object.assign(state.nations[i],{n:get('n'),x:num(get('x')),y:num(get('y')),real:get('real'),al:get('al'),moeda:get('moeda'),cot:get('cot'),nota:get('nota')}); if(active==='economy'&&state.economy[i]){state.economy[i].nome=get('nome');state.economy[i].nota=get('nota');state.economy[i].cor=get('cor');state.economy[i].cota=get('cota').split(',').map(v=>v.trim()).map(v=>v===''?null:Number(v));} if(active==='estigmas'&&state.estigmas[i])Object.assign(state.estigmas[i],{nome:get('nome'),desc:get('desc'),custo:get('custo'),bonus:get('bonus'),risco:get('risco')});});
+  }
+  function bindRows(){form.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{collect();const i=Number(b.dataset.del);if(active==='timeline')state.timeline.splice(i,1);if(active==='nations')state.nations.splice(i,1);if(active==='estigmas')state.estigmas.splice(i,1);render();});}
+  async function save(){collect(); if(!window.MS_DB?.ready){setStatus('Supabase ainda não está pronto.');return;} const payload={version:1,timeline:state.timeline,nations:state.nations,economy:state.economy,estigmas:state.estigmas,updatedAt:new Date().toISOString()}; const r=await window.MS_DB.saveSiteContent(payload,key); if(r){setStatus('SALVO NO SUPABASE.',true);apply(payload);}else setStatus('Falha ao salvar no Supabase.');}
+  async function load(){if(!window.MS_DB?.ready){setStatus('Supabase ainda não está pronto.');return;} const d=await window.MS_DB.fetchSiteContent(key); if(!d){setStatus('Ainda não há conteúdo administrativo salvo.');return;} if(Array.isArray(d.timeline))state.timeline=d.timeline;if(Array.isArray(d.nations))state.nations=d.nations;if(Array.isArray(d.economy))state.economy=d.economy;if(Array.isArray(d.estigmas))state.estigmas=d.estigmas;apply(d);render();setStatus('Conteúdo carregado do Supabase.',true);}
+  function apply(d){
+    if(Array.isArray(d.timeline)){const v=qs('#ms-v-linha'); if(v){const items=d.timeline.map(t=>`<div class="tl-item"><span class="ano">◈ ${esc(t.ano)}</span><h4>${esc(t.titulo)}</h4><p>${esc(t.txt)}</p></div>`).join('');const tl=v.querySelector('.tl');if(tl)tl.innerHTML=items;}}
+    if(Array.isArray(d.nations)){const v=qs('#ms-v-mapa'); if(v){const nodes=v.querySelectorAll('.nacao');d.nations.forEach((n,i)=>{const g=nodes[i];if(!g)return;g.setAttribute('transform',`translate(${num(n.x)-num(NACOES[i]?.x||0)} ${num(n.y)-num(NACOES[i]?.y||0)})`);g.dataset.i=i;});}}
+    if(Array.isArray(d.estigmas)){const v=qs('#ms-v-exodo');if(v){const rows=v.querySelectorAll('table.data tr');d.estigmas.forEach((e,i)=>{const r=rows[i+1];if(r){r.innerHTML=`<td style="color:var(--amber-hi)"><b>${esc(e.nome)}</b></td><td style="color:var(--ink-dim)">${esc(e.desc)}</td><td style="font-family:var(--font-mono);color:var(--cyan)">${esc(e.custo)}</td><td>${esc(e.bonus)}</td><td style="color:var(--red-hi);font-size:13px">${esc(e.risco)}</td>`;}});}}
+  }
+  panel.querySelector('#ms-adm-save').onclick=save;panel.querySelector('#ms-adm-load').onclick=load;render();
+  // carrega automaticamente o estado persistido sem bloquear a renderização do Escudo
+  setTimeout(load,400);
+})();
 
-  window.openMasterShield=function(){
-    const role=String(window.currentUser?.role||'').trim().toLowerCase();
-    if(!['mestre','admin'].includes(role)){
-      alert('Acesso restrito a Mestres e ADM.');
-      return false;
-    }
-    if(typeof window.showScreen==='function') window.showScreen('screen-master-shield');
-    const badge=document.getElementById('master-shield-role');
-    if(badge) badge.textContent='ACESSO: '+role.toUpperCase();
-    ensureAdminEditor();
-    msGo('linha');
-    return true;
-  };
-
+  root.querySelectorAll('.master-shield-nav button, .ms-shield-nav button').forEach(b=>b.addEventListener('click',()=>msGo(b.dataset.msView)));
   window.msShieldNavigate=msGo;
   msGo('linha');
 })();
