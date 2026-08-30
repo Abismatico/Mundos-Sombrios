@@ -1,12 +1,3 @@
-window.openMasterShield = function(){
-  if(typeof window.showScreen === 'function') window.showScreen('screen-master-shield');
-  else {
-    const screen=document.getElementById('screen-master-shield');
-    if(screen){ document.querySelectorAll('.screen').forEach(x=>x.classList.remove('active')); screen.classList.add('active'); screen.setAttribute('aria-hidden','false'); }
-  }
-  if(typeof window.msShieldNavigate === 'function') window.msShieldNavigate('linha');
-};
-
 // Mundos Sombrios — Escudo do Mestre (integrado ao design original)
 (function(){
   'use strict';
@@ -15,7 +6,7 @@ window.openMasterShield = function(){
   const qs=s=>root.querySelector(s);
   const qsa=s=>root.querySelectorAll(s);
   const tt=qs('#ms-tooltip');
-  const msGo=v=>{ qsa('.ms-view').forEach(x=>x.classList.remove('active')); const el=qs('#ms-v-'+v); if(el)el.classList.add('active'); qsa('.ms-shield-nav button').forEach(b=>b.classList.toggle('active',b.dataset.msView===v)); window.scrollTo({top:0,behavior:'smooth'}); };
+  const msGo=v=>{ qsa('.ms-view').forEach(x=>x.classList.remove('active')); const el=qs('#ms-v-'+v); if(el)el.classList.add('active'); qsa('.master-shield-nav button').forEach(b=>b.classList.toggle('active',b.dataset.msView===v)); window.scrollTo({top:0,behavior:'smooth'}); };
   const tipMove=e=>{if(tt){tt.style.left=(e.clientX+16)+'px';tt.style.top=(e.clientY+12)+'px';}};
   const tipShow=html=>{if(tt){tt.innerHTML=html;tt.style.display='block';}};
   const tipHide=()=>{if(tt)tt.style.display='none';};
@@ -301,35 +292,26 @@ function abrirDoc(id){ msGo('arquivos'); const d=qs('#ms-doc-'+id); if(d){ d.ope
   });
   h += `</div>`;
   qs('#ms-v-arquivos').innerHTML = h;
-  const docBusca = qs('#doc-busca');
-  const docHits = qs('#doc-hits');
-  const docList = qs('#doc-list');
-  if(docBusca){
-    docBusca.addEventListener('input',e=>{
-      const q = e.target.value.trim().toLowerCase();
-      if(q.length<3){
-        if(docList) qsa('#doc-list details').forEach(d=>d.style.display='');
-        if(docHits) docHits.textContent='';
-        return;
-      }
-      let hits=0;
-      DOCS.forEach(d=>{
-        const el = qs('#doc-'+d.id);
-        if(!el) return;
-        const ok = d.titulo.toLowerCase().includes(q) || d.texto.toLowerCase().includes(q);
-        el.style.display = ok?'':'none';
-        if(ok){ el.open = true; hits += (d.texto.toLowerCase().split(q).length-1); }
-      });
-      if(docHits) docHits.textContent = hits+' ocorrências';
+  qs('#doc-busca').addEventListener('input',e=>{
+    const q = e.target.value.trim().toLowerCase();
+    if(q.length<3){ qsa('#doc-list details').forEach(d=>d.style.display=''); qs('#doc-hits').textContent=''; return; }
+    let hits=0;
+    DOCS.forEach(d=>{
+      const el = qs('#ms-doc-'+d.id);
+      const ok = d.titulo.toLowerCase().includes(q) || d.texto.toLowerCase().includes(q);
+      el.style.display = ok?'':'none';
+      if(ok){ el.open = true; hits += (d.texto.toLowerCase().split(q).length-1); }
     });
-  }})();
+    qs('#doc-hits').textContent = hits+' ocorrências';
+  });
+})();
 function baixarDoc(id){
   const d = DOCS.find(x=>x.id===id);
   const b = new Blob([d.titulo+'\n'+'═'.repeat(40)+'\n\n'+d.texto],{type:'text/plain;charset=utf-8'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(b);
   a.download = id+'.txt'; a.click(); URL.revokeObjectURL(a.href);
 }
-  root.querySelectorAll('.ms-shield-nav button').forEach(b=>b.addEventListener('click',()=>msGo(b.dataset.msView)));
+  root.querySelectorAll('.master-shield-nav button').forEach(b=>b.addEventListener('click',()=>msGo(b.dataset.msView)));
   window.msShieldNavigate=msGo;
   msGo('linha');
 })();
