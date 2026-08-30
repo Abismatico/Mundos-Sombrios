@@ -7,6 +7,16 @@
   const qsa=s=>root.querySelectorAll(s);
   const tt=qs('#ms-tooltip');
   const msGo=v=>{ qsa('.ms-view').forEach(x=>x.classList.remove('active')); const el=qs('#ms-v-'+v); if(el)el.classList.add('active'); qsa('.ms-shield-nav button').forEach(b=>b.classList.toggle('active',b.dataset.msView===v)); window.scrollTo({top:0,behavior:'smooth'}); };
+  window.openMasterShield=function(){
+    const u=window.currentUser||null;
+    const role=String(u?.role||'').toLowerCase();
+    if(!['mestre','admin'].includes(role)){ alert('Acesso restrito a Mestres e ADM.'); return false; }
+    if(typeof window.showScreen==='function') window.showScreen('screen-master-shield');
+    const badge=document.getElementById('master-shield-role');
+    if(badge) badge.textContent=role==='admin'?'ADM — ACESSO TOTAL':'MESTRE — ACESSO RESTRITO';
+    msGo('linha');
+    return true;
+  };
   const tipMove=e=>{if(tt){tt.style.left=(e.clientX+16)+'px';tt.style.top=(e.clientY+12)+'px';}};
   const tipShow=html=>{if(tt){tt.innerHTML=html;tt.style.display='block';}};
   const tipHide=()=>{if(tt)tt.style.display='none';};
@@ -292,9 +302,9 @@ function abrirDoc(id){ msGo('arquivos'); const d=qs('#ms-doc-'+id); if(d){ d.ope
   });
   h += `</div>`;
   qs('#ms-v-arquivos').innerHTML = h;
-  qs('#ms-doc-busca').addEventListener('input',e=>{
+  qs('#doc-busca').addEventListener('input',e=>{
     const q = e.target.value.trim().toLowerCase();
-    if(q.length<3){ qsa('#ms-doc-list details').forEach(d=>d.style.display=''); qs('#ms-doc-hits').textContent=''; return; }
+    if(q.length<3){ qsa('#doc-list details').forEach(d=>d.style.display=''); qs('#doc-hits').textContent=''; return; }
     let hits=0;
     DOCS.forEach(d=>{
       const el = qs('#ms-doc-'+d.id);
@@ -302,7 +312,7 @@ function abrirDoc(id){ msGo('arquivos'); const d=qs('#ms-doc-'+id); if(d){ d.ope
       el.style.display = ok?'':'none';
       if(ok){ el.open = true; hits += (d.texto.toLowerCase().split(q).length-1); }
     });
-    qs('#ms-doc-hits').textContent = hits+' ocorrências';
+    qs('#doc-hits').textContent = hits+' ocorrências';
   });
 })();
 function baixarDoc(id){
