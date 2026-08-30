@@ -7,16 +7,6 @@
   const qsa=s=>root.querySelectorAll(s);
   const tt=qs('#ms-tooltip');
   const msGo=v=>{ qsa('.ms-view').forEach(x=>x.classList.remove('active')); const el=qs('#ms-v-'+v); if(el)el.classList.add('active'); qsa('.ms-shield-nav button').forEach(b=>b.classList.toggle('active',b.dataset.msView===v)); window.scrollTo({top:0,behavior:'smooth'}); };
-  window.openMasterShield=function(){
-    const u=window.currentUser||null;
-    const role=String(u?.role||'').toLowerCase();
-    if(!['mestre','admin'].includes(role)){ alert('Acesso restrito a Mestres e ADM.'); return false; }
-    if(typeof window.showScreen==='function') window.showScreen('screen-master-shield');
-    const badge=document.getElementById('master-shield-role');
-    if(badge) badge.textContent=role==='admin'?'ADM — ACESSO TOTAL':'MESTRE — ACESSO RESTRITO';
-    msGo('linha');
-    return true;
-  };
   const tipMove=e=>{if(tt){tt.style.left=(e.clientX+16)+'px';tt.style.top=(e.clientY+12)+'px';}};
   const tipShow=html=>{if(tt){tt.innerHTML=html;tt.style.display='block';}};
   const tipHide=()=>{if(tt)tt.style.display='none';};
