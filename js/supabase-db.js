@@ -470,6 +470,12 @@
             return Array.isArray(data) ? data : [];
         },
 
+        async fetchMapPoints() {
+            const rows = await this.fetchSiteSettings();
+            const row = rows.find(x => x.key === 'master_shield_map_points');
+            return Array.isArray(row?.value?.points) ? row.value.points : null;
+        },
+
         async saveSiteSetting(key, value) {
             const payload = {
                 key: String(key),

@@ -218,6 +218,9 @@ ordem:[
 {nome:"Aether Resonantia ✝", tema:"A Verdade da Unidade — PERDIDA", tiers:[{t:"Ascensão Perdida", d:"A Harmonia entre todas as frequências do Espectro. Perdida na Queda."}]}
 ]};
 
+// Exposto para o Escudo do Mestre e ferramentas administrativas.
+window.NACOES = NACOES;
+
 // ESTIGMAS (Êxodo)
 const ESTIGMAS = [
 {nome:"Somático", custo:2, bonus:"+1 Força / Defesa", risco:"Degeneração muscular e fadiga intensa.", desc:"Atua sobre músculos, ossos e tecidos."},

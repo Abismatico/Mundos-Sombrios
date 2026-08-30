@@ -21,3 +21,10 @@
 .ms-map-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .ms-map-note{font-size:12px;color:#888;margin:7px 0 12px}
 @media(max-width:800px){.ms-map-edit-row{grid-template-columns:1fr 1fr}.ms-map-edit-row button{grid-column:1/-1}.master-shield-screen{padding-left:10px;padding-right:10px}}
+
+.ms-map-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0 14px}
+.ms-map-toolbar input{flex:1;min-width:220px;background:#090909;border:1px solid #444;color:#ddd;padding:9px;font-family:monospace}
+.ms-map-edit-row{grid-template-columns:1.25fr 1fr .55fr .55fr .65fr auto!important}
+.ms-map-edit-row input.ms-map-note-input{grid-column:1/-1}
+.ms-map-edit-row input,.ms-map-edit-row select{box-sizing:border-box}
+@media(max-width:800px){.ms-map-edit-row{grid-template-columns:1fr 1fr!important}.ms-map-edit-row input.ms-map-note-input{grid-column:1/-1}}

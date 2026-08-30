@@ -349,19 +349,59 @@ function baixarDoc(id){
     let points=base.map(n=>({...n}));
     const saved=await loadMapOverrides(); if(saved) points=saved;
     if(saved && typeof window.msShieldRenderMap==='function') window.msShieldRenderMap(points);
-    let html='<div class="master-shield-map-editor"><h3>Editor de Pontos do Mapa — ADM</h3><p class="ms-map-note">Altere nome, posição e alinhamento. Salvar grava no Supabase em <b>site_settings</b>; o mapa público poderá consumir esses valores depois.</p><div id="ms-map-edit-list">';
-    points.forEach((n,i)=>{html+=`<div class="ms-map-edit-row" data-i="${i}"><input data-k="n" value="${esc(n.n)}" placeholder="Nome"><input data-k="x" type="number" value="${Number(n.x)||0}" placeholder="X"><input data-k="y" type="number" value="${Number(n.y)||0}" placeholder="Y"><select data-k="al"><option value="pro" ${n.al==='pro'?'selected':''}>PRÓ</option><option value="ant" ${n.al==='ant'?'selected':''}>ANT</option><option value="neu" ${n.al==='neu'?'selected':''}>NEU</option></select><button type="button" class="souls-btn small-btn" data-del="${i}">Excluir</button></div>`;});
-    html+='</div><div class="ms-map-actions"><button type="button" class="souls-btn small-btn" id="ms-map-add">+ Adicionar ponto</button><button type="button" class="souls-btn small-btn" id="ms-map-save">SALVAR NO SUPABASE</button></div></div>';
+
+    const editorId='ms-map-edit-list';
+    let html='<div class="master-shield-map-editor"><h3>Editor de Pontos do Mapa — ADM</h3>'+
+      '<p class="ms-map-note">Aqui você controla os pontos exibidos no mapa do Escudo. As alterações são gravadas no Supabase em <b>site_settings</b>.</p>'+
+      '<div class="ms-map-toolbar"><input id="ms-map-search" type="search" placeholder="Filtrar por nome ou região...">'+
+      '<button type="button" class="souls-btn small-btn" id="ms-map-add">+ ADICIONAR PONTO</button>'+
+      '<button type="button" class="souls-btn small-btn" id="ms-map-reset">RESTAURAR BASE</button></div>'+
+      `<div id="${editorId}"></div>`+
+      '<div class="ms-map-actions"><button type="button" class="souls-btn small-btn" id="ms-map-save">SALVAR NO SUPABASE</button></div></div>';
     host.insertAdjacentHTML('afterbegin',html);
     const editor=host.querySelector('.master-shield-map-editor');
-    const list=host.querySelector('#ms-map-edit-list');
-    host.querySelector('#ms-map-add').onclick=()=>{points.push({n:'Novo ponto',x:500,y:250,al:'neu',real:'',moeda:'',cot:'',nota:''}); mountMapEditor();};
-    host.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{points.splice(Number(b.dataset.del),1);mountMapEditor();});
+    const list=host.querySelector('#'+editorId);
+    const search=host.querySelector('#ms-map-search');
+    let working=points.map(n=>({...n}));
+
+    const renderEditor=()=>{
+      const q=String(search?.value||'').trim().toLowerCase();
+      list.innerHTML='';
+      working.forEach((n,i)=>{
+        const hay=`${n.n||''} ${n.real||''} ${n.moeda||''}`.toLowerCase();
+        if(q && !hay.includes(q)) return;
+        list.insertAdjacentHTML('beforeend',`<div class="ms-map-edit-row" data-i="${i}">
+          <input data-k="n" value="${esc(n.n)}" placeholder="Nome">
+          <input data-k="real" value="${esc(n.real)}" placeholder="Região/país">
+          <input data-k="x" type="number" min="0" max="1000" value="${Number(n.x)||0}" placeholder="X">
+          <input data-k="y" type="number" min="0" max="500" value="${Number(n.y)||0}" placeholder="Y">
+          <select data-k="al"><option value="pro" ${n.al==='pro'?'selected':''}>PRÓ</option><option value="ant" ${n.al==='ant'?'selected':''}>ANT</option><option value="neu" ${n.al==='neu'?'selected':''}>NEU</option></select>
+          <button type="button" class="souls-btn small-btn" data-del="${i}">EXCLUIR</button>
+          <input data-k="moeda" value="${esc(n.moeda)}" placeholder="Moeda">
+          <input data-k="cot" value="${esc(n.cot)}" placeholder="Cotação">
+          <input data-k="nota" class="ms-map-note-input" value="${esc(n.nota)}" placeholder="Descrição / nota">
+        </div>`);
+      });
+      list.querySelectorAll('.ms-map-edit-row').forEach(row=>{
+        row.querySelectorAll('[data-k]').forEach(el=>el.addEventListener('input',()=>{
+          const i=Number(row.dataset.i), k=el.dataset.k;
+          working[i][k]=el.type==='number'?Number(el.value):el.value;
+        }));
+        row.querySelector('[data-del]')?.addEventListener('click',()=>{
+          working.splice(Number(row.dataset.i),1); renderEditor();
+        });
+      });
+    };
+    renderEditor();
+    search?.addEventListener('input',renderEditor);
+    host.querySelector('#ms-map-add').onclick=()=>{working.push({n:'Novo ponto',x:500,y:250,al:'neu',real:'',moeda:'',cot:'',nota:''});renderEditor();};
+    host.querySelector('#ms-map-reset').onclick=()=>{if(confirm('Restaurar os 50 pontos originais? As alterações atuais ainda não salvas serão descartadas.')){working=base.map(n=>({...n}));renderEditor();if(window.msShieldRenderMap)window.msShieldRenderMap(working);}};
     host.querySelector('#ms-map-save').onclick=async()=>{
-      const next=[...list.querySelectorAll('.ms-map-edit-row')].map(r=>{const get=k=>r.querySelector(`[data-k="${k}"]`)?.value; const old=points[Number(r.dataset.i)]||{}; return {...old,n:get('n'),x:Number(get('x')),y:Number(get('y')),al:get('al')};});
+      const clean=working.map(n=>({...n,x:Number(n.x)||0,y:Number(n.y)||0}));
       if(!window.MS_DB?.saveSiteSetting){alert('Supabase indisponível.');return;}
-      const saved=await window.MS_DB.saveSiteSetting('master_shield_map_points',{points:next});
-      if(saved){points=next; if(typeof window.msShieldRenderMap==='function') window.msShieldRenderMap(points); await mountMapEditor(); alert('Pontos do mapa salvos no Supabase.');} else alert('Não foi possível salvar. Verifique a RLS e a sessão ADM.');
+      const saved=await window.MS_DB.saveSiteSetting('master_shield_map_points',{points:clean});
+      if(saved){working=clean;points=clean;if(window.msShieldRenderMap)window.msShieldRenderMap(clean);await mountMapEditor();alert('Pontos do mapa salvos no Supabase.');}
+      else alert('Não foi possível salvar. Verifique a RLS e a sessão ADM.');
     };
   }
   window.msShieldInit=async function(){
