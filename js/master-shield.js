@@ -13,21 +13,7 @@
   const qs=s=>root.querySelector(s);
   const qsa=s=>root.querySelectorAll(s);
   const tt=qs('#ms-tooltip');
-  const msGo=v=>{
-    const target=String(v||'linha');
-    qsa('.ms-view').forEach(x=>x.classList.remove('active'));
-    const el=qs('#ms-v-'+target);
-    if(el) el.classList.add('active');
-
-    // A navegação do Escudo é independente da navegação do site principal.
-    // Atualiza somente botões que realmente pertencem ao Escudo.
-    qsa('.master-shield-nav button, .ms-shield-nav button, [data-ms-view]').forEach(b=>{
-      b.classList.toggle('active',String(b.dataset.msView||'')===target);
-      b.setAttribute('aria-selected',String(b.dataset.msView||'')===target?'true':'false');
-    });
-
-    window.scrollTo({top:0,behavior:'smooth'});
-  };
+  const msGo=v=>{ qsa('.ms-view').forEach(x=>x.classList.remove('active')); const el=qs('#ms-v-'+v); if(el)el.classList.add('active'); qsa('.ms-shield-nav button').forEach(b=>b.classList.toggle('active',b.dataset.msView===v)); window.scrollTo({top:0,behavior:'smooth'}); };
   const tipMove=e=>{if(tt){tt.style.left=(e.clientX+16)+'px';tt.style.top=(e.clientY+12)+'px';}};
   const tipShow=html=>{if(tt){tt.innerHTML=html;tt.style.display='block';}};
   const tipHide=()=>{if(tt)tt.style.display='none';};
@@ -336,7 +322,7 @@ function baixarDoc(id){
 /* ══════════ EDITOR VISUAL DO ADM ══════════ */
 (function(){
   const isAdmin = !!(window.currentUser && String(window.currentUser.role || '').toLowerCase() === 'admin');
-  if(!isAdmin){ return; }
+  if(!isAdmin){ setTimeout(()=>{ if(window.currentUser && String(window.currentUser.role||'').toLowerCase()==='admin' && !qs('#ms-admin-editor')) console.warn("Reload skipped to prevent loop"); },1200); return; }
   const host = root;
   const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const num = v => Number.isFinite(Number(v)) ? Number(v) : 0;
@@ -416,15 +402,7 @@ function baixarDoc(id){
   setTimeout(load,400);
 })();
 
-  // Delegação: funciona mesmo se a navegação for reconstruída pelo HTML/ADM.
-  root.addEventListener('click',e=>{
-    const b=e.target.closest('.master-shield-nav button, .ms-shield-nav button, [data-ms-view]');
-    if(!b || !root.contains(b)) return;
-    const view=b.dataset.msView;
-    if(!view) return;
-    e.preventDefault();
-    msGo(view);
-  });
+  root.querySelectorAll('.master-shield-nav button, .ms-shield-nav button').forEach(b=>b.addEventListener('click',()=>msGo(b.dataset.msView)));
   window.msShieldNavigate=msGo;
   msGo('linha');
 })();
