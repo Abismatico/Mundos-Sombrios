@@ -18,3 +18,7 @@
 @media(max-width:650px){.portal-admin-form fieldset.portal-media-fieldset{grid-template-columns:1fr}.portal-admin-form fieldset.portal-media-fieldset label:last-of-type,.portal-admin-form .portal-media-fieldset small{grid-column:auto}.portal-featured .portal-card-media{max-height:220px}.portal-story-card{min-height:unset}}
 
 .portal-story-body{font-family:Georgia,serif;color:#c8c0b5;font-size:1.06rem;line-height:1.9;margin:28px 0}.portal-story-body p{margin:0 0 20px}.portal-story-body-input{min-height:260px!important}
+
+/* Escudo do Mestre — entrada restrita, mantendo o design original */
+.portal-nav .portal-shield-link{border-color:rgba(212,175,55,.45);color:#d4af37;}
+.portal-nav .portal-shield-link:hover{color:#f0d46a;border-color:#d4af37;}
