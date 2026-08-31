@@ -126,34 +126,73 @@
   function unmountShield(){document.getElementById('master-shield-cube')?.remove();document.getElementById('master-shield-panel')?.remove();state.shield=null;try{window.__msVttIsGM=false}catch(_){}}
 
   function vttState(){return online.vtt||{chat:[],dice:[],gallery:[]};}
-  function saveVtt(state){online.vtt=state; if(window.MS_DB?.ready&&tableId()!=='draft'&&gm()) window.MS_DB.saveTableState(tableId(),state).catch(e=>console.warn('[Mundos Sombrios] Estado VTT:',e));}
+  function saveVtt(state){
+    online.vtt=state;
+    // Estado estrutural (grid, galeria, locks) pertence ao Mestre. Jogadores publicam eventos, não sobrescrevem a mesa.
+    if(window.MS_DB?.ready&&tableId()!=='draft'&&gm()) window.MS_DB.saveTableState(tableId(),state).catch(e=>console.warn('[Mundos Sombrios] Estado VTT:',e));
+  }
   async function onVttEnter(table,isGM){
-    if(online.unsubscribe){online.unsubscribe();online.unsubscribe=null;} online.hydrated=false; online.notes=[];online.npcs=[];online.files=[];
+    if(online.unsubscribe){try{online.unsubscribe();}catch(_){} online.unsubscribe=null;}
+    if(window.MS_REALTIME?.disconnect) window.MS_REALTIME.disconnect();
+    online.hydrated=false; online.notes=[];online.npcs=[];online.files=[];
     if(table?.id&&window.MS_DB?.ready){
       try{ const [remote,events]=await Promise.all([window.MS_DB.fetchTableState(table.id),window.MS_DB.fetchTableEvents(table.id,200)]); online.vtt=remote.data||{chat:[],dice:[],gallery:[]};
         (events.data||[]).forEach(ev=>applyRemoteEvent(ev)); online.hydrated=false; await hydrateOnline();
-        online.unsubscribe=window.MS_DB.subscribeTable(table.id,applyRemoteEvent);
+        if(window.MS_REALTIME?.connect) online.unsubscribe=await window.MS_REALTIME.connect(table.id,applyRemoteEvent);
       }catch(e){console.warn('[Mundos Sombrios] Realtime da mesa:',e);}
     }
   }
+  async function refreshTableRoster(){
+    if(!currentTableData?.id || !window.MS_SERVICES?.Games) return;
+    try{
+      const result=await window.MS_SERVICES.Games.characters(currentTableData.id);
+      const remoteCharacters=result?.data||[];
+      tablePlayers = remoteCharacters.map(c=>{
+        const payload=c?.payload&&typeof c.payload==='object'?msClone(c.payload):{};
+        payload.id=c.id; payload.ownerId=c.owner_id; payload.userId=c.user_id; payload.name=payload.name||c.name; payload.mode=payload.mode||c.mode; payload.nature=payload.nature||c.nature; payload.className=payload.className||c.class_name; payload.updatedAt=c.updated_at; payload.isMe=String(c.user_id)===String(currentUser?.id); payload.sourceOwnerId=c.owner_id; payload.sourceCharId=c.id; payload.participantUserId=c.user_id; return payload;
+      });
+      renderVttCards?.();
+      window.MS_PLATFORM?.emit('table:roster-refreshed',{tableId:currentTableData.id,count:tablePlayers.length});
+    }catch(e){console.warn('[Mundos Sombrios] refresh roster:',e);}
+  }
   function applyRemoteEvent(event){
     if(!event||!event.event_type)return; const p=event.payload||{};
-    if(event.event_type==='chat'){const item={sender:p.sender,msg:p.msg,color:p.color||'#00ffcc',id:event.id};if(!online.vtt.chat.some(x=>String(x.id)===String(item.id))){online.vtt.chat.push(item);online.vtt.chat=online.vtt.chat.slice(-150);if(typeof addChatMessage==='function')addChatMessage(item.sender,item.msg,item.color);}}
-    if(event.event_type==='dice'){const item={id:event.id,type:p.type,result:p.result,sender:p.sender};if(!online.vtt.dice.some(x=>String(x.id)===String(item.id))){online.vtt.dice.push(item);diceHistory=online.vtt.dice.slice(-100);if(typeof renderDiceHistory==='function')renderDiceHistory();}}
+    if(event.event_type==='table_refresh'){
+      if(p.entity==='table_members') refreshTableRoster();
+      if(p.entity==='table_state') window.MS_DB?.fetchTableState?.(currentTableData?.id).then(r=>{if(r?.data){online.vtt=r.data;restoreVttState();}}).catch(()=>{});
+      if(p.entity==='game_sessions') window.MS_PLATFORM?.emit('table:sessions-changed',{tableId:currentTableData?.id});
+      return;
+    }
+    if(event.event_type==='table_state'){ online.vtt=p.state || p || online.vtt; restoreVttState(); return; }
+    if(event.event_type==='chat'){
+      const duplicate=online.vtt.chat.some(x=>String(x.sender)===String(p.sender)&&String(x.msg)===String(p.msg)&&Date.now()-Number(x.at||0)<5000);
+      if(!duplicate){ const item={sender:p.sender,msg:p.msg,color:p.color||'#00ffcc',id:event.id,at:Date.now()}; online.vtt.chat.push(item); online.vtt.chat=online.vtt.chat.slice(-150); if(typeof addChatMessage==='function')addChatMessage(item.sender,item.msg,item.color); }
+    }
+    if(event.event_type==='token_move'){
+      const tokenId=String(p.tokenId||''); const canvas=window.vttCanvas||vttCanvas;
+      const obj=canvas?.getObjects()?.find(o=>String(o.msTokenId||'')===tokenId);
+      if(obj){ window.__msApplyingRemoteToken=true; obj.set({left:Number(p.left)||0,top:Number(p.top)||0,angle:Number(p.angle)||0,scaleX:Number(p.scaleX)||obj.scaleX,scaleY:Number(p.scaleY)||obj.scaleY}); canvas.renderAll(); window.__msApplyingRemoteToken=false; if(isVttGM && window.MasterTools?.saveGrid) window.MasterTools.saveGrid(canvas); }
+      return;
+    }
+    if(event.event_type==='control'){ Object.assign(window,{}); if(typeof p.chatLocked==='boolean'){ chatLocked=p.chatLocked; const btn=document.getElementById('btn-lock-chat'); if(btn)btn.innerText=chatLocked?'🔏':'🔓'; } return; }
+    if(event.event_type==='dice'){
+      const duplicate=online.vtt.dice.some(x=>String(x.type)===String(p.type)&&String(x.result)===String(p.result)&&String(x.sender)===String(p.sender)&&Date.now()-Number(x.at||0)<5000);
+      if(!duplicate){ const item={id:event.id,type:p.type,result:p.result,sender:p.sender,at:Date.now()}; online.vtt.dice.push(item); online.vtt.dice=online.vtt.dice.slice(-100); diceHistory=online.vtt.dice.slice(-100); if(typeof renderDiceHistory==='function')renderDiceHistory(); }
+    }
   }
   function restoreVttState(){const s=vttState();const chat=document.getElementById('chat-messages');if(chat){chat.innerHTML='';(s.chat||[]).forEach(x=>{if(typeof addChatMessage==='function')addChatMessage(x.sender,x.msg,x.color);});}if(typeof diceHistory!=='undefined'){diceHistory=Array.isArray(s.dice)?s.dice.slice():[];if(typeof renderDiceHistory==='function')renderDiceHistory();}const c=document.getElementById('camp-gallery-container');if(c){c.innerHTML='';(s.gallery||[]).forEach(f=>addGalleryDom(f));}}
   function addGalleryDom(f){const c=document.getElementById('camp-gallery-container');if(!c)return;c.insertAdjacentHTML('beforeend',`<div class="gallery-thumb"><img src="${f.src}" alt="${esc(f.name||'Imagem')}" onclick="viewFullscreen(this.src)"><button type="button" class="delete-btn hide-on-view" data-gallery-src="${encodeURIComponent(f.src||'')}">X</button></div>`);}
-  function onChatMessage(sender,msg,isGM){const s=vttState();s.chat=Array.isArray(s.chat)?s.chat:[];const local={id:'local-'+Date.now()+'-'+Math.random(),sender,msg,color:isGM?'#ff00ff':'#00ffcc',at:Date.now()};s.chat.push(local);s.chat=s.chat.slice(-150);saveVtt(s);if(window.MS_DB?.ready&&tableId()!=='draft')window.MS_DB.publishTableEvent(tableId(),'chat',{sender,msg,color:local.color});}
-  function onDiceRoll(type,result,sender){const s=vttState();s.dice=Array.isArray(s.dice)?s.dice:[];s.dice.push({id:'local-'+Date.now()+'-'+Math.random(),type,result,sender});s.dice=s.dice.slice(-100);saveVtt(s);if(window.MS_DB?.ready&&tableId()!=='draft')window.MS_DB.publishTableEvent(tableId(),'dice',{type,result,sender});}
+  function onChatMessage(sender,msg,isGM){const s=vttState();s.chat=Array.isArray(s.chat)?s.chat:[];const local={id:'local-'+Date.now()+'-'+Math.random(),sender,msg,color:isGM?'#ff00ff':'#00ffcc',at:Date.now()};s.chat.push(local);s.chat=s.chat.slice(-150);if(gm()) saveVtt(s);if(window.MS_DB?.ready&&tableId()!=='draft')window.MS_SERVICES?.VTT?.event?.(tableId(),'chat',{sender,msg,color:local.color});}
+  function onDiceRoll(type,result,sender){const s=vttState();s.dice=Array.isArray(s.dice)?s.dice:[];s.dice.push({id:'local-'+Date.now()+'-'+Math.random(),type,result,sender,at:Date.now()});s.dice=s.dice.slice(-100);if(gm()) saveVtt(s);if(window.MS_DB?.ready&&tableId()!=='draft')window.MS_SERVICES?.VTT?.event?.(tableId(),'dice',{type,result,sender});}
   function syncDice(list){const s=vttState();s.dice=Array.isArray(list)?list.slice(-100):[];saveVtt(s);}
+  function saveTableControlState(patch){ if(!gm()||tableId()==='draft') return; online.vtt={...(online.vtt||{}),...patch}; saveVtt(online.vtt); }
   function saveGalleryImage(src,name){if(!isVttGM())return;const s=vttState();s.gallery=Array.isArray(s.gallery)?s.gallery:[];s.gallery.push({src,name:name||'Imagem',at:Date.now()});s.gallery=s.gallery.slice(-40);saveVtt(s);}
-  function removeGalleryImage(src){const s=vttState();s.gallery=(s.gallery||[]).filter(f=>f.src!==src);saveVtt(s);}
   function isVttGM(){try{return !!window.__msVttIsGM}catch(_){return false;}}
   function removeGalleryImage(src){const s=vttState();s.gallery=(s.gallery||[]).filter(f=>f.src!==src);saveVtt(s);document.querySelectorAll('[data-gallery-src]').forEach(b=>{try{if(decodeURIComponent(b.dataset.gallerySrc||'')===src)b.parentElement?.remove()}catch(_){}})}
 
   function saveGrid(canvas){if(!canvas)return;const s=vttState();const objects=canvas.getObjects().filter(o=>!o.isGridLine);s.grid=canvas.toJSON(['owner','borderColor','isGridLine']);s.grid.objects=objects.map(o=>o.toObject(['owner','borderColor','isGridLine']));saveVtt(s);}
   function restoreGrid(canvas){const s=vttState();if(!canvas||!s.grid||!s.grid.objects?.length)return;try{window.__msRestoringGrid=true;canvas.loadFromJSON({version:s.grid.version||'6.0.0',objects:s.grid.objects},()=>{drawGridLines?.();canvas.renderAll();window.__msRestoringGrid=false;});}catch(_){window.__msRestoringGrid=false}}
   window.renderMasterTools=renderMasterTools;
-  window.MasterTools={renderMasterTools,mountShield,unmountShield,onVttEnter,restoreVttState,onChatMessage,onDiceRoll,syncDice,saveGalleryImage,removeGalleryImage,saveGrid,restoreGrid};
+  window.MasterTools={renderMasterTools,mountShield,unmountShield,onVttEnter,restoreVttState,onChatMessage,onDiceRoll,syncDice,saveGalleryImage,removeGalleryImage,saveGrid,restoreGrid,saveTableControlState};
   document.addEventListener('DOMContentLoaded',()=>{if(gm()){} });
 })();

@@ -219,25 +219,39 @@ async function msBuildCurrentUser(profileOverride = null) {
 }
 
 async function msHydrateRemoteGameState() {
-    if (!window.MS_DB?.ready || !currentUser) return;
+    if (!window.MS_SERVICES?.Characters || !currentUser) return;
     try {
-        const [remoteChars, remoteTables] = await Promise.all([window.MS_DB.fetchCharacters(), window.MS_DB.fetchTables()]);
-        if (Array.isArray(remoteChars)) {
-            const mine=remoteChars.filter(c=>String(c.user_id||c.owner_id)===String(currentUser.id)).map(c=>{
-                const payload=(c.payload&&typeof c.payload==='object')?msClone(c.payload):{};
-                payload.id=c.id; payload.ownerId=currentUser.id; payload.createdAt=payload.createdAt||c.created_at; payload.updatedAt=c.updated_at;
-                return payload;
-            });
-            const store=msEnsureRepoStore(); store[currentUser.id]=store[currentUser.id]||{characters:[],joinedTables:[],ownedTables:[]}; store[currentUser.id].characters=mine;
-            msWriteJSON(MS_REPO_KEY,store); characters=msClone(mine);
-        }
-        if (Array.isArray(remoteTables)) {
-            allTablesDB=remoteTables.map(t=>msNormalizeTable({id:t.id,code:t.code,name:t.name,theme:t.theme,gameMode:t.game_mode,ownerId:t.owner_id,participants:t.participants||[],banned:t.banned||[],settings:t.settings||{},createdAt:t.created_at,updatedAt:t.updated_at}));
-            msWriteJSON('mundosSombriosTables',allTablesDB);
-        }
+        const [remoteChars, remoteTables] = await Promise.all([
+            window.MS_SERVICES.Characters.listMine(),
+            window.MS_SERVICES.Games.listMine()
+        ]);
+        const charRows = remoteChars?.data || [];
+        characters = charRows.map(c => {
+            const payload = c?.payload && typeof c.payload === 'object' ? msClone(c.payload) : {};
+            payload.id = c.id; payload.ownerId = currentUser.id; payload.userId = currentUser.id;
+            payload.createdAt = payload.createdAt || c.created_at; payload.updatedAt = c.updated_at;
+            return payload;
+        });
+        allCharactersDB = characters.map(msClone);
+
+        const tableRows = remoteTables?.data || [];
+        allTablesDB = tableRows.map(t => msNormalizeTable({
+            id:t.id,code:t.code,name:t.name,theme:t.theme,gameMode:t.game_mode,ownerId:t.owner_id,
+            participants:Array.isArray(t.participants)?t.participants:[],banned:t.banned||[],settings:t.settings||{},
+            createdAt:t.created_at,updatedAt:t.updated_at
+        }));
         msSyncCurrentUserView();
-    } catch(error) { console.warn('[Mundos Sombrios] Falha ao hidratar mesas/fichas:',error); }
+        window.MS_PLATFORM?.setStatus('persistence','success',null,{updated:true});
+        window.MS_PLATFORM?.emit('character:hydrated',{count:characters.length});
+        window.MS_PLATFORM?.emit('tables:hydrated',{owned:myTables.length,joined:joinedTables.length});
+    } catch(error) {
+        window.MS_PLATFORM?.setStatus('persistence','error',error);
+        window.MS_PLATFORM?.toast('Não foi possível sincronizar suas fichas e mesas.','error');
+        console.warn('[Mundos Sombrios] Falha ao hidratar mesas/fichas:',error);
+    }
 }
+
+window.msHydrateRemoteGameState = msHydrateRemoteGameState;
 
 async function msApplyAuthenticatedSession(profileOverride = null) {
     currentUser = await msBuildCurrentUser(profileOverride);
@@ -256,9 +270,16 @@ async function msApplyAuthenticatedSession(profileOverride = null) {
 }
 
 async function msBootstrapAuthSession() {
-    if (!window.MS_DB?.ready) return;
-    try { const session=await window.MS_DB.getSession(); if(session.user){ const profile=(await window.MS_DB.fetchMyProfile()).data; await msApplyAuthenticatedSession(profile); } }
-    catch(error){ console.warn('[Mundos Sombrios] Não foi possível restaurar a sessão:', error); }
+    if (!window.MS_DB?.ready) { window.MS_PLATFORM?.setStatus('auth','error',new Error('Supabase indisponível')); return; }
+    window.MS_PLATFORM?.setStatus('auth','loading');
+    try {
+        const session=await window.MS_DB.getSession();
+        if(session.user){ const profile=(await window.MS_DB.fetchMyProfile()).data; await msApplyAuthenticatedSession(profile); }
+        window.MS_PLATFORM?.setStatus('auth','success');
+    } catch(error){
+        window.MS_PLATFORM?.setStatus('auth','error',error);
+        console.warn('[Mundos Sombrios] Não foi possível restaurar a sessão:', error);
+    }
 }
 
 window.addEventListener('ms-auth-state', async (event)=>{
@@ -271,13 +292,15 @@ window.addEventListener('ms-auth-state', async (event)=>{
 document.addEventListener('DOMContentLoaded',()=>{
     msBootstrapAuthSession();
     msRefreshInitialSetupButton();
+    window.MS_PLATFORM?.emit('ms:app:ready',{ version: window.MS_PLATFORM?.version || null });
 });
 async function doLogin() {
     const identifier=document.getElementById('login-user').value.trim(); const password=document.getElementById('login-pass').value;
-    if(!identifier||!password){alert('Preencha as credenciais.');return false;}
-    if(!window.MS_DB?.ready){alert('O serviço online de autenticação não está disponível.');return false;}
-    try{ const {error}=await window.MS_DB.signIn(identifier,password); if(error){console.warn('[Mundos Sombrios] Login:',error);alert('Login inválido ou conta ainda não confirmada.');return false;} const ok=await msApplyAuthenticatedSession(); if(!ok){await window.MS_DB.signOut();alert('Perfil de usuário não encontrado ou bloqueado.');return false;} await msSyncOnlineState(); return true; }
-    catch(error){console.error('[Mundos Sombrios] Falha no login online:',error);alert('Não foi possível autenticar. Verifique o e-mail, senha e conexão.');return false;}
+    window.MS_PLATFORM?.setStatus('auth','loading');
+    if(!identifier||!password){window.MS_PLATFORM?.setStatus('auth','error',new Error('Credenciais incompletas')); window.MS_PLATFORM?.toast('Preencha as credenciais.','error'); return false;}
+    if(!window.MS_DB?.ready){window.MS_PLATFORM?.setStatus('auth','error',new Error('Supabase indisponível')); window.MS_PLATFORM?.toast('O serviço online de autenticação não está disponível.','error'); return false;}
+    try{ const {error}=await window.MS_DB.signIn(identifier,password); if(error){window.MS_PLATFORM?.setStatus('auth','error',error); console.warn('[Mundos Sombrios] Login:',error); window.MS_PLATFORM?.toast('Login inválido ou conta ainda não confirmada.','error'); return false;} const ok=await msApplyAuthenticatedSession(); if(!ok){await window.MS_DB.signOut(); window.MS_PLATFORM?.setStatus('auth','error',new Error('Perfil não encontrado ou bloqueado')); window.MS_PLATFORM?.toast('Perfil de usuário não encontrado ou bloqueado.','error'); return false;} await msSyncOnlineState(); window.MS_PLATFORM?.setStatus('auth','success'); window.MS_PLATFORM?.emit('auth:signed-in',{user: currentUser}); return true; }
+    catch(error){window.MS_PLATFORM?.setStatus('auth','error',error); console.error('[Mundos Sombrios] Falha no login online:',error); window.MS_PLATFORM?.toast('Não foi possível autenticar. Verifique o e-mail, senha e conexão.','error'); return false;}
 }
 
 async function doLogout() {
@@ -610,11 +633,7 @@ async function handleReq(reqId, approved) {
     msWriteStorageJSON('mundosSombriosRequests', requestsDB);
 
     if (window.MS_DB && window.MS_DB.ready) {
-        const saveResult = await window.MS_DB.saveAdminRequest(resolvedReq);
-        if (!saveResult) {
-            alert('Não foi possível atualizar a solicitação no Supabase. A alteração não foi concluída.');
-            return false;
-        }
+        await window.MS_DB.saveAdminRequest(resolvedReq);
         const remoteReqs = await window.MS_DB.fetchAdminRequests();
         requestsDB = dedupeRequests(Array.isArray(remoteReqs) ? remoteReqs : []).filter(r => String(r.status || 'pending').toLowerCase() === 'pending');
         msWriteStorageJSON('mundosSombriosRequests', requestsDB);
@@ -887,6 +906,7 @@ function applyNatureTheme(nature) {
 
 // NAVIGATION
 function showScreen(id) {
+    window.MS_PLATFORM?.emit('screen:changing',{screen:id});
     const target = document.getElementById(id);
     if(!target) {
         console.error('[Mundos Sombrios] Tela não encontrada:', id);
@@ -908,6 +928,8 @@ function showScreen(id) {
 }
 
 function selectGameMode(mode) {
+    window.MS_PLATFORM?.emit('mode:changing',{mode});
+    window.MS_PLATFORM?.setCache('selectedGameMode', mode);
     if (mode !== 'exodo' && mode !== 'ocultatun') {
         console.error('[Mundos Sombrios] Modo inválido selecionado:', mode);
         alert('Modo de jogo inválido. Escolha Êxodo ou Ocultatun.');
@@ -968,18 +990,15 @@ function updateSkillSelects() {
 }
 
 function exportCharacterJSON() {
-    if (!currentUser) return alert('Faça login antes de exportar uma ficha.');
     const sourceArray = document.getElementById('screen-vtt')?.classList.contains('active') ? tablePlayers : characters;
-    if (!Array.isArray(sourceArray) || editingIndex === null || !sourceArray[editingIndex]) return alert('Abra uma ficha antes de exportá-la.');
-    const char = sourceArray[editingIndex];
-    const payload = JSON.stringify(char, null, 2);
-    const blob = new Blob([payload], { type: 'application/json;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${String(char.name || 'Alma_Desconhecida').replace(/[^a-z0-9À-ÿ_-]+/gi,'_')}_Ficha.json`;
-    document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    const char = sourceArray[editingIndex] || sourceArray[0];
+    if (!char) {
+        window.MS_PLATFORM?.toast('Nenhuma alma selecionada para exportar.','error');
+        return false;
+    }
+    const exported = window.MS_PLATFORM?.exportCharacter(char,'json');
+    if (exported) window.MS_PLATFORM?.toast('Ficha exportada em JSON.','success');
+    return exported !== false;
 }
 
 function importCharacterJSON(evt) {
@@ -1344,41 +1363,10 @@ function recalculateStats() {
     
     panel.querySelectorAll('.res-val-input').forEach(inp => {
         const type = inp.getAttribute('data-type');
-        let val = 0;
-        
-        if(type === 'PV') {
-            let baseVig = (vig < 0) ? (vig * 10) + 10 : (vig * 10) + 10;
-            if(baseVig < 5) baseVig = 5;
-            
-            if(currentClass === "Carrasco Cinzento") val = (vig * 10) + 15;
-            else if(currentClass === "Esotérico") val = (vig * 10) + 12;
-            else val = baseVig;
-            if(val < 5) val = 5;
-        }
-        else if(type.includes("EP") || type.includes("Energia") || type.includes("EE")) {
-            if(currentClass === "Hermético") val = 0;
-            else if(currentClass === "Esotérico") val = (int * 5) + 15;
-            else if(currentNature.includes("Designado") || currentNature.includes("Envolto") || currentNature.includes("Taumatúrgico")) {
-                val = (Math.max(int, pre) * 5) + 15;
-            }
-            else val = 0;
-        }
-        else if(type.includes("EB") || type.includes("Estamina")) {
-            if(currentNature.includes("Carreira") || currentClass.includes("Mercador")) {
-                val = 6 + vig;
-            } else {
-                val = (vig * 3) + 5;
-            }
-        }
-        else if(type.includes("Ameaça")) {
-            val = vig + 3;
-        }
-        else if(type.includes("DS") || type.includes("ES") || type.includes("Síntese")) {
-            val = 8 + int + pre + 1;
-        }
-        else if(type.includes("CO") || type.includes("Decadência") || type.includes("Assimilação")) val = 0; 
-        else if(type.includes("LHL")) val = 75; 
-        else val = "-"; 
+        const val = window.MS_PLATFORM?.calculateBaseResource(type, {
+            vig, int, pre, currentClass, currentNature
+        }) ?? '-';
+        window.MS_PLATFORM?.emit('resource:calculated', { type, value: val, context: { vig, int, pre, currentClass, currentNature } });
         
         inp.placeholder = "Base: " + val;
         
@@ -1477,6 +1465,7 @@ function bootAuthScreen() {
 
 document.addEventListener('DOMContentLoaded', () => {
     bootAuthScreen();
+    document.getElementById('char-form')?.addEventListener('input', () => validateCurrentCharacterDraft(), { passive: true });
     const fsModal = document.getElementById('fs-modal');
     if(fsModal) {
         fsModal.addEventListener('wheel', (e) => {
@@ -1876,13 +1865,13 @@ function toggleVttWindow(id) {
     }
 }
 
-function leaveVTT() {
-    if(confirm("Deseja desconectar sua alma desta fenda?")) {
-        isDraftMode = false;
-        showScreen('screen-ancoragem');
-        tablePlayers = [];
-        if (window.MasterTools && typeof window.MasterTools.unmountShield === 'function') window.MasterTools.unmountShield();
-    }
+async function leaveVTT() {
+    if(!confirm("Deseja desconectar sua alma desta fenda?")) return;
+    try {
+        if(!isDraftMode && !isVttGM && currentTableData?.code && window.MS_SERVICES?.Games) await window.MS_SERVICES.Games.leave(currentTableData.code);
+    } catch(error) { window.MS_PLATFORM?.toast(error.message||'Não foi possível encerrar a conexão com a mesa.','error'); return; }
+    isDraftMode=false; showScreen('screen-ancoragem'); tablePlayers=[]; currentTableData=null;
+    if (window.MasterTools && typeof window.MasterTools.unmountShield === 'function') window.MasterTools.unmountShield();
 }
 
 function openManagePlayers() {
@@ -1905,22 +1894,16 @@ function openManagePlayers() {
     document.getElementById('manage-players-modal').style.display = 'flex';
 }
 
-function kickPlayer(index, type) {
+async function kickPlayer(index, type) {
     const p = tablePlayers[index];
-    if(confirm(`Deseja ${type === 'perm' ? 'BANIR' : 'EXPULSAR'} ${p.name}?`)) {
-        if(type === 'perm' && currentTableData && !p.isNPC) {
-            currentTableData.banned.push(p.id);
-            if (Array.isArray(allTablesDB)) {
-                const idx = allTablesDB.findIndex(t => t.id === currentTableData.id);
-                if (idx !== -1) {
-                    allTablesDB[idx] = { ...allTablesDB[idx], banned: currentTableData.banned || [] };
-                }
-            }
-        }
+    if(!p || p.isNPC || !currentTableData?.id) return;
+    if(!confirm(`Deseja ${type === 'perm' ? 'BANIR' : 'EXPULSAR'} ${p.name}?`)) return;
+    try {
+        await window.MS_SERVICES?.Games?.setMemberStatus(currentTableData.id, p.participantUserId || p.userId, type === 'perm' ? 'banned' : 'left');
         tablePlayers.splice(index, 1);
-        renderVttCards();
-        openManagePlayers();
-    }
+        renderVttCards(); openManagePlayers();
+        window.MS_PLATFORM?.toast(type === 'perm' ? 'Jogador banido da mesa.' : 'Jogador removido da mesa.','success');
+    } catch(error) { window.MS_PLATFORM?.toast(error.message||'Não foi possível alterar o acesso do jogador.','error'); }
 }
 
 // VTT THEMES
@@ -1939,11 +1922,15 @@ function previewVttTheme() {
     else if(theme === 'cosmic') { vttScreen.style.setProperty('--vtt-accent', '#9933ff'); vttScreen.style.setProperty('--vtt-bg', '#0a001a'); }
     else { vttScreen.style.setProperty('--vtt-accent', '#d4af37'); vttScreen.style.setProperty('--vtt-bg', '#050505'); }
 }
-function applyVttTheme() { 
+async function applyVttTheme() { 
     if(currentTableData) {
         currentTableData.theme = document.getElementById('vtt-theme-select').value;
         const idx = allTablesDB.findIndex(t => t.id === currentTableData.id);
         if(idx !== -1) allTablesDB[idx].theme = currentTableData.theme;
+        if(isVttGM && window.MS_SERVICES?.Games) {
+            try { await window.MS_SERVICES.Games.updateSettings(currentTableData.id, { ...(currentTableData.settings||{}), theme: currentTableData.theme, font: document.getElementById('vtt-font-select')?.value || "'Cinzel', serif" }); }
+            catch(error) { window.MS_PLATFORM?.toast(error.message||'Tema alterado apenas localmente; sincronização falhou.','error'); }
+        }
     }
     cancelVttTheme(); 
 }
@@ -2020,13 +2007,17 @@ function initVttGrid() {
         
         drawGridLines();
         
+        let moveTimer = null;
         vttCanvas.on('object:moving', function(e) {
-            if(!isVttGM && e.target.owner !== 'me') {
-                e.target.set({left: e.transform.original.left, top: e.transform.original.top});
-                vttCanvas.renderAll();
-            }
+            const target=e.target;
+            if(!isVttGM && target.owner !== 'me') { target.set({left:e.transform.original.left, top:e.transform.original.top}); vttCanvas.renderAll(); return; }
+            if(window.__msApplyingRemoteToken || !target?.msTokenId || !currentTableData?.id || !window.MS_SERVICES?.VTT) return;
+            clearTimeout(moveTimer);
+            moveTimer=setTimeout(()=>{
+                window.MS_SERVICES.VTT.event(currentTableData.id,'token_move',{tokenId:String(target.msTokenId),left:Number(target.left)||0,top:Number(target.top)||0,angle:Number(target.angle)||0,scaleX:Number(target.scaleX)||1,scaleY:Number(target.scaleY)||1});
+            },60);
         });
-        ['object:modified','object:added','object:removed'].forEach(evt=>vttCanvas.on(evt,()=>{ if(window.MasterTools?.saveGrid && !window.__msRestoringGrid) window.MasterTools.saveGrid(vttCanvas); }));
+        ['object:modified','object:added','object:removed'].forEach(evt=>vttCanvas.on(evt,()=>{ if(window.MasterTools?.saveGrid && !window.__msRestoringGrid && (isVttGM || evt!=='object:modified')) window.MasterTools.saveGrid(vttCanvas); }));
     } else {
         vttCanvas.setWidth(container.clientWidth);
         vttCanvas.setHeight(container.clientHeight);
@@ -2083,7 +2074,7 @@ function canvasAddNPCToken() {
 function createTokenGroup(mainObj, nameText, owner, color, borderObj = null) {
     const text = new fabric.Text(nameText, { fontSize: 12, fill: '#fff', originX: 'center', top: 30, backgroundColor: 'rgba(0,0,0,0.7)' });
     const objs = borderObj ? [mainObj, borderObj, text] : [mainObj, text];
-    const group = new fabric.Group(objs, { left: 100, top: 100, owner: owner, borderColor: color, cornerColor: color, transparentCorners: false });
+    const group = new fabric.Group(objs, { left: 100, top: 100, owner: owner, msTokenId: (crypto.randomUUID ? crypto.randomUUID() : 'tok-'+Date.now()+'-'+Math.random().toString(36).slice(2)), borderColor: color, cornerColor: color, transparentCorners: false });
     vttCanvas.add(group);
 }
 
@@ -2305,10 +2296,13 @@ function addChatMessage(sender, msg, color) {
     chat.scrollTop = chat.scrollHeight;
 }
 function toggleChatLock() {
+    if(!isVttGM) return;
     chatLocked = !chatLocked;
     const btn = document.getElementById('btn-lock-chat');
-    btn.innerText = chatLocked ? '🔏' : '🔓';
+    if(btn) btn.innerText = chatLocked ? '🔏' : '🔓';
     addChatMessage('Sistema', chatLocked ? 'O chat foi bloqueado pelo Mestre.' : 'O chat foi liberado.', '#ff3333');
+    if(window.MasterTools?.saveTableControlState) window.MasterTools.saveTableControlState({chatLocked});
+    if(currentTableData?.id && window.MS_SERVICES?.VTT) window.MS_SERVICES.VTT.event(currentTableData.id,'control',{chatLocked});
 }
 
 // VTT GALLERY
@@ -3507,7 +3501,7 @@ function relockTree(treeId, level, nature) {
 
 
 /* =====================================================================
-   OVERRIDES — REPOSITÓRIOS POR CONTA + MESA COMPARTILHADA POR CÓDIGO
+   COMPATIBILITY CACHE — state efêmero por conta + mesa; Supabase é a fonte de verdade
    ===================================================================== */
 
 const MS_REPO_KEY = 'mundosSombriosCharacterReposV3';
@@ -3672,42 +3666,38 @@ function msGetTableByCodeOrId(idOrCode) {
 }
 
 function msUpsertTable(table) {
+    window.MS_PLATFORM?.emit('table:cache-updated',{table:msClone(table)});
     const normalized = msNormalizeTable(msClone(table));
     const idx = (allTablesDB || []).findIndex(t => String(t.id) === String(normalized.id));
     if (idx >= 0) allTablesDB[idx] = normalized;
     else allTablesDB.push(normalized);
     msWriteJSON('mundosSombriosTables', allTablesDB);
-    if (window.MS_DB && window.MS_DB.ready && currentUser && String(normalized.ownerId) === String(currentUser.id)) {
-        window.MS_DB.saveTable(normalized).catch?.(()=>{});
-    }
     return normalized;
 }
 
-function msPersistCharacterToRepo(char, ownerId, charIdOverride = null) {
+async function msPersistCharacterToRepo(char, ownerId, charIdOverride = null) {
     if (!ownerId) ownerId = currentUser ? currentUser.id : null;
-    if (!ownerId) return;
-
-    const store = msEnsureRepoStore();
-    const repo = store[ownerId] || { characters: [], joinedTables: [], ownedTables: [] };
-    const charId = charIdOverride !== null && charIdOverride !== undefined ? charIdOverride : char.id;
-    const targetIdx = Array.isArray(repo.characters)
-        ? repo.characters.findIndex(c => String(c.id) === String(charId))
-        : -1;
+    if (!ownerId) throw new Error('Proprietário da ficha não identificado.');
 
     const saved = msClone(char);
     saved.ownerId = ownerId;
+    const charId = charIdOverride !== null && charIdOverride !== undefined ? charIdOverride : char.id;
     if (charId !== undefined && charId !== null) saved.id = charId;
 
-    if (!Array.isArray(repo.characters)) repo.characters = [];
-    if (targetIdx >= 0) repo.characters[targetIdx] = saved;
-    else repo.characters.push(saved);
-
+    // Cache efêmero para a UI; a fonte de verdade é o Supabase.
+    const store = msEnsureRepoStore();
+    const repo = store[ownerId] || { characters: [], joinedTables: [], ownedTables: [] };
+    const idx = (repo.characters || []).findIndex(c => String(c.id) === String(saved.id));
+    if (idx >= 0) repo.characters[idx] = saved; else repo.characters.push(saved);
     store[ownerId] = repo;
     msWriteJSON(MS_REPO_KEY, store);
-    if (window.MS_DB && window.MS_DB.ready) {
-        window.MS_DB.saveCharacter(saved);
-    }
     msRefreshLegacyCharacterUnion();
+
+    if (!window.MS_DB?.ready) throw new Error('Supabase indisponível para persistir a ficha.');
+    const result = await window.MS_DB.saveCharacter(saved);
+    if (!result) throw new Error('O Supabase não confirmou o salvamento da ficha.');
+    window.MS_PLATFORM?.emit('character:saved',{character: saved, remote: result});
+    return result;
 }
 
 function msPersistJoinedTableRepo(userId, tableCode, tableName, tableId) {
@@ -3837,33 +3827,44 @@ function confirmCreateTable() {
 }
 
 async function saveDraftTable() {
-    if(!currentUser)return;
-    const code=generateRoomCode();
-    const draft={id:Date.now().toString(),name:document.getElementById('vtt-table-name').innerText,code,theme:currentVttTheme,gameMode:currentDraftGameMode,ownerId:currentUser.id,banned:[],participants:[],settings:{}};
+    if(!currentUser || !window.MS_SERVICES?.Games) return false;
+    const name = document.getElementById('vtt-table-name')?.innerText?.trim() || 'Nova Fenda';
+    const draft={id:crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),name,code:generateRoomCode(),theme:currentVttTheme,gameMode:currentDraftGameMode,ownerId:currentUser.id,banned:[],participants:[],settings:{}};
     try{
-        const remoteResult=await window.MS_DB.createTableRemote(draft);
-        if(remoteResult?.error) throw remoteResult.error;
-        const remote=remoteResult?.data||remoteResult;
-        const newTable=remote?.id?msNormalizeTable({id:remote.id,code:remote.code,name:remote.name,theme:remote.theme,gameMode:remote.game_mode,ownerId:remote.owner_id,participants:remote.participants||[],banned:remote.banned||[],settings:remote.settings||{}}):draft;
+        const result=await window.MS_SERVICES.Games.create(draft);
+        const remote=result?.data||result;
+        if(!remote || remote.id===undefined) throw new Error('O Supabase não devolveu a mesa criada.');
+        const newTable=msNormalizeTable({id:remote.id,code:remote.code,name:remote.name,theme:remote.theme,gameMode:remote.game_mode,ownerId:remote.owner_id,participants:remote.participants||[],banned:remote.banned||[],settings:remote.settings||{},createdAt:remote.created_at,updatedAt:remote.updated_at});
         msUpsertTable(newTable); myTables=(allTablesDB||[]).filter(t=>String(t.ownerId)===String(currentUser.id)).map(msClone); isDraftMode=false; currentTableData=msClone(newTable);
-        document.getElementById('btn-save-table').style.display='none'; alert(`Fenda Imortalizada com sucesso!\nCódigo de Acesso para os Jogadores: ${newTable.code}`); renderAncoragem();
-    }catch(error){console.error('[Mundos Sombrios] Criação de mesa online:',error);alert(error.message||'Não foi possível criar a Fenda online.');}
+        document.getElementById('btn-save-table').style.display='none';
+        window.MS_PLATFORM?.toast(`Mesa criada. Código: ${newTable.code}`,'success');
+        renderAncoragem();
+        return true;
+    }catch(error){window.MS_PLATFORM?.toast(error.message||'Não foi possível criar a mesa online.','error');return false;}
 }
 
 async function deleteTable(id) {
-    if(!confirm('Tem certeza que deseja apagar essa Fenda para sempre? O mundo será destruído.'))return;
+    if(!currentUser || !window.MS_SERVICES?.Games) return false;
+    if(!confirm('Tem certeza que deseja apagar essa Fenda para sempre? O mundo será destruído.')) return false;
     try{
-        const {error}=await window.MS_DB.client.from('tables').delete().eq('id',String(id)); if(error)throw error;
-        allTablesDB=(allTablesDB||[]).filter(t=>String(t.id)!==String(id)); msWriteJSON('mundosSombriosTables',allTablesDB); renderAncoragem();
-    }catch(error){console.error('[Mundos Sombrios] Exclusão de mesa:',error);alert(error.message||'Não foi possível excluir a Fenda.');}
+        await window.MS_SERVICES.Games.delete(id);
+        allTablesDB=(allTablesDB||[]).filter(t=>String(t.id)!==String(id));
+        if(String(currentTableData?.id)===String(id)) currentTableData=null;
+        renderAncoragem();
+        window.MS_PLATFORM?.toast('Mesa excluída com sucesso.','success');
+        return true;
+    }catch(error){window.MS_PLATFORM?.toast(error.message||'Não foi possível excluir a Fenda.','error');return false;}
 }
 
-function leaveJoinedTable(code) {
-    if (confirm("Deseja cortar sua conexão permanente com esta Fenda?")) {
-        msRemoveJoinedTableRepo(currentUser.id, code);
-        joinedTables = joinedTables.filter(t => String(t.code).toUpperCase() !== String(code).toUpperCase());
+async function leaveJoinedTable(code) {
+    if (!currentUser || !window.MS_SERVICES?.Games) return false;
+    if (!confirm('Deseja cortar sua conexão permanente com esta Fenda?')) return false;
+    try {
+        await window.MS_SERVICES.Games.leave(code);
+        await msHydrateRemoteGameState();
         renderAncoragem();
-    }
+        return true;
+    } catch (error) { return false; }
 }
 
 function openJoinTableModal() {
@@ -3879,95 +3880,76 @@ function openJoinTableModal() {
 }
 
 async function confirmJoinTable() {
-    const code=document.getElementById('join-code-input').value.trim().toUpperCase(); const raw=document.getElementById('join-char-select-vtt').value; const charIndex=raw===''?null:Number(raw);
-    if(!code||charIndex===null||Number.isNaN(charIndex)){alert('Preencha o código e selecione uma alma.');return;}
-    const selectedChar=characters[charIndex]?msClone(characters[charIndex]):null;
-    if(!window.MS_DB?.ready){alert('A mesa online não está disponível.');return;}
+    const code=document.getElementById('join-code-input')?.value.trim().toUpperCase();
+    const raw=document.getElementById('join-char-select-vtt')?.value;
+    const charIndex=raw===''?null:Number(raw);
+    if(!code||charIndex===null||Number.isNaN(charIndex)||!characters[charIndex]){window.MS_PLATFORM?.toast('Preencha o código e selecione uma alma.','error');return false;}
+    if(!window.MS_SERVICES?.Games){window.MS_PLATFORM?.toast('A mesa online não está disponível.','error');return false;}
     try{
-        const result=await window.MS_DB.joinTableRemote(code,selectedChar?.id||null); if(result.error)throw result.error;
-        document.getElementById('join-modal').style.display='none'; myVttCharIndex=charIndex;
-        const remote=result.data; const table=remote?.id?msNormalizeTable({id:remote.id,code:remote.code,name:remote.name,theme:remote.theme,gameMode:remote.game_mode,ownerId:remote.owner_id,participants:remote.participants||[],banned:remote.banned||[],settings:remote.settings||{}}):msGetTableByCodeOrId(code);
-        if(!table){alert('Código de mesa inválido.');return;}
-        msUpsertTable(table);
-        if(String(table.ownerId)===String(currentUser.id)){alert('Você é o Mestre desta mesa! Entrando como Mestre.');enterVTT(table.id,true);return;}
-        msPersistJoinedTableRepo(currentUser.id,table.code,table.name,table.id);
-        joinedTables=(allTablesDB||[]).filter(t=>(t.participants||[]).some(p=>String(p.userId)===String(currentUser.id))&&String(t.ownerId)!==String(currentUser.id)).map(msClone);
-        enterVTT(table.id,false);
-    }catch(error){console.error('[Mundos Sombrios] Entrada na mesa:',error);alert(error.message||'Não foi possível entrar nessa Fenda.');}
+        const selectedChar=msClone(characters[charIndex]);
+        const result=await window.MS_SERVICES.Games.join(code,selectedChar.id);
+        const remote=result?.data;
+        if(!remote?.id) throw new Error('Mesa ou convite inválido.');
+        const table=msNormalizeTable({id:remote.id,code:remote.code,name:remote.name,theme:remote.theme,gameMode:remote.game_mode,ownerId:remote.owner_id,participants:remote.participants||[],banned:remote.banned||[],settings:remote.settings||{},createdAt:remote.created_at,updatedAt:remote.updated_at});
+        myVttCharIndex=charIndex; msUpsertTable(table); document.getElementById('join-modal').style.display='none';
+        await msHydrateRemoteGameState();
+        window.MS_PLATFORM?.toast('Você atravessou o véu e entrou na mesa.','success');
+        enterVTT(table.id,String(table.ownerId)===String(currentUser.id));
+        return true;
+    }catch(error){window.MS_PLATFORM?.toast(error.message||'Não foi possível entrar nessa Fenda.','error');return false;}
 }
 
-function enterVTT(tableIdOrCode, asGM, draftName = null) {
+async function enterVTT(tableIdOrCode, asGM, draftName = null) {
     isVttGM = !!asGM;
     document.querySelectorAll('.gm-only-btn').forEach(el => el.style.display = asGM ? 'flex' : 'none');
-
-    tablePlayers = [];
-    currentTableData = null;
-    diceHistory = [];
-    renderDiceHistory();
+    tablePlayers = []; currentTableData = null; diceHistory = []; renderDiceHistory();
 
     if (tableIdOrCode === 'draft') {
-        document.getElementById('vtt-table-name').innerText = draftName || "Forjando Nova Fenda...";
+        document.getElementById('vtt-table-name').innerText = draftName || 'Forjando Nova Fenda...';
         document.getElementById('btn-save-table').style.display = 'block';
     } else {
         document.getElementById('btn-save-table').style.display = 'none';
         const table = msGetTableByCodeOrId(tableIdOrCode);
         currentTableData = table ? msClone(table) : null;
-        document.getElementById('vtt-table-name').innerText = currentTableData ? currentTableData.name : ("Sessão Mestra");
-        if (currentTableData && currentTableData.theme) {
-            document.getElementById('vtt-theme-select').value = currentTableData.theme;
-            previewVttTheme();
-        }
+        if (!currentTableData) { window.MS_PLATFORM?.toast('Mesa não encontrada nesta sessão. Atualize suas mesas.','error'); return false; }
+        document.getElementById('vtt-table-name').innerText = currentTableData.name;
+        if (currentTableData.theme) { document.getElementById('vtt-theme-select').value = currentTableData.theme; previewVttTheme(); }
 
-        const participants = Array.isArray(currentTableData?.participants) ? currentTableData.participants : [];
-        const hydrated = participants
-            .map(p => {
-                const resolved = msFindCharacterByRef(p.ownerId, p.charId);
-                if (!resolved) return null;
-                resolved.isMe = String(p.userId) === String(currentUser.id);
-                resolved.isNPC = !!resolved.isNPC;
-                resolved.ownerId = p.ownerId;
-                resolved.sourceOwnerId = p.ownerId;
-                resolved.sourceCharId = p.charId;
-                resolved.participantUserId = p.userId;
-                return resolved;
-            })
-            .filter(Boolean);
-
-        if (asGM && hydrated.length === 0 && currentUser && Array.isArray(characters) && characters.length) {
-            // fallback visual: o mestre vê pelo menos as próprias fichas, sem interferir no sistema.
-            characters.forEach(c => {
-                const mine = msClone(c);
-                mine.isMe = true;
-                mine.ownerId = currentUser.id;
-                mine.sourceOwnerId = currentUser.id;
-                mine.sourceCharId = mine.id;
-                hydrated.push(mine);
-            });
-        }
-
-        if (!asGM && myVttCharIndex !== -1 && characters[myVttCharIndex]) {
-            const selected = msClone(characters[myVttCharIndex]);
-            const already = hydrated.some(c => String(c.id) === String(selected.id));
-            if (!already) {
-                selected.isMe = true;
-                selected.ownerId = currentUser.id;
-                selected.sourceOwnerId = currentUser.id;
-                selected.sourceCharId = selected.id;
-                hydrated.unshift(selected);
+        // O banco retorna apenas personagens permitidos pela mesa. Nunca buscamos fichas privadas de terceiros diretamente.
+        try {
+            if (window.MS_SERVICES?.Characters && window.MS_SERVICES?.Games && window.currentUser) {
+                const result = await window.MS_SERVICES.Games.characters(currentTableData.id);
+                const remoteCharacters = result?.data || [];
+                if (remoteCharacters.length) {
+                    tablePlayers = remoteCharacters.map(c => {
+                        const payload = c.payload && typeof c.payload === 'object' ? msClone(c.payload) : {};
+                        payload.id = c.id; payload.ownerId = c.owner_id; payload.userId = c.user_id;
+                        payload.name = payload.name || c.name; payload.mode = payload.mode || c.mode; payload.nature = payload.nature || c.nature; payload.className = payload.className || c.class_name;
+                        payload.updatedAt = c.updated_at;
+                        payload.isMe = String(c.user_id) === String(currentUser.id);
+                        payload.sourceOwnerId = c.owner_id; payload.sourceCharId = c.id; payload.participantUserId = c.user_id;
+                        return payload;
+                    });
+                }
             }
-        }
+        } catch (error) { window.MS_PLATFORM?.toast('A mesa abriu, mas as fichas participantes não puderam ser sincronizadas.','error'); }
 
-        tablePlayers = hydrated;
+        if (!asGM && !tablePlayers.some(c=>c.isMe) && myVttCharIndex !== -1 && characters[myVttCharIndex]) {
+            const selected = msClone(characters[myVttCharIndex]); selected.isMe=true; selected.sourceOwnerId=currentUser.id; selected.sourceCharId=selected.id; selected.participantUserId=currentUser.id; tablePlayers.unshift(selected);
+        }
+        if (asGM && !tablePlayers.length && Array.isArray(characters)) {
+            characters.forEach(c => { const mine=msClone(c); mine.isMe=true; mine.sourceOwnerId=currentUser.id; mine.sourceCharId=mine.id; mine.participantUserId=currentUser.id; tablePlayers.push(mine); });
+        }
     }
 
-    if (window.MasterTools && typeof window.MasterTools.onVttEnter === 'function') window.MasterTools.onVttEnter(currentTableData, isVttGM);
+    if (window.MasterTools && typeof window.MasterTools.onVttEnter === 'function') await window.MasterTools.onVttEnter(currentTableData, isVttGM);
     showScreen('screen-vtt');
     if (window.MasterTools && typeof window.MasterTools.mountShield === 'function') window.MasterTools.mountShield(isVttGM, currentTableData);
-
     document.querySelectorAll('.vtt-floating-window').forEach(el => el.style.display = 'none');
-    toggleVttWindow('vtt-chat-box');
-    renderVttCards();
+    toggleVttWindow('vtt-chat-box'); renderVttCards();
     if (window.MasterTools && typeof window.MasterTools.restoreVttState === 'function') window.MasterTools.restoreVttState();
+    window.MS_PLATFORM?.emit('vtt:entered',{tableId:currentTableData?.id||null,asGM:isVttGM});
+    return true;
 }
 
 function toggleEditUI() {
@@ -4063,41 +4045,96 @@ function buildCharacterPayloadFromBuilder() {
     return char;
 }
 
-function saveCharacter(e) {
-    e.preventDefault();
-    if (!isEditMode || !currentUser) return;
+async function saveCharacter(e) {
+    if (e?.preventDefault) e.preventDefault();
+    if (!isEditMode || !currentUser) return false;
 
     const builder = document.getElementById('screen-builder');
     const payload = buildCharacterPayloadFromBuilder();
+    const validation = window.MS_PLATFORM?.validateDraft(payload) || {valid:true,errors:[],warnings:[]};
+    renderCharacterValidation(validation);
+    if (!validation.valid) {
+        window.MS_PLATFORM?.toast(validation.errors[0] || 'Revise a ficha antes de salvar.','error');
+        return false;
+    }
 
-    // Edição do mestre dentro da mesa: persiste na ficha real do dono.
-    if (builder.classList.contains('overlay') && isVttGM && editingIndex !== null && tablePlayers[editingIndex]) {
-        const target = tablePlayers[editingIndex];
-        const ownerId = target.sourceOwnerId || target.ownerId || currentUser.id;
-        const charId = target.sourceCharId || target.id || payload.id;
-        payload.id = charId;
-        payload.ownerId = ownerId;
-        payload.sourceOwnerId = ownerId;
-        payload.sourceCharId = charId;
-        tablePlayers[editingIndex] = { ...msClone(target), ...msClone(payload) };
-        msPersistCharacterToRepo(payload, ownerId, charId);
-        renderVttCards();
+    window.MS_PLATFORM?.setStatus('builder','loading');
+    try {
+        // Edição do Mestre dentro da mesa: persiste a ficha real do proprietário.
+        if (builder.classList.contains('overlay') && isVttGM && editingIndex !== null && tablePlayers[editingIndex]) {
+            const target = tablePlayers[editingIndex];
+            const ownerId = target.sourceOwnerId || target.ownerId || currentUser.id;
+            const charId = target.sourceCharId || target.id || payload.id;
+            payload.id = charId; payload.ownerId = ownerId; payload.sourceOwnerId = ownerId; payload.sourceCharId = charId;
+            tablePlayers[editingIndex] = { ...msClone(target), ...msClone(payload) };
+            const tableId = currentTableData?.id || currentTableData?.tableId || target.tableId;
+            if (!tableId || !window.MS_DB?.ready || typeof window.MS_DB.updateCharacterAsGM !== 'function') {
+                throw new Error('A edição de ficha pelo Mestre exige uma mesa online sincronizada.');
+            }
+            await window.MS_DB.updateCharacterAsGM(tableId, payload);
+            msPersistCharacterToRepo(payload, ownerId, charId).catch(error => console.warn('[Mundos Sombrios] Cache da ficha GM:', error));
+            renderVttCards();
+            closeBuilder();
+            window.MS_PLATFORM?.setStatus('builder','success');
+            window.MS_PLATFORM?.toast('Ficha do jogador sincronizada.','success');
+            return true;
+        }
+
+        if (editingIndex !== null) characters[editingIndex] = msClone(payload);
+        else characters.push(msClone(payload));
+        saveGlobalCharacters();
+        await window.MS_PLATFORM?.withPersistence(
+            () => msPersistCharacterToRepo(payload, currentUser.id, payload.id),
+            { entity: 'character', operation: editingIndex !== null ? 'update' : 'create', id: payload.id }
+        );
+        window.MS_PLATFORM?.setStatus('builder','success');
+        window.MS_PLATFORM?.toast(editingIndex !== null ? 'Edição sincronizada com sucesso.' : 'Alma forjada e sincronizada.','success');
+        window.MS_PLATFORM?.emit('character:changed',{character:msClone(payload), mode: editingIndex !== null ? 'edit' : 'create'});
         closeBuilder();
-        return;
+        return true;
+    } catch (error) {
+        window.MS_PLATFORM?.setStatus('builder','error',error);
+        window.MS_PLATFORM?.toast(error.message || 'Não foi possível salvar a ficha.','error');
+        console.error('[Mundos Sombrios] Falha ao salvar ficha:', error);
+        return false;
     }
-
-    if (editingIndex !== null) {
-        characters[editingIndex] = msClone(payload);
-    } else {
-        characters.push(msClone(payload));
-    }
-
-    saveGlobalCharacters();
-    if (window.MS_DB && window.MS_DB.ready) {
-        window.MS_DB.saveCharacter(msClone(payload));
-    }
-    closeBuilder();
 }
+
+function renderCharacterValidation(result) {
+    const panel=document.getElementById('character-validation-panel');
+    if(!panel) return;
+    const errors=Array.isArray(result?.errors)?result.errors:[];
+    const warnings=Array.isArray(result?.warnings)?result.warnings:[];
+    panel.hidden = !(errors.length || warnings.length);
+    panel.dataset.valid = result?.valid ? 'true' : 'false';
+    const title=result?.valid ? (warnings.length ? 'Ficha válida com observações' : 'Ficha válida') : 'Ficha com problemas';
+    panel.innerHTML = `<strong>${title}</strong>${errors.length?`<ul>${errors.map(x=>`<li>Erro: ${escHtml(x)}</li>`).join('')}</ul>`:''}${warnings.length?`<ul>${warnings.map(x=>`<li>Atenção: ${escHtml(x)}</li>`).join('')}</ul>`:''}`;
+}
+
+function validateCurrentCharacterDraft() {
+    try { const payload=buildCharacterPayloadFromBuilder(); const result=window.MS_PLATFORM?.validateDraft(payload) || {valid:true,errors:[],warnings:[]}; renderCharacterValidation(result); return result; } catch(error) { const result={valid:false,errors:[error.message||'Falha ao validar a ficha.'],warnings:[]}; renderCharacterValidation(result); return result; }
+}
+
+function openCharacterPreview() {
+    const modal=document.getElementById('character-preview-modal'); const target=document.getElementById('character-preview-content');
+    if(!modal||!target) return;
+    try {
+        const char=buildCharacterPayloadFromBuilder();
+        const result=window.MS_PLATFORM?.validateDraft(char); renderCharacterValidation(result);
+        const mode=String(char.mode||'exodo')==='ocultatun'?'Ocultatun · Ecos':'Êxodo · Assimilação';
+        const stats=char.stats||{};
+        const resources=window.MS_PLATFORM?.normalizeResources(char.resources).slice(0,8) || [];
+        target.innerHTML=`<article class="character-preview-card" data-mode="${escHtml(char.mode||'exodo')}">
+          <header><div><span class="preview-kicker">${escHtml(mode)}</span><h4>${escHtml(char.name||'Alma sem nome')}</h4><p>${escHtml(char.nature||'Natureza não definida')} · ${escHtml(char.className||'Classe não definida')}</p></div>${char.avatar?`<img src="${char.avatar}" alt="Retrato de ${escHtml(char.name||'personagem')}">`:'<div class="preview-no-avatar" aria-hidden="true">◈</div>'}</header>
+          <section class="preview-stats"><span>FOR <b>${escHtml(stats.for??0)}</b></span><span>VIG <b>${escHtml(stats.vig??0)}</b></span><span>AGI <b>${escHtml(stats.agi??0)}</b></span><span>INT <b>${escHtml(stats.int??0)}</b></span><span>PRN <b>${escHtml(stats.prn??0)}</b></span><span>PRE <b>${escHtml(stats.pre??0)}</b></span></section>
+          <section class="preview-resources">${resources.map(r=>`<div class="ms-resource-card"><div class="ms-resource-label"><span>${escHtml(r.label||r.key)}</span><b>${escHtml(r.value)}${r.max!=null?`/${escHtml(r.max)}`:''}</b></div><div class="ms-resource-bar"><span style="width:${r.max>0?Math.max(0,Math.min(100,(r.value/r.max)*100)):100}%"></span></div></div>`).join('')}</section>
+        </article>`;
+        modal.style.display='flex'; modal.setAttribute('aria-hidden','false');
+        window.MS_PLATFORM?.emit('character:previewed',{character:char});
+    } catch(error) { window.MS_PLATFORM?.toast(error.message||'Não foi possível montar a pré-visualização.','error'); }
+}
+
+function closeCharacterPreview() { const modal=document.getElementById('character-preview-modal'); if(modal){modal.style.display='none'; modal.setAttribute('aria-hidden','true');} }
 
 function syncVttCharacterToOwner(char) {
     if (!char || char.isNPC) return;

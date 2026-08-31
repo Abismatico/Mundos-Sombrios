@@ -29,6 +29,8 @@
         }
     });
 
+    const activeRealtimeChannels = new Map();
+
     const tableNames = {
         profiles: 'profiles',
         tables: 'tables',
@@ -286,10 +288,16 @@
         },
 
         async publishTableEvent(tableId, eventType, payload = {}) {
+            const id = String(tableId);
+            const actorId = String(window.currentUser?.id || '');
             const { data, error } = await supabase.from(tableNames.table_events).insert({
-                table_id: String(tableId), event_type: String(eventType), payload: payload || {}
+                table_id: id, event_type: String(eventType), payload: payload || {}, actor_id: actorId || null
             }).select().maybeSingle();
-            return { data, error };
+            if (error) return { data: null, error };
+            try { await api.broadcastTableEvent(id, eventType, payload, { id: data?.id }); } catch (broadcastError) {
+                console.warn('[Mundos Sombrios] Broadcast indisponível; evento persistido:', broadcastError);
+            }
+            return { data, error: null };
         },
 
         async fetchTableEvents(tableId, limit = 200) {
@@ -297,17 +305,64 @@
             return { data: Array.isArray(data) ? data : [], error };
         },
 
-        subscribeTable(tableId, handler) {
+        async subscribeTable(tableId, handlers = {}) {
             const id = String(tableId);
-            const channel = supabase.channel(`table:${id}`)
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: tableNames.table_events, filter: `table_id=eq.${id}` }, payload => {
-                    try { handler(payload?.new || null); } catch (e) { console.warn('[Mundos Sombrios] handler Realtime:', e); }
-                })
-                .on('postgres_changes', { event: '*', schema: 'public', table: tableNames.table_state, filter: `table_id=eq.${id}` }, payload => {
-                    try { handler({ event_type: 'table_state', payload: payload?.new || {}, actor_id: null }); } catch (e) { console.warn('[Mundos Sombrios] handler Realtime state:', e); }
-                })
-                .subscribe();
-            return () => { try { supabase.removeChannel(channel); } catch (_) {} };
+            const onEvent = typeof handlers === 'function' ? handlers : handlers?.event;
+            const onPresence = typeof handlers?.presence === 'function' ? handlers.presence : null;
+            if (!id) return () => {};
+            if (activeRealtimeChannels.has(id)) {
+                const existing = activeRealtimeChannels.get(id);
+                existing.handlers.add({ onEvent, onPresence });
+                onPresence?.(existing.channel.presenceState());
+                return () => existing.handlers.delete([...existing.handlers].find(x => x.onEvent === onEvent && x.onPresence === onPresence));
+            }
+            try {
+                const { data: sessionData } = await supabase.auth.getSession();
+                if (sessionData?.session?.access_token && typeof supabase.realtime.setAuth === 'function') await supabase.realtime.setAuth(sessionData.session.access_token);
+            } catch (_) {}
+            const channel = supabase.channel(`ms:table:${id}`, { config: { private: true, broadcast: { ack: true, self: false }, presence: { key: String(window.currentUser?.id || 'anonymous') } } });
+            const handlersSet = new Set([{ onEvent, onPresence }]);
+            const notify = (fn, payload) => handlersSet.forEach(h => { try { h[fn]?.(payload); } catch (e) { console.warn('[Mundos Sombrios] Realtime handler:', e); } });
+            channel.on('broadcast', { event: 'table:event' }, msg => notify('onEvent', msg?.payload || msg));
+            channel.on('broadcast', { event: 'table:refresh' }, msg => notify('onEvent', { event_type: 'table_refresh', payload: msg?.payload || {} }));
+            channel.on('presence', { event: 'sync' }, () => notify('onPresence', channel.presenceState()));
+            channel.on('presence', { event: 'join' }, () => notify('onPresence', channel.presenceState()));
+            channel.on('presence', { event: 'leave' }, () => notify('onPresence', channel.presenceState()));
+            const status = await new Promise(resolve => {
+                let done = false;
+                channel.subscribe(st => { if (!done && ['SUBSCRIBED','CHANNEL_ERROR','TIMED_OUT'].includes(st)) { done = true; resolve(st); } });
+                setTimeout(() => { if (!done) { done = true; resolve('TIMED_OUT'); } }, 12000);
+            });
+            if (status !== 'SUBSCRIBED') { try { await supabase.removeChannel(channel); } catch (_) {} throw new Error(`Não foi possível conectar à mesa em tempo real (${status}).`); }
+            activeRealtimeChannels.set(id, { channel, handlers: handlersSet });
+            try { await channel.track({ user_id: String(window.currentUser?.id || ''), username: String(window.currentUser?.username || 'Jogador'), role: String(window.currentUser?.role || 'jogador'), online_at: new Date().toISOString() }); } catch (_) {}
+            return () => {
+                const current = activeRealtimeChannels.get(id);
+                const first = current?.handlers;
+                const target = [...(first || [])].find(x => x.onEvent === onEvent && x.onPresence === onPresence);
+                if (target) first.delete(target);
+                if (first && first.size === 0) { try { supabase.removeChannel(channel); } catch (_) {} activeRealtimeChannels.delete(id); }
+            };
+        },
+
+
+        async broadcastTableEvent(tableId, eventType, payload, options = {}) {
+            const id = String(tableId);
+            if (!id) throw new Error('Mesa inválida.');
+            const existing = activeRealtimeChannels.get(id);
+            if (existing) {
+                return existing.channel.send({ type: 'broadcast', event: 'table:event', payload: { id: options.id || null, table_id: id, event_type: String(eventType), payload: payload || {}, actor_id: String(window.currentUser?.id || ''), created_at: new Date().toISOString() } });
+            }
+            try {
+                const { data: sessionData } = await supabase.auth.getSession();
+                if (sessionData?.session?.access_token && typeof supabase.realtime.setAuth === 'function') await supabase.realtime.setAuth(sessionData.session.access_token);
+            } catch (_) {}
+            const channel = supabase.channel(`ms:table:${id}`, { config: { private: true, broadcast: { ack: true, self: false } } });
+            try {
+                const status = await new Promise(resolve => { let done=false; channel.subscribe(st=>{ if(!done&&['SUBSCRIBED','CHANNEL_ERROR','TIMED_OUT'].includes(st)){done=true;resolve(st);} }); setTimeout(()=>{if(!done){done=true;resolve('TIMED_OUT');}},12000); });
+                if (status !== 'SUBSCRIBED') throw new Error(`Canal da mesa indisponível (${status}).`);
+                return await channel.send({ type: 'broadcast', event: 'table:event', payload: { id: options.id || null, table_id: id, event_type: String(eventType), payload: payload || {}, actor_id: String(window.currentUser?.id || ''), created_at: new Date().toISOString() } });
+            } finally { try { await supabase.removeChannel(channel); } catch (_) {} }
         },
 
         async saveTableState(tableId, state) {
