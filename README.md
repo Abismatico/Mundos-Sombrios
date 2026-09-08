@@ -47,7 +47,7 @@ Consulte `ARCHITECTURE/CURRENT.md` antes de criar uma nova funcionalidade.
 ## Observações
 
 - O projeto usa persistência online do Supabase como fonte única de verdade.
-- Não existe persistência de credenciais, personagens ou conteúdo por `localStorage` no runtime atual; caches de compatibilidade são apenas memória de sessão.
+- Não existe persistência de credenciais, personagens ou conteúdo de jogo por `localStorage`. A V2.1 usa `localStorage` apenas para preferências locais de interface (nível de imersão, áudio opcional e modo guiado/rápido); esses dados não são fonte de verdade do jogo.
 - Para cada tipo de conteúdo que deve ser administrado online (postagens, notícias, regras, materiais), o ideal é criar uma tabela no Supabase e gravar por API/JS com `upsert` ou `insert`.
 
 ## Publicação do banco
@@ -55,3 +55,13 @@ Consulte `ARCHITECTURE/CURRENT.md` antes de criar uma nova funcionalidade.
 Para uma instalação nova, execute `supabase-production.sql` no SQL Editor do Supabase. Ele reúne o schema base e a migração online, incluindo Auth, RLS, RPC, Realtime, convites, histórico de fichas, campanhas e sessões.
 
 Para instalações existentes, execute apenas `supabase-online-migration.sql` depois de revisar o estado atual das tabelas. Nunca desabilite RLS em produção.
+
+
+## Experiência V2.1
+
+A camada `js/immersive-experience.js` é exclusivamente de UX/direção de arte. Ela observa o estado canônico do construtor e acrescenta jornada guiada, Retrato Vivo, modos Criar/Evoluir/Jogar, transparência de fórmulas, feedback visual de consequências, favoritos de poderes e preferências de intensidade. Regras continuam em `ms-platform.js` e nos módulos especializados; a camada imersiva não deve duplicar cálculos canônicos.
+
+
+## Portal Oficial V2.2
+
+A home pública usa `css/portal/portal-editorial-v2.2.css` como camada final de apresentação. O Portal V2.2 reduz a extensão vertical, limita comprimentos de leitura, omite painéis editoriais vazios na página inicial, mantém um índice de acesso rápido e preserva a navegação principal nas subpáginas. Conteúdo publicado continua vindo de `PortalContent`/Supabase; o redesign não cria uma segunda fonte editorial.

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mundos Sombrios — Portal Oficial</title>
+    <link rel="icon" href="assets/archetypes/natures/exo-nexo.svg" type="image/svg+xml">
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Roboto:wght@300;400;700&family=MedievalSharp&family=Orbitron&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -21,6 +22,8 @@
     <link rel="stylesheet" href="css/portal/portal-visual-v0.62.css">
     <link rel="stylesheet" href="css/builder/builder-modern-v0.62.css">
     <link rel="stylesheet" href="css/builder/builder-art-direction-v0.63.css">
+    <link rel="stylesheet" href="css/immersive-experience.css">
+    <link rel="stylesheet" href="css/portal/portal-editorial-v2.2.css">
 
 </head>
 <body class="ms-shell-booting">
@@ -62,6 +65,7 @@
                     <input type="password" id="login-pass" placeholder="Sua chave secreta...">
                 </div>
                 <button class="souls-btn" style="width:100%; margin: 20px 0 10px 0;" onclick="doLogin()">ATRAVESSAR PORTAL</button>
+                <button class="souls-btn small-btn" style="border:none; color:#d4af37; width:100%;" onclick="resendConfirmation()">Reenviar confirmação do e-mail</button>
                 
                 <div style="display:flex; justify-content:space-between; margin-top:15px;">
                     <button class="souls-btn small-btn" style="border:none; color:#00ffcc;" onclick="openRegister()">Despertar Conta</button>
@@ -223,6 +227,7 @@
                     <button class="souls-btn small-btn" id="btn-toggle-edit" onclick="toggleEditMode()">SALVAR EDIÇÃO</button>
                     <button class="souls-btn small-btn" onclick="exportCharacterJSON()" style="border-color:#00ffcc; color:#00ffcc;">EXPORTAR JSON</button>
                     <button class="souls-btn small-btn" type="button" onclick="openCharacterPreview()">PRÉ-VISUALIZAR</button>
+                    <button class="souls-btn small-btn" type="button" onclick="openCharacterHistory()">HISTÓRICO</button>
                     <button class="souls-btn small-btn" onclick="downloadPDF()">BAIXAR PDF</button>
                 </div>
             </div>
@@ -232,6 +237,7 @@
                     <button class="tab-btn active" onclick="openTab('tab-identity')">Identidade & Natureza</button>
                     <button class="tab-btn" id="btn-tab-stats" onclick="openTab('tab-stats')">Atributos & Recursos</button>
                     <button class="tab-btn" id="btn-tab-skills" onclick="openTab('tab-skills')">Perícias & Talentos</button>
+                    <button class="tab-btn" id="btn-tab-evolution" onclick="openTab('tab-evolution')">Evolução Gradual</button>
                     <button class="tab-btn" id="btn-tab-powers" onclick="openTab('tab-powers')">Poderes / Potências</button>
                     <button class="tab-btn" id="btn-tab-alquerino" style="display:none" onclick="openTab('tab-alquerino')">⚗ Laboratório Alquímico</button>
                     <button class="tab-btn" id="btn-tab-rituals" style="display:none" onclick="openTab('tab-rituals')">◈ Códice Hermético</button>
@@ -247,6 +253,19 @@
                             <label>Nome da Entidade / Personagem:</label>
                             <input type="text" id="char-name" required placeholder="Digite o nome verdadeiro..." style="font-size:1.5rem; text-align:center;">
                         </div>
+
+                        <section class="ms-concept-panel" aria-labelledby="concept-title">
+                            <div class="ms-section-heading"><span>CONCEITO</span><h3 id="concept-title">Quem existia antes da ficha?</h3><p id="concept-mode-help">Registre a origem, os vínculos e aquilo que mantém esta pessoa em movimento.</p></div>
+                            <div class="ms-concept-grid">
+                                <div class="form-group"><label>Origem / Nacionalidade</label><input type="text" id="char-origin" placeholder="Lugar, comunidade ou linhagem"></div>
+                                <div class="form-group"><label>Ocupação / Função anterior</label><input type="text" id="char-occupation" placeholder="O que fazia antes da campanha"></div>
+                                <div class="form-group"><label>Vínculo institucional</label><input type="text" id="char-institution" placeholder="Organização, célula, corporação ou grupo"></div>
+                                <div class="form-group"><label>Situação / Estatuto</label><input type="text" id="char-status" placeholder="Tratado, designação, dívida, licença..."></div>
+                                <div class="form-group ms-span-2"><label>Vínculos pessoais</label><textarea id="char-bonds" placeholder="Pessoas, lugares, promessas e relações importantes"></textarea></div>
+                                <div class="form-group ms-span-2"><label>Motivação</label><textarea id="char-motivation" placeholder="O que este personagem quer, teme ou precisa provar"></textarea></div>
+                                <div class="form-group ms-span-2"><label>Relação com o mundo</label><textarea id="char-world-relation" placeholder="Como enxerga o cenário, suas instituições e seus conflitos"></textarea></div>
+                            </div>
+                        </section>
 
                         <div class="form-group" style="margin-top: 30px;">
                             <h3 style="color:var(--theme-color, #d4af37); font-family: 'Cinzel', serif; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 5px;">I. A Natureza da Alma (Expansão)</h3>
@@ -316,6 +335,21 @@
                         <div class="dynamic-list" id="skills-list"></div>
                     </div>
 
+                    <div id="tab-evolution" class="tab-content">
+                        <section class="ms-evolution-panel">
+                            <div class="ms-section-heading"><span>EVOLUÇÃO GRADUAL</span><h3>Registro de prática e reconhecimento</h3><p>Documente o que foi exercitado em jogo. O avanço só é marcado como autorizado quando reconhecido pelo Mestre.</p></div>
+                            <div class="ms-evolution-form hide-on-view">
+                                <div class="form-group"><label>Sessão / Marco</label><input id="evolution-session" placeholder="Ex.: Sessão 07 — A Queda de Belém"></div>
+                                <div class="form-group"><label>Capacidade exercitada</label><input id="evolution-capability" placeholder="Perícia, atributo, poder ou técnica"></div>
+                                <div class="form-group"><label>Sucessos relevantes</label><input id="evolution-successes" type="number" min="0" value="0"></div>
+                                <label class="ms-check-row"><input id="evolution-authorized" type="checkbox"> Avanço autorizado pelo Mestre</label>
+                                <div class="form-group ms-span-2"><label>Registro da prática</label><textarea id="evolution-notes" placeholder="O que aconteceu e por que esta prática foi significativa"></textarea></div>
+                                <button type="button" class="souls-btn small-btn ms-span-2" onclick="addEvolutionEntry()">REGISTRAR EVOLUÇÃO</button>
+                            </div>
+                            <div id="evolution-list" class="ms-evolution-list"></div>
+                        </section>
+                    </div>
+
                     <div id="tab-powers" class="tab-content">
                         <div class="selection-panel power-panel hide-on-view" id="power-selection-panel">
                             <div class="form-group">
@@ -326,9 +360,18 @@
                                 <label>Modificadores e Custos Gerais:</label>
                                 <input type="text" id="pb-mod" placeholder="Ex: Amplo (+2 CÊ), Causador de Dor (-1 CÊ)">
                             </div>
+                            <div class="ms-power-structure">
+                                <div class="form-group"><label>Efeito</label><input id="pb-effect" placeholder="O que o poder faz mecanicamente"></div>
+                                <div class="form-group"><label>Alcance</label><input id="pb-range" placeholder="Pessoal, toque, 12 m..."></div>
+                                <div class="form-group"><label>Duração</label><input id="pb-duration" placeholder="Instantânea, 3 rodadas..."></div>
+                                <div class="form-group"><label>Alvos / Área</label><input id="pb-targets" placeholder="1 alvo, cone de 6 m..."></div>
+                                <div class="form-group"><label>Custo</label><input id="pb-cost" placeholder="CÊ, Estamina, risco, preparação..."></div>
+                                <div class="form-group"><label>Teste</label><input id="pb-test" placeholder="Atributo + Perícia, CD, oposição..."></div>
+                                <div class="form-group ms-span-2"><label>Consequências / Falha</label><textarea id="pb-consequence" placeholder="Riscos, efeitos colaterais, estresse, corrupção..."></textarea></div>
+                            </div>
                             <div class="form-group">
-                                <label>Descrição Mestra:</label>
-                                <textarea id="pb-desc" placeholder="Descreva os efeitos visuais, rituais e mecânicas..."></textarea>
+                                <label>Descrição autoral:</label>
+                                <textarea id="pb-desc" placeholder="Descreva aparência, ritual, ficção e particularidades..."></textarea>
                             </div>
                             <div class="sub-panel" style="border: 1px dashed var(--theme-color, #d4af37); padding: 10px; margin-bottom: 10px;">
                                 <label>Anexar Potências ao Poder:</label>
@@ -579,7 +622,9 @@
                         <button class="vtt-tool-btn" onclick="canvasAddShape('cone')">📐 Cone</button>
                         <button class="vtt-tool-btn" onclick="canvasAddShape('line')">➖ Linha</button>
                         <button class="vtt-tool-btn" onclick="canvasAddShape('radius')">⭕ Raio</button>
-                        <button class="vtt-tool-btn" onclick="canvasToggleRuler()">📏 Régua</button>
+                        <label class="vtt-scale-control">Escala / célula <span><input id="vtt-grid-scale" type="number" min="0.1" step="0.1" value="1.5"> m</span></label>
+                        <button id="vtt-ruler-btn" class="vtt-tool-btn" onclick="canvasToggleRuler()">📏 Régua</button>
+                        <div id="vtt-ruler-status" class="vtt-ruler-status" aria-live="polite">Régua desligada</div>
                         <button class="vtt-tool-btn" style="border-color:red; color:red; margin-top:15px;" onclick="canvasDeleteSelected()">Apagar Sel.</button>
                     </div>
                     <div style="flex:1; overflow:hidden; background:#1a1a1a;" id="canvas-wrapper">
@@ -754,6 +799,17 @@
                     <input type="text" id="new-table-name" placeholder="Ex: O Cântico do Vazio">
                 </div>
                 <div class="form-group">
+                    <label>Descrição da campanha:</label>
+                    <textarea id="new-table-description" placeholder="Premissa, tom e conflito central"></textarea>
+                </div>
+                <div class="ms-table-meta-grid">
+                    <div class="form-group"><label>Época</label><input id="new-table-era" placeholder="Ex.: 2038 / Pós-Colheita"></div>
+                    <div class="form-group"><label>Região</label><input id="new-table-region" placeholder="Cidade, país, setor ou plano"></div>
+                </div>
+                <div class="form-group"><label>Expansões permitidas</label><input id="new-table-expansions" placeholder="Ex.: Envolto, Ordem dos Sete"></div>
+                <div class="form-group"><label>Condições iniciais</label><textarea id="new-table-initial" placeholder="Estado do mundo, recursos, alertas e condições de abertura"></textarea></div>
+                <div class="form-group"><label>Regras específicas da mesa</label><textarea id="new-table-rules" placeholder="House rules, limites e exceções"></textarea></div>
+                <div class="form-group">
                     <label>Modo de Jogo:</label>
                     <select id="new-table-mode">
                         <option value="exodo">Êxodo · Assimilação</option>
@@ -898,8 +954,7 @@
     <script src="js/supabase-db.js"></script>
     <script src="js/ms-services.js"></script>
     <script src="js/ms-realtime.js"></script>
-    <script src="js/master-shield-data.js"></script>
-    <script src="js/master-shield.js"></script>
+    <script src="js/master-shield-loader.js"></script>
     <script src="js/script.js"></script>
     <script src="js/linhagem-tree.js"></script>
     <script src="js/exodo-nexo.js"></script>
@@ -913,6 +968,7 @@
     <script src="js/ordem-sete.js"></script>
     <script src="js/power-registry.js"></script>
     <script src="js/ms-online-ui.js"></script>
+    <script src="js/immersive-experience.js"></script>
 
 
     <!-- MODAL GLOBAL: configuração inicial do ADM; mantido fora de qualquer .screen para evitar sobreposição/stacking context -->

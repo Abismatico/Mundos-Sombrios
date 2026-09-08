@@ -1,4 +1,4 @@
-/* Mundos Sombrios — Online Services / v0.66
+/* Mundos Sombrios — Online Services / v0.67
  * Uma única camada de domínio entre UI e Supabase.
  * Regras: Supabase é a fonte de verdade; estado de interface permanece local/efêmero.
  */
@@ -89,7 +89,7 @@
   });
 
   window.MS_SERVICES = Object.freeze({
-    version: '0.66.1',
+    version: '0.67.0',
     Auth: AuthService,
     Profile: ProfileService,
     Characters: CharacterService,
@@ -102,5 +102,5 @@
     currentUserId: uid
   });
 
-  platform()?.emit('ms:services:ready', { version: '0.66.1' });
+  platform()?.emit('ms:services:ready', { version: '0.67.0' });
 })();

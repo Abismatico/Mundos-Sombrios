@@ -31,6 +31,10 @@
 
     const activeRealtimeChannels = new Map();
 
+    function getAuthRedirectUrl() {
+        return window.location.href.split('#')[0];
+    }
+
     const tableNames = {
         profiles: 'profiles',
         tables: 'tables',
@@ -57,25 +61,6 @@
         }
     }
 
-    function normalizeUserPayload(user) {
-        if (!user) return null;
-        const banned = !!(user.banned || user.isBanned || user.status === 'banned');
-        const status = String(user.status || (banned ? 'banned' : 'active')).trim() || 'active';
-        const payload = {
-            id: String(user.id || 'u-' + Date.now()),
-            username: String(user.username || '').trim(),
-            email: String(user.email || '').trim(),
-            role: user.role || 'jogador',
-            created_at: user.createdAt || new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            banned,
-            status
-        };
-        if (user.data && typeof user.data === 'object' && Object.keys(user.data).length) {
-            payload.data = user.data;
-        }
-        return payload;
-    }
 
     function normalizeTablePayload(table) {
         if (!table) return null;
@@ -137,11 +122,22 @@
             return { data, error };
         },
 
+        async resendSignupConfirmation(email) {
+            return supabase.auth.resend({
+                type: 'signup',
+                email: String(email || '').trim().toLowerCase(),
+                options: { emailRedirectTo: getAuthRedirectUrl() }
+            });
+        },
+
         async signUp({ username, email, password, requestMaster = false }) {
             const { data, error } = await supabase.auth.signUp({
                 email: String(email || '').trim(),
                 password: String(password || ''),
-                options: { data: { username: String(username || '').trim(), request_master: !!requestMaster } }
+                options: {
+                    emailRedirectTo: getAuthRedirectUrl(),
+                    data: { username: String(username || '').trim(), request_master: !!requestMaster }
+                }
             });
             if (!error && data?.user && data.user.identities?.length === 0) {
                 return { data, error: new Error('Este e-mail já possui uma conta.') };
@@ -154,7 +150,7 @@
         },
 
         async resetPasswordForEmail(email, redirectTo) {
-            return supabase.auth.resetPasswordForEmail(String(email || '').trim(), { redirectTo });
+            return supabase.auth.resetPasswordForEmail(String(email || '').trim(), { redirectTo: redirectTo || getAuthRedirectUrl() });
         },
 
         async updatePassword(password) {
@@ -489,7 +485,10 @@
                 p_id: payload.id, p_name: payload.name, p_mode: payload.mode, p_nature: payload.nature || null,
                 p_class_name: payload.class_name || null, p_payload: payload.payload || {}
             });
-            if (error) console.warn('[Mundos Sombrios] saveCharacter falhou:', error);
+            if (error) {
+                console.warn('[Mundos Sombrios] saveCharacter falhou:', error);
+                throw error;
+            }
             return data || null;
         },
 

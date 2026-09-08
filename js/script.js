@@ -184,10 +184,9 @@ function isEnvolto() { return currentNature === 'O Envolto (Horror Cósmico)'; }
 function envState() { return (window.__envRitualDraft && typeof window.__envRitualDraft === 'object') ? window.__envRitualDraft : { known: [] }; }
 let activeCarouselIndex = 0;
 
-let cropper = null;
-let currentCropTarget = '';
-let editingImageIndex = -1; 
 let currentPowerDraft = [];
+let currentEvolutionLog = [];
+let currentDraftSettings = {};
 Object.defineProperty(window, 'currentPowerDraft', { configurable: true, get(){ return currentPowerDraft; }, set(v){ currentPowerDraft = Array.isArray(v) ? v : []; } });
 
 // VTT STATE
@@ -203,7 +202,6 @@ let myVttCharIndex = -1;
 let npcHpHidden = false;
 let diceHistory = [];
 let currentSheetEquipment = [];
-let selectedVttEquipmentCharId = null;
 
 // ==========================================
 // AUTHENTICATION LOGIC
@@ -215,7 +213,7 @@ async function msBuildCurrentUser(profileOverride = null) {
     const remote = profileOverride || (await window.MS_DB.fetchMyProfile()).data;
     const profile = remote || { id: session.user.id, username: session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'jogador', email: session.user.email || '', role: 'jogador', banned: false, status: 'active' };
     if (profile.banned || profile.status === 'banned') { await window.MS_DB.signOut(); alert('Esta conta foi banida pelo Arconte.'); return null; }
-    return { id:String(profile.id || session.user.id), authUserId:session.user.id, username:String(profile.username || 'jogador'), email:String(profile.email || session.user.email || ''), role:normalizeUserRole(profile.role || 'jogador'), banned:!!profile.banned, status:profile.status || 'active' };
+    return { id:String(session.user.id), authUserId:session.user.id, profileId:String(profile.id || session.user.id), username:String(profile.username || 'jogador'), email:String(profile.email || session.user.email || ''), role:normalizeUserRole(profile.role || 'jogador'), banned:!!profile.banned, status:profile.status || 'active' };
 }
 
 async function msHydrateRemoteGameState() {
@@ -233,6 +231,15 @@ async function msHydrateRemoteGameState() {
             return payload;
         });
         allCharactersDB = characters.map(msClone);
+
+        // Supabase é a fonte de verdade. Antes de sincronizar a visão legada,
+        // promove a hidratação remota ao cache por usuário para impedir que
+        // um cache local vazio sobrescreva fichas acabadas de carregar.
+        const repoStore = msEnsureRepoStore();
+        const currentRepo = repoStore[currentUser.id] || { characters: [], joinedTables: [], ownedTables: [] };
+        currentRepo.characters = characters.map(msClone);
+        repoStore[currentUser.id] = currentRepo;
+        msWriteJSON(MS_REPO_KEY, repoStore);
 
         const tableRows = remoteTables?.data || [];
         allTablesDB = tableRows.map(t => msNormalizeTable({
@@ -264,6 +271,7 @@ async function msApplyAuthenticatedSession(profileOverride = null) {
     const emblem=document.getElementById('master-emblem'); if(emblem) emblem.style.display=(currentUser.role==='mestre'||currentUser.role==='admin')?'block':'none';
     const adminButton=document.getElementById('btn-admin-panel'); if(adminButton) adminButton.style.display=currentUser.role==='admin'?'block':'none';
     const gmTab=document.getElementById('tab-btn-gm'); if(gmTab) gmTab.style.display=(currentUser.role==='mestre'||currentUser.role==='admin')?'inline-block':'none';
+    const shieldButton=document.getElementById('btn-master-shield'); if(shieldButton) shieldButton.style.display=(currentUser.role==='mestre'||currentUser.role==='admin')?'inline-block':'none';
     showScreen('screen-portal');
     if(typeof window.renderOfficialPortal==='function') window.renderOfficialPortal();
     return true;
@@ -299,8 +307,24 @@ async function doLogin() {
     window.MS_PLATFORM?.setStatus('auth','loading');
     if(!identifier||!password){window.MS_PLATFORM?.setStatus('auth','error',new Error('Credenciais incompletas')); window.MS_PLATFORM?.toast('Preencha as credenciais.','error'); return false;}
     if(!window.MS_DB?.ready){window.MS_PLATFORM?.setStatus('auth','error',new Error('Supabase indisponível')); window.MS_PLATFORM?.toast('O serviço online de autenticação não está disponível.','error'); return false;}
-    try{ const {error}=await window.MS_DB.signIn(identifier,password); if(error){window.MS_PLATFORM?.setStatus('auth','error',error); console.warn('[Mundos Sombrios] Login:',error); window.MS_PLATFORM?.toast('Login inválido ou conta ainda não confirmada.','error'); return false;} const ok=await msApplyAuthenticatedSession(); if(!ok){await window.MS_DB.signOut(); window.MS_PLATFORM?.setStatus('auth','error',new Error('Perfil não encontrado ou bloqueado')); window.MS_PLATFORM?.toast('Perfil de usuário não encontrado ou bloqueado.','error'); return false;} await msSyncOnlineState(); window.MS_PLATFORM?.setStatus('auth','success'); window.MS_PLATFORM?.emit('auth:signed-in',{user: currentUser}); return true; }
+    try{ const {error}=await window.MS_DB.signIn(identifier,password); if(error){window.MS_PLATFORM?.setStatus('auth','error',error); console.warn('[Mundos Sombrios] Login:',error); const message=String(error.message||'').toLowerCase(); window.MS_PLATFORM?.toast(message.includes('confirm')?'Confirme o e-mail da conta antes de entrar.':'Login inválido ou conta ainda não confirmada.','error'); return false;} const ok=await msApplyAuthenticatedSession(); if(!ok){await window.MS_DB.signOut(); window.MS_PLATFORM?.setStatus('auth','error',new Error('Perfil não encontrado ou bloqueado')); window.MS_PLATFORM?.toast('Perfil de usuário não encontrado ou bloqueado.','error'); return false;} await msSyncOnlineState(); window.MS_PLATFORM?.setStatus('auth','success'); window.MS_PLATFORM?.emit('auth:signed-in',{user: currentUser}); return true; }
     catch(error){window.MS_PLATFORM?.setStatus('auth','error',error); console.error('[Mundos Sombrios] Falha no login online:',error); window.MS_PLATFORM?.toast('Não foi possível autenticar. Verifique o e-mail, senha e conexão.','error'); return false;}
+}
+
+async function resendConfirmation() {
+    const email = document.getElementById('login-user').value.trim().toLowerCase();
+    if (!email || !email.includes('@')) { window.MS_PLATFORM?.toast('Informe seu e-mail no campo de login para reenviar a confirmação.','error'); return false; }
+    if (!window.MS_DB?.ready || typeof window.MS_DB.resendSignupConfirmation !== 'function') { window.MS_PLATFORM?.toast('O serviço online de autenticação não está disponível.','error'); return false; }
+    try {
+        const { error } = await window.MS_DB.resendSignupConfirmation(email);
+        if (error) throw error;
+        window.MS_PLATFORM?.toast('Se a conta existir e ainda não estiver confirmada, um novo e-mail foi enviado.','success');
+        return true;
+    } catch (error) {
+        console.warn('[Mundos Sombrios] Reenvio de confirmação:', error);
+        window.MS_PLATFORM?.toast('Não foi possível reenviar a confirmação agora.','error');
+        return false;
+    }
 }
 
 async function doLogout() {
@@ -672,7 +696,7 @@ function mercadorRankCardMarkup(rankId) {
 
 function syncMercadorPatentFromUI() {
     if (currentClass !== 'Mercador da Morte') return;
-    const select = document.querySelector('#v16-rank-select, #v15-rank-select, #mm-rank');
+    const select = document.querySelector('#v16-rank-select');
     if (!select) return;
     window.__mmDraft = window.__mmDraft || {};
     window.__mmDraft.rankId = select.value || 'cadete';
@@ -688,7 +712,7 @@ function syncMercadorPatentFromUI() {
 }
 
 document.addEventListener('change', (event) => {
-    if (event.target?.matches('#v16-rank-select, #v15-rank-select, #mm-rank')) {
+    if (event.target?.matches('#v16-rank-select')) {
         syncMercadorPatentFromUI();
     }
 }, true);
@@ -718,11 +742,6 @@ const classDescDict = {
     "Intérprete (Os Olhos)": "Lê os Códigos da Criação. Revela o oculto, entende línguas mortas e percebe falhas.",
     "Sentinela (A Parede)": "Escudo absoluto. Absorve dano por aliados e é inabalável contra o medo e a corrupção.",
     "Juízo (A Voz)": "Comanda a realidade através do verbo. Suas palavras forçam a verdade sobre a ilusão."
-};
-
-const specDescDict = {
-    "Somático": "O gene altera os músculos, ossos e pele.",
-    "Sensorial": "Amplia os 5 sentidos a níveis super-humanos."
 };
 
 const descDict = {
@@ -1093,59 +1112,84 @@ function renderArchetypeCards(gridId, entries, options = {}) {
     const selected = options.selected || '';
     const disabled = !!options.disabled;
     const artType = type === 'expansion' ? 'nature' : 'class';
-    grid.className = `archetype-grid archetype-grid-${mode} archetype-grid-${type}`;
-    grid.innerHTML = '';
-
     const entriesList = Object.entries(entries || {});
-    const stageArt = window.MS_ARCHETYPE_ART ? window.MS_ARCHETYPE_ART.get(selected || entriesList[0]?.[0] || '', artType) : null;
+    const safe = value => window.escHtml ? window.escHtml(String(value ?? '')) : String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    if (!entriesList.length) { grid.innerHTML = '<div class="archetype-empty">Nenhuma opção disponível.</div>'; return; }
+
+    grid.className = `archetype-grid archetype-grid-${mode} archetype-grid-${type} archetype-carousel`;
+    grid.innerHTML = '';
+    const selectedIndex = Math.max(0, entriesList.findIndex(([name]) => name === selected));
+    let index = selectedIndex >= 0 ? selectedIndex : 0;
+
     const stageKicker = type === 'expansion' ? (mode === 'exodo' ? 'ARQUIVO DE ORIGEM' : 'REGISTRO DE ARQUIVO') : 'FORJA DE PERSONAGEM';
     const stageTitle = type === 'expansion' ? (mode === 'exodo' ? 'Escolha sua linhagem de Êxodo' : 'Abra o arquivo que moldará sua ficha') : 'Escolha sua classe';
     const stageNote = type === 'expansion'
-        ? (mode === 'exodo' ? 'Cada linhagem muda a fantasia do personagem e abre um novo conjunto de possibilidades. Escolha como sua evolução começa.' : 'Cada registro define a forma como você encara o horror. Escolha o dossiê que será sua porta de entrada para Ocultatun.')
-        : 'Escolha o papel que você quer interpretar. A partir daqui, a ficha passa a falar a linguagem dessa classe.';
+        ? (mode === 'exodo' ? 'Cada linhagem muda a fantasia, os recursos e o ritmo mecânico da ficha.' : 'Cada arquivo altera sua relação com o paranormal, seus riscos e sua função em campo.')
+        : 'Uma opção por vez. Use as setas para comparar função, atributos e estilo antes de confirmar.';
 
     const head = document.createElement('div');
     head.className = 'archetype-stage-head';
-    head.style.setProperty('--builder-accent', stageArt?.palette?.[0] || '#69e9ff');
-    head.style.setProperty('--builder-glow', stageArt?.palette?.[1] || '#9f8dff');
-    head.innerHTML = `<div class="archetype-stage-copy"><span class="archetype-stage-kicker">${stageKicker}</span><h3 class="archetype-stage-title">${stageTitle}</h3><p class="archetype-stage-note">${stageNote}</p></div><div class="archetype-stage-meta"><span class="archetype-stage-chip">${mode === 'exodo' ? 'ÊXODO' : 'OCULTATUN'}</span><span class="archetype-stage-chip">${entriesList.length} ${type === 'expansion' ? 'REGISTROS' : 'CLASSES'}</span><span class="archetype-stage-chip">${disabled ? 'ESCOLHA FIXADA' : 'SELECIONE 1'}</span></div>`;
+    head.innerHTML = `<div class="archetype-stage-copy"><span class="archetype-stage-kicker">${stageKicker}</span><h3 class="archetype-stage-title">${stageTitle}</h3><p class="archetype-stage-note">${stageNote}</p></div><div class="archetype-stage-meta"><span class="archetype-stage-chip">${mode === 'exodo' ? 'ÊXODO' : 'OCULTATUN'}</span><span class="archetype-stage-chip" data-carousel-counter></span><span class="archetype-stage-chip">${disabled ? 'ESCOLHA FIXADA' : 'NAVEGUE E CONFIRME'}</span></div>`;
     grid.appendChild(head);
 
-    Object.entries(entries || {}).forEach(([name, data], index) => {
-        const card = document.createElement('button');
-        card.type = 'button';
-        card.className = 'archetype-card';
-        card.dataset.archetype = archetypeSlug(name);
-        card.dataset.mode = mode;
-        card.dataset.type = type;
+    const carousel = document.createElement('div');
+    carousel.className = 'archetype-carousel-shell ms-archetype-carousel';
+    carousel.innerHTML = `<button type="button" class="archetype-nav archetype-nav-prev" aria-label="Opção anterior">‹</button><div class="archetype-carousel-viewport" aria-live="polite"></div><button type="button" class="archetype-nav archetype-nav-next" aria-label="Próxima opção">›</button>`;
+    grid.appendChild(carousel);
+    const viewport = carousel.querySelector('.archetype-carousel-viewport');
+    const prev = carousel.querySelector('.archetype-nav-prev');
+    const next = carousel.querySelector('.archetype-nav-next');
+    const counter = head.querySelector('[data-carousel-counter]');
+
+    function attrsSummary(data) {
+        const attrs = data?.attr || {};
+        const labels = {for:'FOR',vig:'VIG',agi:'AGI',int:'INT',prn:'PRN',pre:'PRE'};
+        return Object.entries(labels).map(([key,label]) => `<span><b>${label}</b>${safe(attrs[key] ?? 0)}</span>`).join('');
+    }
+
+    function renderCurrent(direction = 0) {
+        const [name, data] = entriesList[index];
         const art = window.MS_ARCHETYPE_ART ? window.MS_ARCHETYPE_ART.get(name, artType) : null;
         const [accent, glow] = art?.palette?.length >= 2 ? art.palette : archetypeAccent(mode, name, type);
-        card.style.setProperty('--archetype-accent', accent);
-        card.style.setProperty('--archetype-glow', glow);
-        card.style.setProperty('--art-accent', accent);
-        card.style.setProperty('--art-glow', glow);
-        card.dataset.artFamily = art?.family || 'unknown';
-        card.style.animationDelay = `${Math.min(index * 70, 560)}ms`;
-        card.disabled = disabled;
-        if (name === selected) card.classList.add('active');
-        if (disabled) card.classList.add('archetype-locked');
+        head.style.setProperty('--builder-accent', accent);
+        head.style.setProperty('--builder-glow', glow);
+        counter.textContent = `${index + 1} / ${entriesList.length}`;
+        const isSelected = name === (document.getElementById(type === 'expansion' ? 'char-nature' : 'char-class')?.value || selected);
         const label = type === 'expansion' ? (mode === 'exodo' ? 'LINHAGEM / ORIGEM' : 'ARQUIVO / EXPANSÃO') : (art?.role || 'CLASSE');
-        const symbol = art?.icon || (type === 'expansion' ? '▣' : '◇');
-        const tone = art?.tone || String((data && data.desc) || '').split('.')[0];
-        const call = art?.call || 'A identidade começa aqui.';
-        const shot = art?.shot || (mode === 'exodo' ? 'SINAL HOLOGRÁFICO' : 'ARQUIVO CLASSIFICADO');
-        const tag = art?.tag || (mode === 'exodo' ? 'GENE' : 'CÓDICE');
-        card.innerHTML = `<span class="archetype-art-backdrop" aria-hidden="true"></span><span class="archetype-scanline" aria-hidden="true"></span><span class="archetype-card-top"><span class="archetype-seal" aria-hidden="true">${symbol}</span><span class="archetype-art-classcode"><span>${art?.codename || String(name).toUpperCase()}</span>${shot}</span></span><span class="archetype-card-copy"><span class="archetype-kind">${label}</span><strong>${String(name).replace(/[<>]/g,'')}</strong><small>${String((data && data.snippet) || (classDescDict[name] || tone || '')).replace(/[<>]/g,'')}</small><span class="archetype-art-tagline">${String(call).replace(/[<>]/g,'')}</span><span class="archetype-meta"><span>${String(tag).replace(/[<>]/g,'')}</span><span>${disabled ? 'ESCOLHA FIXADA · EDIÇÃO' : 'ENTRAR NA FORJA'}</span></span></span>`;
-        card.setAttribute('aria-label', `${name} — ${call}`);
-        if (!disabled) {
+        const summary = type === 'expansion' ? (data?.desc || data?.snippet || art?.tone || '') : (classDescDict[name] || data?.desc || art?.tone || '');
+        const mechanics = type === 'expansion'
+            ? `<div class="archetype-mechanics"><strong>Recursos</strong><div>${(data?.resources || []).map(x => `<span>${safe(x)}</span>`).join('') || '<span>Recursos definidos pela classe</span>'}</div></div>`
+            : `<div class="archetype-mechanics"><strong>Atributos base</strong><div class="archetype-attr-strip">${attrsSummary(data)}</div>${Array.isArray(data?.skills)&&data.skills.length?`<small>Perícias nativas: ${safe(data.skills.join(' · '))}</small>`:''}</div>`;
+        viewport.dataset.direction = direction > 0 ? 'next' : direction < 0 ? 'prev' : 'idle';
+        viewport.innerHTML = `<article class="archetype-card ${isSelected?'active':''} ${disabled?'archetype-locked':''}" data-archetype="${safe(archetypeSlug(name))}" data-mode="${safe(mode)}" data-type="${safe(type)}" data-art-family="${safe(art?.family || 'unknown')}" style="--archetype-accent:${accent};--archetype-glow:${glow};--art-accent:${accent};--art-glow:${glow}">
+          <div class="archetype-portrait-stage"><img class="archetype-portrait" src="${safe(art?.image || '')}" alt="Personagem representativo de ${safe(name)}"><span class="archetype-portrait-vignette" aria-hidden="true"></span><span class="archetype-scanline" aria-hidden="true"></span><div class="archetype-card-top"><span class="archetype-seal" aria-hidden="true">${safe(art?.icon || (type === 'expansion' ? '▣' : '◇'))}</span><span class="archetype-art-classcode"><span>${safe(art?.codename || name.toUpperCase())}</span>${safe(art?.shot || art?.kicker || '')}</span></div></div>
+          <div class="archetype-card-copy"><span class="archetype-kind">${safe(label)}</span><h4>${safe(name)}</h4><p>${safe(summary)}</p><span class="archetype-art-tagline">${safe(art?.call || art?.tone || 'A identidade começa aqui.')}</span>${mechanics}<div class="archetype-select-row"><span>${safe(art?.tag || art?.token || (mode === 'exodo' ? 'GENE' : 'CÓDICE'))}</span><button type="button" class="archetype-confirm" ${disabled?'disabled':''}>${isSelected ? 'SELECIONADO' : (disabled ? 'ESCOLHA FIXADA' : `SELECIONAR ${type === 'expansion' ? 'EXPANSÃO' : 'CLASSE'}`)}</button></div></div>
+        </article>`;
+        const confirm = viewport.querySelector('.archetype-confirm');
+        if (confirm && !disabled) confirm.addEventListener('click', () => {
             const fn = options.onSelect;
-            if (fn) card.addEventListener('click', () => fn(name));
-        } else {
-            card.setAttribute('aria-disabled', 'true');
-            card.title = 'Classe/expansão já escolhida e não pode ser alterada na edição.';
-        }
-        grid.appendChild(card);
+            if (fn) fn(name);
+            renderCurrent(0);
+        });
+        const card = viewport.querySelector('.archetype-card');
+        if (card && !disabled) card.addEventListener('dblclick', () => confirm?.click());
+        prev.disabled = disabled || entriesList.length < 2;
+        next.disabled = disabled || entriesList.length < 2;
+    }
+
+    function move(delta) {
+        if (disabled || entriesList.length < 2) return;
+        index = (index + delta + entriesList.length) % entriesList.length;
+        renderCurrent(delta);
+    }
+    prev.addEventListener('click', () => move(-1));
+    next.addEventListener('click', () => move(1));
+    carousel.addEventListener('keydown', event => {
+        if (event.key === 'ArrowLeft') { event.preventDefault(); move(-1); }
+        if (event.key === 'ArrowRight') { event.preventDefault(); move(1); }
     });
+    carousel.tabIndex = 0;
+    renderCurrent(0);
 }
 
 function startBuilder(mode) {
@@ -1510,37 +1554,56 @@ function addPotencyToDraft() {
     });
 }
 
-function commitPower() {
-    const name = document.getElementById('pb-name').value;
-    const mod = document.getElementById('pb-mod').value;
-    const desc = document.getElementById('pb-desc').value;
-    
-    if(!name) { alert("Dê um nome ao poder/ritual."); return; }
-    if(currentPowerDraft.length === 0) { alert("Anexe pelo menos uma potência à formula."); return; }
+function msFieldValue(id) { const el=document.getElementById(id); return el ? String(el.value||'').trim() : ''; }
 
-    const container = document.getElementById('powers-list');
+function renderPowerItem(power) {
+    const safe = window.escHtml || (v=>String(v??''));
     const div = document.createElement('div');
     div.className = 'list-item';
-    
-    let partsHtml = currentPowerDraft.map(p => `<span class="nature-text">${p.potency} (Cap:${p.cap})</span>`).join(" + ");
-    
+    div.dataset.power = JSON.stringify(power || {});
+    const formula = (power.components||[]).map(p => `<span class="nature-text">${safe(p.potency)} (Cap:${safe(p.cap)})</span>`).join(' + ');
+    const data = [['Efeito',power.effect],['Alcance',power.range],['Duração',power.duration],['Alvos',power.targets],['Custo',power.cost],['Teste',power.test]].filter(([,v])=>v);
     div.innerHTML = `
         <div class="list-item-header">
-            <input type="text" value="${name}" class="power-name-input" readonly style="flex:1; font-weight:bold; color:var(--theme-color);">
-            <input type="text" value="${mod}" class="power-mod-input" placeholder="S/Modificadores" readonly style="flex:1; color:#aaa;">
+            <input type="text" value="${safe(power.name)}" class="power-name-input" readonly style="flex:1;font-weight:bold;color:var(--theme-color);">
+            <input type="text" value="${safe(power.modifiers||'')}" class="power-mod-input" placeholder="S/Modificadores" readonly style="flex:1;color:#aaa;">
             <button type="button" class="hide-on-view" onclick="this.closest('.list-item').remove()">&#10006;</button>
         </div>
-        <div style="font-size:0.85rem; margin-top:5px; color:#00ffcc;">Fórmula: ${partsHtml}</div>
-        <textarea readonly class="power-desc-input">${desc}</textarea>
-    `;
-    container.appendChild(div);
-    
-    document.getElementById('pb-name').value = '';
-    document.getElementById('pb-mod').value = '';
-    document.getElementById('pb-desc').value = '';
-    currentPowerDraft = [];
-    document.getElementById('pb-draft-list').innerHTML = '';
+        ${formula?`<div style="font-size:.85rem;margin-top:5px;color:#00ffcc;">Fórmula: ${formula}</div>`:''}
+        <div class="ms-power-data">${data.map(([k,v])=>`<span><b>${k}:</b> ${safe(v)}</span>`).join('')}${power.consequences?`<span class="wide"><b>Consequências:</b> ${safe(power.consequences)}</span>`:''}</div>
+        <textarea readonly class="power-desc-input">${safe(power.description||'')}</textarea>`;
+    return div;
 }
+
+function commitPower() {
+    const power = {
+        id: (crypto.randomUUID ? crypto.randomUUID() : 'pow-'+Date.now()),
+        name: msFieldValue('pb-name'), modifiers: msFieldValue('pb-mod'), description: msFieldValue('pb-desc'),
+        effect: msFieldValue('pb-effect'), range: msFieldValue('pb-range'), duration: msFieldValue('pb-duration'),
+        targets: msFieldValue('pb-targets'), cost: msFieldValue('pb-cost'), test: msFieldValue('pb-test'),
+        consequences: msFieldValue('pb-consequence'), components: msClone(currentPowerDraft || [])
+    };
+    if(!power.name) { alert("Dê um nome ao poder/ritual."); return; }
+    if(currentPowerDraft.length === 0 && !power.effect) { alert("Defina o efeito ou anexe ao menos uma potência à fórmula."); return; }
+    document.getElementById('powers-list')?.appendChild(renderPowerItem(power));
+    ['pb-name','pb-mod','pb-desc','pb-effect','pb-range','pb-duration','pb-targets','pb-cost','pb-test','pb-consequence'].forEach(id=>{const el=document.getElementById(id); if(el) el.value='';});
+    currentPowerDraft = [];
+    const draft=document.getElementById('pb-draft-list'); if(draft) draft.innerHTML='';
+    window.MS_ONLINE_UI?.saveBuilderDraft?.();
+}
+
+function renderEvolutionEntries() {
+    const box=document.getElementById('evolution-list'); if(!box) return;
+    const safe=window.escHtml || (v=>String(v??''));
+    box.innerHTML = currentEvolutionLog.length ? currentEvolutionLog.map((entry,i)=>`<article class="ms-evolution-entry" data-evolution-index="${i}"><div><h4>${safe(entry.capability||'Capacidade')}</h4><p>${safe(entry.notes||'Sem observações.')}</p><div class="ms-evolution-meta"><span>${safe(entry.session||'Sessão não informada')}</span><span>${Number(entry.successes)||0} sucessos</span>${entry.authorized?'<span class="authorized">✓ autorizado</span>':'<span>aguardando autorização</span>'}</div></div><button type="button" class="hide-on-view" onclick="removeEvolutionEntry(${i})" aria-label="Remover evolução">×</button></article>`).join('') : '<p class="empty-state">Nenhuma prática registrada nesta ficha.</p>';
+}
+function addEvolutionEntry(){
+    const capability=msFieldValue('evolution-capability'); if(!capability){window.MS_PLATFORM?.toast('Informe a capacidade exercitada.','error');return;}
+    currentEvolutionLog.push({id:(crypto.randomUUID?crypto.randomUUID():'evo-'+Date.now()),session:msFieldValue('evolution-session'),capability,successes:Number(document.getElementById('evolution-successes')?.value||0),authorized:!!document.getElementById('evolution-authorized')?.checked,notes:msFieldValue('evolution-notes'),createdAt:new Date().toISOString()});
+    ['evolution-session','evolution-capability','evolution-notes'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';}); const suc=document.getElementById('evolution-successes');if(suc)suc.value=0;const auth=document.getElementById('evolution-authorized');if(auth)auth.checked=false;renderEvolutionEntries();window.MS_ONLINE_UI?.saveBuilderDraft?.();
+}
+function removeEvolutionEntry(i){ currentEvolutionLog.splice(i,1);renderEvolutionEntries();window.MS_ONLINE_UI?.saveBuilderDraft?.(); }
+window.addEvolutionEntry=addEvolutionEntry; window.removeEvolutionEntry=removeEvolutionEntry; window.renderEvolutionEntries=renderEvolutionEntries;
 /* Removed duplicate declaration of a consolidated function: saveCharacter */
 /* Removed duplicate declaration of a consolidated function: loadCharacterToBuilder */
 
@@ -1569,20 +1632,9 @@ function renderCharList() {
     characters.forEach((char, index) => {
         const animClass = getNatureCardClass(char.nature);
         
-        let cName = char.className || 'default';
-        let safeSlug = cName.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-        let iconColorClass = "icon-" + safeSlug;
-
         const wrapper = document.createElement('div');
         wrapper.className = 'card-wrapper';
         wrapper.innerHTML = `
-            <div class="card-3d-icon-wrapper ${iconColorClass}">
-                <div class="cube-icon">
-                    <div class="cube-face front"></div><div class="cube-face back"></div>
-                    <div class="cube-face left"></div><div class="cube-face right"></div>
-                    <div class="cube-face top"></div><div class="cube-face bottom"></div>
-                </div>
-            </div>
             <button class="delete-soul" onclick="deleteCharacter(${index}, event)" title="Excluir Ficha">X</button>
             <div class="soul-card ${animClass}">
                 <div class="ornament"></div>
@@ -1936,13 +1988,6 @@ async function applyVttTheme() {
 }
 
 // VTT DRAGGABLES
-function setupDraggables() {
-    makeDraggable(document.getElementById('vtt-grid-window'), document.getElementById('grid-window-header'), false);
-    makeDraggable(document.getElementById('vtt-gallery-window'), document.getElementById('gallery-window-header'), false);
-    makeDraggable(document.getElementById('vtt-dice-box'), document.getElementById('dice-box-header'), true); 
-    makeDraggable(document.getElementById('vtt-chat-box'), document.getElementById('chat-box-header'), false);
-    makeDraggable(document.getElementById('vtt-equipment-window'), document.getElementById('equipment-window-header'), false); 
-}
 
 function makeDraggable(el, header, requiresGM) {
     let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
@@ -2041,8 +2086,12 @@ function drawGridLines() {
 }
 
 function canvasSetMode(mode) {
+    if(!vttCanvas) return;
+    if(window.__msRulerActive) msSetRulerActive(false);
     vttCanvas.isDrawingMode = false;
-    vttCanvas.getObjects().forEach(o => o.set('selectable', mode === 'select'));
+    vttCanvas.selection = mode === 'select';
+    vttCanvas.getObjects().forEach(o => o.set('selectable', mode === 'select' && !o.isGridLine && !o.isRuler && (isVttGM || !o.owner || o.owner === 'me' || String(o.ownerId||'')===String(currentUser?.id||''))));
+    vttCanvas.requestRenderAll();
 }
 
 function canvasAddPCToken() {
@@ -2052,13 +2101,13 @@ function canvasAddPCToken() {
     fabric.Image.fromURL(myChar.avatar || '', function(img) {
         if(!img) {
             const circle = new fabric.Circle({ radius: 25, fill: '#00ffcc', stroke: '#fff', strokeWidth: 2, shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.8)', blur: 10, offsetX: 5, offsetY: 5 }) });
-            createTokenGroup(circle, myChar.name, 'me', '#00ffcc');
+            createTokenGroup(circle, myChar.name, 'me', '#00ffcc', null, myChar.sourceCharId||myChar.id||null, currentUser?.id||myChar.ownerId||null);
         } else {
             img.scaleToWidth(50);
             img.scaleToHeight(50);
             img.set({clipPath: new fabric.Circle({radius:25, originX:'center', originY:'center'})});
             const circle = new fabric.Circle({ radius: 26, fill: 'transparent', stroke: '#00ffcc', strokeWidth: 2, shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.8)', blur: 10, offsetX: 5, offsetY: 5 }) });
-            createTokenGroup(img, myChar.name, 'me', '#00ffcc', circle);
+            createTokenGroup(img, myChar.name, 'me', '#00ffcc', circle, myChar.sourceCharId||myChar.id||null, currentUser?.id||myChar.ownerId||null);
         }
     });
 }
@@ -2068,14 +2117,14 @@ function canvasAddNPCToken() {
     const color = prompt("Cor do Monstro/NPC (Ex: red, #ff00ff):", "#ff3333");
     const name = prompt("Nome do Monstro:", "Goblin Abissal");
     const circle = new fabric.Circle({ radius: 25, fill: color, stroke: '#000', strokeWidth: 2, shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.8)', blur: 10, offsetX: 5, offsetY: 5 }) });
-    createTokenGroup(circle, name, 'gm', color);
+    createTokenGroup(circle, name, 'gm', color, null, null, currentUser?.id||null);
 }
 
-function createTokenGroup(mainObj, nameText, owner, color, borderObj = null) {
+function createTokenGroup(mainObj, nameText, owner, color, borderObj = null, characterId = null, ownerId = null) {
     const text = new fabric.Text(nameText, { fontSize: 12, fill: '#fff', originX: 'center', top: 30, backgroundColor: 'rgba(0,0,0,0.7)' });
     const objs = borderObj ? [mainObj, borderObj, text] : [mainObj, text];
-    const group = new fabric.Group(objs, { left: 100, top: 100, owner: owner, msTokenId: (crypto.randomUUID ? crypto.randomUUID() : 'tok-'+Date.now()+'-'+Math.random().toString(36).slice(2)), borderColor: color, cornerColor: color, transparentCorners: false });
-    vttCanvas.add(group);
+    const group = new fabric.Group(objs, { left: 100, top: 100, owner, ownerId, characterId, msTokenId: (crypto.randomUUID ? crypto.randomUUID() : 'tok-'+Date.now()+'-'+Math.random().toString(36).slice(2)), borderColor: color, cornerColor: color, transparentCorners: false });
+    vttCanvas.add(group); vttCanvas.setActiveObject(group); vttCanvas.requestRenderAll();
 }
 
 function canvasSetBackground(e) {
@@ -2105,9 +2154,23 @@ function canvasAddShape(type) {
     vttCanvas.add(shape);
 }
 
-function canvasToggleRuler() {
-    alert("Função de Régua: Clique e arraste para medir (Simulado). Grid = 1.5m");
+function msRulerScale(){ const n=Number(document.getElementById('vtt-grid-scale')?.value||1.5); return Number.isFinite(n)&&n>0?n:1.5; }
+function msRulerStatus(text, active=window.__msRulerActive){ const el=document.getElementById('vtt-ruler-status');if(el){el.textContent=text;el.classList.toggle('active',!!active);} const btn=document.getElementById('vtt-ruler-btn');if(btn)btn.classList.toggle('active',!!active); }
+function msClearRulerObjects(){ if(!vttCanvas)return; vttCanvas.getObjects().filter(o=>o.isRuler).forEach(o=>vttCanvas.remove(o));vttCanvas.requestRenderAll(); }
+function msSetRulerActive(active){
+    if(!vttCanvas)return; window.__msRulerActive=!!active; window.__msRulerStart=null;
+    vttCanvas.selection=!active; vttCanvas.skipTargetFind=!!active;
+    vttCanvas.getObjects().forEach(o=>o.set('selectable',!active && !o.isGridLine && !o.isRuler && (isVttGM || !o.owner || o.owner==='me' || String(o.ownerId||'')===String(currentUser?.id||''))));
+    if(!active) msClearRulerObjects();
+    msRulerStatus(active?'Clique e arraste sobre o mapa para medir.':'Régua desligada',active);vttCanvas.requestRenderAll();
 }
+function msInstallRulerHandlers(){
+    if(!vttCanvas || vttCanvas.__msRulerInstalled)return; vttCanvas.__msRulerInstalled=true;
+    vttCanvas.on('mouse:down',opt=>{if(!window.__msRulerActive)return;msClearRulerObjects();const p=vttCanvas.getPointer(opt.e);window.__msRulerStart=p;const line=new fabric.Line([p.x,p.y,p.x,p.y],{stroke:'#00ffcc',strokeWidth:3,selectable:false,evented:false,isRuler:true});const label=new fabric.Text('0 m',{left:p.x+8,top:p.y+8,fontSize:14,fill:'#fff',backgroundColor:'rgba(0,0,0,.75)',selectable:false,evented:false,isRuler:true});vttCanvas.add(line,label);window.__msRulerLine=line;window.__msRulerLabel=label;});
+    vttCanvas.on('mouse:move',opt=>{if(!window.__msRulerActive||!window.__msRulerStart||!window.__msRulerLine)return;const p=vttCanvas.getPointer(opt.e),st=window.__msRulerStart;window.__msRulerLine.set({x2:p.x,y2:p.y});const px=Math.hypot(p.x-st.x,p.y-st.y),cells=px/50,meters=cells*msRulerScale();window.__msRulerLabel.set({left:p.x+8,top:p.y+8,text:`${meters.toFixed(1)} m · ${cells.toFixed(1)} células`});msRulerStatus(`${meters.toFixed(1)} m (${cells.toFixed(1)} células)`,true);vttCanvas.requestRenderAll();});
+    vttCanvas.on('mouse:up',()=>{if(window.__msRulerActive)window.__msRulerStart=null;});
+}
+function canvasToggleRuler() { if(!vttCanvas){window.MS_PLATFORM?.toast('Abra o mapa antes de ativar a régua.','error');return;} msInstallRulerHandlers(); msSetRulerActive(!window.__msRulerActive); }
 
 function canvasDeleteSelected() {
     const active = vttCanvas.getActiveObject();
@@ -3182,7 +3245,6 @@ function renderEnvoltoTree(trees, nature, nodesContainer, svgContainer, scrollWr
     const BASE_W = 800, BASE_H = 700;
     const designScale = 1;
     const count = Math.max(1, trees.length);
-    const rootRadius = 290 * designScale;
     const tierRadii = [235, 190, 150].map(r => r * designScale);
     const completionRadius = 82 * designScale;
 
@@ -3505,7 +3567,6 @@ function relockTree(treeId, level, nature) {
    ===================================================================== */
 
 const MS_REPO_KEY = 'mundosSombriosCharacterReposV3';
-const MS_JOINED_KEY = 'mundosSombriosJoinedReposV3';
 const MS_TABLE_MIGRATION_KEY = 'mundosSombriosTableMigrationV3';
 const MS_CHAR_MIGRATION_KEY = 'mundosSombriosCharMigrationV3';
 const msInMemoryStore = {};
@@ -3544,12 +3605,6 @@ function msEnsureUserRepo(userId) {
     return store[userId];
 }
 
-function msSyncRepoStore(userId, repo) {
-    const store = msEnsureRepoStore();
-    store[userId] = repo;
-    msWriteJSON(MS_REPO_KEY, store);
-    return store;
-}
 
 function msGetAllRepoCharacters(store = msEnsureRepoStore()) {
     return Object.values(store).flatMap(repo => Array.isArray(repo.characters) ? repo.characters : []);
@@ -3559,20 +3614,6 @@ function msGetAllRepoJoinedTables(store = msEnsureRepoStore()) {
     return Object.values(store).flatMap(repo => Array.isArray(repo.joinedTables) ? repo.joinedTables : []);
 }
 
-function msFindCharacterByRef(ownerId, charId) {
-    if (!ownerId || charId === undefined || charId === null) return null;
-    const store = msEnsureRepoStore();
-    const repo = store[ownerId];
-    if (repo && Array.isArray(repo.characters)) {
-        const found = repo.characters.find(c => String(c.id) === String(charId));
-        if (found) return msClone(found);
-    }
-    if (Array.isArray(allCharactersDB)) {
-        const fallback = allCharactersDB.find(c => String(c.ownerId) === String(ownerId) && String(c.id) === String(charId));
-        if (fallback) return msClone(fallback);
-    }
-    return null;
-}
 
 function msNormalizeTable(table) {
     if (!table) return null;
@@ -3645,16 +3686,6 @@ function msSyncCurrentUserView() {
     msWriteJSON('mundosSombriosJoined', allJoinedTablesDB);
 }
 
-function msResolveCurrentUserCharSelection() {
-    const sel = document.getElementById('join-char-select-vtt');
-    if (!sel) return null;
-    const value = sel.value;
-    if (value === '' || value === null || value === undefined) return null;
-    const index = Number(value);
-    if (Number.isNaN(index)) return null;
-    if (!Array.isArray(characters) || !characters[index]) return null;
-    return msClone(characters[index]);
-}
 
 function msGetTableByCodeOrId(idOrCode) {
     const token = String(idOrCode || '').trim();
@@ -3684,7 +3715,11 @@ async function msPersistCharacterToRepo(char, ownerId, charIdOverride = null) {
     const charId = charIdOverride !== null && charIdOverride !== undefined ? charIdOverride : char.id;
     if (charId !== undefined && charId !== null) saved.id = charId;
 
-    // Cache efêmero para a UI; a fonte de verdade é o Supabase.
+    // Persistência remota primeiro: o cache local só é promovido após confirmação.
+    if (!window.MS_DB?.ready || !window.MS_SERVICES?.Characters?.save) throw new Error('Supabase indisponível para persistir a ficha.');
+    const result = await window.MS_SERVICES.Characters.save(saved);
+    if (!result) throw new Error('O Supabase não confirmou o salvamento da ficha. O rascunho foi mantido para recuperação.');
+
     const store = msEnsureRepoStore();
     const repo = store[ownerId] || { characters: [], joinedTables: [], ownedTables: [] };
     const idx = (repo.characters || []).findIndex(c => String(c.id) === String(saved.id));
@@ -3692,67 +3727,13 @@ async function msPersistCharacterToRepo(char, ownerId, charIdOverride = null) {
     store[ownerId] = repo;
     msWriteJSON(MS_REPO_KEY, store);
     msRefreshLegacyCharacterUnion();
-
-    if (!window.MS_DB?.ready) throw new Error('Supabase indisponível para persistir a ficha.');
-    const result = await window.MS_DB.saveCharacter(saved);
-    if (!result) throw new Error('O Supabase não confirmou o salvamento da ficha.');
     window.MS_PLATFORM?.emit('character:saved',{character: saved, remote: result});
     return result;
 }
 
-function msPersistJoinedTableRepo(userId, tableCode, tableName, tableId) {
-    const store = msEnsureRepoStore();
-    const repo = store[userId] || { characters: [], joinedTables: [], ownedTables: [] };
-    if (!Array.isArray(repo.joinedTables)) repo.joinedTables = [];
-    const item = { code: tableCode, name: tableName, tableId: tableId || null, joinedAt: Date.now() };
-    const idx = repo.joinedTables.findIndex(t => String(t.code).toUpperCase() === String(tableCode).toUpperCase());
-    if (idx >= 0) repo.joinedTables[idx] = item;
-    else repo.joinedTables.push(item);
-    store[userId] = repo;
-    msWriteJSON(MS_REPO_KEY, store);
-    msRefreshLegacyJoinedUnion(userId);
-}
 
-function msRemoveJoinedTableRepo(userId, tableCode) {
-    const store = msEnsureRepoStore();
-    const repo = store[userId] || { characters: [], joinedTables: [], ownedTables: [] };
-    repo.joinedTables = (repo.joinedTables || []).filter(t => String(t.code).toUpperCase() !== String(tableCode).toUpperCase());
-    store[userId] = repo;
-    msWriteJSON(MS_REPO_KEY, store);
-    msRefreshLegacyJoinedUnion(userId);
-}
 
-function msLinkParticipantToTable(tableCode, participant) {
-    const table = msGetTableByCodeOrId(tableCode);
-    if (!table) return null;
-    const participants = Array.isArray(table.participants) ? table.participants : [];
-    const clean = {
-        userId: participant.userId,
-        charId: participant.charId,
-        charName: participant.charName || 'Alma Vinculada',
-        ownerId: participant.ownerId || participant.userId,
-        isOwner: !!participant.isOwner,
-        linkedAt: participant.linkedAt || Date.now()
-    };
-    const idx = participants.findIndex(p => String(p.userId) === String(clean.userId) && String(p.charId) === String(clean.charId));
-    if (idx >= 0) participants[idx] = clean;
-    else participants.push(clean);
-    table.participants = participants;
-    msUpsertTable(table);
-    return table;
-}
 
-function msUnlinkParticipantFromTable(tableCode, userId, charId = null) {
-    const table = msGetTableByCodeOrId(tableCode);
-    if (!table) return null;
-    table.participants = (table.participants || []).filter(p => {
-        const sameUser = String(p.userId) === String(userId);
-        if (charId === null || charId === undefined) return !sameUser;
-        return !(sameUser && String(p.charId) === String(charId));
-    });
-    msUpsertTable(table);
-    return table;
-}
 
 function loadUserData() {
     if (!currentUser) return;
@@ -3820,6 +3801,11 @@ function confirmCreateTable() {
 
     currentVttTheme = document.getElementById('new-table-theme').value;
     currentDraftGameMode = document.getElementById('new-table-mode')?.value === 'ocultatun' ? 'ocultatun' : 'exodo';
+    currentDraftSettings = {
+        description: msFieldValue('new-table-description'), era: msFieldValue('new-table-era'), region: msFieldValue('new-table-region'),
+        expansions: msFieldValue('new-table-expansions').split(',').map(x=>x.trim()).filter(Boolean),
+        initialConditions: msFieldValue('new-table-initial'), houseRules: msFieldValue('new-table-rules')
+    };
     document.getElementById('create-table-modal').style.display = 'none';
 
     isDraftMode = true;
@@ -3829,7 +3815,7 @@ function confirmCreateTable() {
 async function saveDraftTable() {
     if(!currentUser || !window.MS_SERVICES?.Games) return false;
     const name = document.getElementById('vtt-table-name')?.innerText?.trim() || 'Nova Fenda';
-    const draft={id:crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),name,code:generateRoomCode(),theme:currentVttTheme,gameMode:currentDraftGameMode,ownerId:currentUser.id,banned:[],participants:[],settings:{}};
+    const draft={id:crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),name,code:generateRoomCode(),theme:currentVttTheme,gameMode:currentDraftGameMode,ownerId:currentUser.id,banned:[],participants:[],settings:msClone(currentDraftSettings||{})};
     try{
         const result=await window.MS_SERVICES.Games.create(draft);
         const remote=result?.data||result;
@@ -4001,48 +3987,35 @@ function toggleEditUI() {
 function buildCharacterPayloadFromBuilder() {
     const skills = [];
     document.querySelectorAll('#skills-list .list-item').forEach(item => skills.push(item.innerHTML));
-
-    const powers = [];
-    document.querySelectorAll('#powers-list .list-item').forEach(item => powers.push(item.innerHTML));
-
+    const powersHtml = [], structuredPowers = [];
+    document.querySelectorAll('#powers-list .list-item').forEach(item => {
+        powersHtml.push(item.innerHTML);
+        if(item.dataset.power){ try{ structuredPowers.push(JSON.parse(item.dataset.power)); }catch(_){ } }
+    });
     const specificData = {};
-    document.querySelectorAll('#specific-content-container input, #specific-content-container select, #specific-content-container textarea').forEach(el => {
-        if (el.id) specificData[el.id] = el.value;
-    });
-
+    document.querySelectorAll('#specific-content-container input, #specific-content-container select, #specific-content-container textarea').forEach(el => { if (el.id) specificData[el.id] = el.type==='checkbox' ? !!el.checked : el.value; });
     const resources = {};
-    document.querySelectorAll('#resource-panel .res-val-input').forEach(inp => {
-        resources[inp.getAttribute('data-type')] = inp.value;
-    });
-
-    const char = {
-        id: editingIndex !== null && ((document.getElementById('screen-vtt').classList.contains('active') && tablePlayers[editingIndex]) ? (tablePlayers[editingIndex].sourceCharId || tablePlayers[editingIndex].id) : (characters[editingIndex]?.id || Date.now())),
+    document.querySelectorAll('#resource-panel .res-val-input').forEach(inp => { resources[inp.getAttribute('data-type')] = inp.value; });
+    const concept={origin:msFieldValue('char-origin'),occupation:msFieldValue('char-occupation'),institution:msFieldValue('char-institution'),status:msFieldValue('char-status'),bonds:msFieldValue('char-bonds'),motivation:msFieldValue('char-motivation'),worldRelation:msFieldValue('char-world-relation')};
+    const editingId = editingIndex !== null
+        ? ((document.getElementById('screen-vtt').classList.contains('active') && tablePlayers[editingIndex])
+            ? (tablePlayers[editingIndex].sourceCharId || tablePlayers[editingIndex].id)
+            : characters[editingIndex]?.id)
+        : null;
+    if (!editingId && !window.__msBuilderCharacterId) window.__msBuilderCharacterId = crypto.randomUUID ? crypto.randomUUID() : ('c-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+    const characterId = editingId || window.__msBuilderCharacterId;
+    return {
+        id: characterId,
         ownerId: currentUser ? currentUser.id : null,
-        name: document.getElementById('char-name').value,
-        mode: editingIndex !== null && editingArchetypeSnapshot.mode ? editingArchetypeSnapshot.mode : currentMode,
+        name: msFieldValue('char-name'), mode: editingIndex !== null && editingArchetypeSnapshot.mode ? editingArchetypeSnapshot.mode : currentMode,
         nature: editingIndex !== null && editingArchetypeSnapshot.nature ? editingArchetypeSnapshot.nature : currentNature,
         className: editingIndex !== null && editingArchetypeSnapshot.className ? editingArchetypeSnapshot.className : currentClass,
-        avatar: currentAvatarBase64,
-        gallery: msClone(currentGallery || []),
-        points: document.getElementById('pts-count').value,
-        stats: {
-            for: document.getElementById('attr-for').value,
-            vig: document.getElementById('attr-vig').value,
-            agi: document.getElementById('attr-agi').value,
-            int: document.getElementById('attr-int').value,
-            prn: document.getElementById('attr-prn').value,
-            pre: document.getElementById('attr-pre').value
-        },
-        resources: resources,
-        skillsHtml: skills,
-        powersHtml: powers,
-        equipment: msClone(currentSheetEquipment || []),
-        specificData: specificData,
-        mercadoDaMorte: currentClass === 'Mercador da Morte'
-            ? msClone(window.__mmDraft || {})
-            : undefined
+        avatar: currentAvatarBase64, gallery: msClone(currentGallery || []), points: document.getElementById('pts-count')?.value || 0,
+        concept,
+        stats: {for:msFieldValue('attr-for'),vig:msFieldValue('attr-vig'),agi:msFieldValue('attr-agi'),int:msFieldValue('attr-int'),prn:msFieldValue('attr-prn'),pre:msFieldValue('attr-pre')},
+        resources, skillsHtml: skills, powers: structuredPowers, powersHtml, evolution: msClone(currentEvolutionLog||[]), equipment: msClone(currentSheetEquipment || []), specificData,
+        mercadoDaMorte: currentClass === 'Mercador da Morte' ? msClone(window.__mmDraft || {}) : undefined
     };
-    return char;
 }
 
 async function saveCharacter(e) {
@@ -4066,13 +4039,16 @@ async function saveCharacter(e) {
             const ownerId = target.sourceOwnerId || target.ownerId || currentUser.id;
             const charId = target.sourceCharId || target.id || payload.id;
             payload.id = charId; payload.ownerId = ownerId; payload.sourceOwnerId = ownerId; payload.sourceCharId = charId;
-            tablePlayers[editingIndex] = { ...msClone(target), ...msClone(payload) };
+            const mergedTarget = { ...msClone(target), ...msClone(payload) };
             const tableId = currentTableData?.id || currentTableData?.tableId || target.tableId;
             if (!tableId || !window.MS_DB?.ready || typeof window.MS_DB.updateCharacterAsGM !== 'function') {
                 throw new Error('A edição de ficha pelo Mestre exige uma mesa online sincronizada.');
             }
+            window.MS_ONLINE_UI?.saveBuilderDraft?.(payload);
             await window.MS_DB.updateCharacterAsGM(tableId, payload);
+            tablePlayers[editingIndex] = mergedTarget;
             msPersistCharacterToRepo(payload, ownerId, charId).catch(error => console.warn('[Mundos Sombrios] Cache da ficha GM:', error));
+            window.MS_ONLINE_UI?.clearBuilderDraft?.();
             renderVttCards();
             closeBuilder();
             window.MS_PLATFORM?.setStatus('builder','success');
@@ -4080,16 +4056,18 @@ async function saveCharacter(e) {
             return true;
         }
 
-        if (editingIndex !== null) characters[editingIndex] = msClone(payload);
-        else characters.push(msClone(payload));
-        saveGlobalCharacters();
+        window.MS_ONLINE_UI?.saveBuilderDraft?.(payload);
+        const wasEditing = editingIndex !== null;
         await window.MS_PLATFORM?.withPersistence(
             () => msPersistCharacterToRepo(payload, currentUser.id, payload.id),
-            { entity: 'character', operation: editingIndex !== null ? 'update' : 'create', id: payload.id }
+            { entity: 'character', operation: wasEditing ? 'update' : 'create', id: payload.id }
         );
+        if (wasEditing) characters[editingIndex] = msClone(payload); else characters.push(msClone(payload));
+        saveGlobalCharacters();
+        window.MS_ONLINE_UI?.clearBuilderDraft?.();
         window.MS_PLATFORM?.setStatus('builder','success');
-        window.MS_PLATFORM?.toast(editingIndex !== null ? 'Edição sincronizada com sucesso.' : 'Alma forjada e sincronizada.','success');
-        window.MS_PLATFORM?.emit('character:changed',{character:msClone(payload), mode: editingIndex !== null ? 'edit' : 'create'});
+        window.MS_PLATFORM?.toast(wasEditing ? 'Edição sincronizada com sucesso.' : 'Alma forjada e sincronizada.','success');
+        window.MS_PLATFORM?.emit('character:changed',{character:msClone(payload), mode: wasEditing ? 'edit' : 'create'});
         closeBuilder();
         return true;
     } catch (error) {
@@ -4148,6 +4126,7 @@ function syncVttCharacterToOwner(char) {
 function loadCharacterToBuilder(index, sourceArray = characters, restrictToIdentity = false) {
     editingIndex = index;
     const char = sourceArray[index];
+    window.__msBuilderCharacterId = char?.sourceCharId || char?.id || null;
     editingArchetypeSnapshot = { mode: char?.mode || null, nature: char?.nature || null, className: char?.className || null };
     currentMode = char.mode || 'exodo';
     // Open/rebuild the builder before touching its dependent selects.
@@ -4164,6 +4143,9 @@ function loadCharacterToBuilder(index, sourceArray = characters, restrictToIdent
 
     const nameEl = document.getElementById('char-name');
     if (nameEl) nameEl.value = char.name || '';
+    const concept=char.concept||{};
+    const conceptMap={'char-origin':'origin','char-occupation':'occupation','char-institution':'institution','char-status':'status','char-bonds':'bonds','char-motivation':'motivation','char-world-relation':'worldRelation'};
+    Object.entries(conceptMap).forEach(([id,key])=>{const el=document.getElementById(id);if(el)el.value=concept[key]||'';});
 
     if (char.avatar) {
         currentAvatarBase64 = char.avatar;
@@ -4206,14 +4188,13 @@ function loadCharacterToBuilder(index, sourceArray = characters, restrictToIdent
 
     const powersList = document.getElementById('powers-list');
     powersList.innerHTML = '';
-    if (char.powersHtml) {
-        char.powersHtml.forEach(pwHtml => {
-            const div = document.createElement('div');
-            div.className = 'list-item';
-            div.innerHTML = pwHtml;
-            powersList.appendChild(div);
-        });
+    if (Array.isArray(char.powers) && char.powers.length) {
+        char.powers.forEach(power => powersList.appendChild(renderPowerItem(power)));
+    } else if (char.powersHtml) {
+        char.powersHtml.forEach(pwHtml => { const div=document.createElement('div');div.className='list-item';div.innerHTML=pwHtml;powersList.appendChild(div); });
     }
+    currentEvolutionLog = Array.isArray(char.evolution) ? msClone(char.evolution) : [];
+    renderEvolutionEntries();
 
     currentSheetEquipment = Array.isArray(char.equipment) ? msClone(char.equipment) : [];
     renderEquipmentSheet();
@@ -4222,6 +4203,7 @@ function loadCharacterToBuilder(index, sourceArray = characters, restrictToIdent
         document.getElementById('btn-tab-stats').style.display = 'none';
         document.getElementById('btn-tab-skills').style.display = 'none';
         document.getElementById('btn-tab-powers').style.display = 'none';
+        const evoBtn=document.getElementById('btn-tab-evolution'); if(evoBtn)evoBtn.style.display='none';
         document.getElementById('btn-tab-equipment').style.display = 'none';
         isEditMode = false;
         toggleEditUI();
@@ -4229,6 +4211,7 @@ function loadCharacterToBuilder(index, sourceArray = characters, restrictToIdent
         document.getElementById('btn-tab-stats').style.display = '';
         document.getElementById('btn-tab-skills').style.display = '';
         document.getElementById('btn-tab-powers').style.display = '';
+        const evoBtn=document.getElementById('btn-tab-evolution'); if(evoBtn)evoBtn.style.display='';
         document.getElementById('btn-tab-equipment').style.display = '';
         const inVTTNow = document.getElementById('screen-vtt')?.classList.contains('active');
         isEditMode = !inVTTNow || isVttGM;
@@ -4287,7 +4270,7 @@ function beginNewCharacter() {
         if(missing.length){ console.error('[Mundos Sombrios] Construtor incompleto:',missing); alert('A janela de criação não foi carregada corretamente. Recarregue o site.'); return false; }
         const opened=initBuilderForSelectedMode();
         if(opened !== false) return true;
-        currentMode=mode; editingIndex=null; editingArchetypeSnapshot={mode:null,nature:null,className:null}; isHydratingCharacter=false; currentAvatarBase64=''; currentGallery=[]; currentPowerDraft=[]; currentSheetEquipment=[]; currentNature=''; currentClass=''; isEditMode=true;
+        currentMode=mode; editingIndex=null; editingArchetypeSnapshot={mode:null,nature:null,className:null}; isHydratingCharacter=false; currentAvatarBase64=''; currentGallery=[]; currentPowerDraft=[]; currentEvolutionLog=[]; currentSheetEquipment=[]; currentNature=''; currentClass=''; isEditMode=true;
         document.getElementById('char-form').reset(); document.getElementById('char-mode').value=mode; populateSelects(mode); startBuilder(mode); toggleEditUI(); return true;
     } catch(err) { console.error('[Mundos Sombrios] DESPERTAR NOVA ALMA falhou:',err); alert('Não foi possível abrir a criação da ficha. O erro foi registrado no console.'); return false; }
 }
@@ -4329,10 +4312,13 @@ function initBuilderForSelectedMode() {
     }
 
     editingIndex = null;
+    window.__msBuilderCharacterId = crypto.randomUUID ? crypto.randomUUID() : ('c-' + Date.now() + '-' + Math.random().toString(36).slice(2));
     currentAvatarBase64 = '';
     currentGallery = [];
     currentPowerDraft = [];
+    currentEvolutionLog = [];
     currentSheetEquipment = [];
+    if (typeof renderEvolutionEntries === 'function') renderEvolutionEntries();
     isEditMode = true;
 
     document.getElementById('char-form').reset();
@@ -4417,13 +4403,16 @@ function initBuilderForSelectedMode() {
             selectedGameMode = mode;
             currentMode = mode;
             editingIndex = null;
+            window.__msBuilderCharacterId = crypto.randomUUID ? crypto.randomUUID() : ('c-' + Date.now() + '-' + Math.random().toString(36).slice(2));
             currentNature = '';
             currentClass = '';
             currentAvatarBase64 = '';
             currentGallery = [];
             currentPowerDraft = [];
+            currentEvolutionLog = [];
             currentSheetEquipment = [];
             currentUnlockedNodes = [];
+            if (typeof renderEvolutionEntries === 'function') renderEvolutionEntries();
             isEditMode = true;
 
             const form = document.getElementById('char-form');
@@ -6382,9 +6371,8 @@ function efBindTreeViewControls() {
         reset.addEventListener('click', e=>{e.preventDefault();if(!isEditMode)return;efResetTablePositions('O Envolto (Horror Cósmico)');});
     }
 
-    const resizeKey = 'ef-resize-bound';
-    if (frame.dataset[resizeKey] !== '1') {
-        frame.dataset[resizeKey]='1';
+    if (frame.dataset.efResizeBound !== '1') {
+        frame.dataset.efResizeBound='1';
         const onResize = () => { if(!efTreeZoomManual) efFitTreeViewport(wrapper,frame); };
         window.addEventListener('resize', onResize, {passive:true});
     }

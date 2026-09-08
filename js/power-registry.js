@@ -57,14 +57,6 @@ function ensureStyle(){
  `;
  document.head.appendChild(s);
 }
-function fillPowerSelect(){
- const data=sourceData(), sel=document.getElementById('pb-potency-name');
- if(!sel||!data.length)return;
- const current=sel.value;
- sel.innerHTML=data.map(p=>`<option value="${esc(p.name)}">${esc(p.name)}</option>`).join('');
- if(data.some(p=>p.name===current))sel.value=current;
- else sel.value=data[0].name;
-}
 function renderDetail(name,cap){
  const data=sourceData(), p=data.find(x=>x.name===name)||data[0], box=document.getElementById('power-desc-box');
  if(!p||!box)return;

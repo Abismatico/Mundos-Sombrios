@@ -4,6 +4,8 @@
   window.openMasterShield=function(){
     const role=String(window.currentUser?.role||'').toLowerCase();
     if(role!=='mestre' && role!=='admin'){ alert('Acesso restrito a Mestres e ADM.'); return; }
+    const badge=document.getElementById('master-shield-role');
+    if(badge) badge.textContent=role==='admin'?'ARCONTE · ADM':'MESTRE AUTORIZADO';
     if(typeof window.showScreen==='function') window.showScreen('screen-master-shield');
     setTimeout(()=>window.msShieldInit?.(),50);
   };
@@ -71,8 +73,25 @@
   });
 })();
 
-// O restante do arquivo permanece inalterado; a correção é exclusivamente a classe
-// usada pela navegação do Escudo: .master-shield-nav, conforme o HTML atual.
+/* ══════════ ECONOMIA E ACERVO MECÂNICO ══════════ */
+(function(){
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const cards=(items, extra='')=>`<div class="ms-shield-grid">${items.map(x=>`<article class="ms-shield-card"><span class="stamp">${esc(x.tipo||x.tema||x.modo||'REGISTRO')}</span><h4>${esc(x.nome||x.titulo)}</h4><p>${esc(x.desc||x.nota||x.texto||'')}</p>${x.stats?`<p><b>Base:</b> ${esc(x.stats)}</p>`:''}${x.extra?`<p>${esc(x.extra)}</p>`:''}${extra}</article>`).join('')}</div>`;
+  const econ=qs('#ms-v-economia');
+  if(econ){econ.innerHTML=`<div class="stamp amb">ARQUIVO ECONÔMICO — ANO 100</div><h1 class="vt">Economia das Potências</h1><p class="sub">// Cotações em relação ao Dólar Federal e trajetória histórica das moedas centrais</p><div class="ms-shield-grid">${ECON.moedas.map(m=>`<article class="ms-shield-card"><h4>${esc(m.nome)}</h4><p><b>Cotação atual:</b> ${esc(m.cota[m.cota.length-1]??'—')} DF</p><p>${esc(m.nota)}</p><small>${ECON.periodos.map((p,i)=>`${esc(p)}: ${esc(m.dados[i])}`).join(' · ')}</small></article>`).join('')}</div>`;}
+  function renderClasses(target, predicate, title, subtitle){const el=qs(target);if(!el)return;const data=CLASSES.filter(predicate);el.innerHTML=`<div class="stamp">COMPÊNDIO DE ARQUÉTIPOS</div><h1 class="vt">${title}</h1><p class="sub">${subtitle}</p><input class="ms-shield-search" placeholder="Filtrar classes, castas ou arquétipos..." aria-label="Filtrar compêndio"><div data-results>${cards(data)}</div>`;const input=el.querySelector('input'),out=el.querySelector('[data-results]');input.addEventListener('input',()=>{const q=input.value.toLowerCase();out.innerHTML=cards(data.filter(x=>`${x.nome} ${x.tipo} ${x.desc} ${x.extra}`.toLowerCase().includes(q)))})}
+  renderClasses('#ms-v-exodo',x=>String(x.modo).includes('Êxodo'),'Êxodo · Assimilação','// Categorias, arquétipos e recursos de sobrevivência no mundo do Gene Êxodo');
+  const exodo=qs('#ms-v-exodo');
+  if(exodo&&Array.isArray(ESTIGMAS)){exodo.insertAdjacentHTML('beforeend',`<section class="ms-shield-section"><div class="stamp amb">BIOLOGIA DO GENE ÊXODO</div><h2 class="vt" style="font-size:25px">Estigmas</h2><p class="sub">// Custo, benefício e risco das manifestações biológicas</p>${cards(ESTIGMAS.map(x=>({tipo:`CUSTO ${x.custo}`,nome:x.nome,desc:x.desc,extra:`${x.bonus} · Risco: ${x.risco}`})))}</section>`);}
+  renderClasses('#ms-v-ocultatun',x=>String(x.modo).includes('Ocultatun'),'Ocultatun · Ecos','// Carreiras e Agentes Designados para investigação, contenção e transgressão');
+  renderClasses('#ms-v-ordem',x=>String(x.modo).includes('Ordem'),'Ordem dos Sete','// Castas e vias de Recordação para aqueles que reconhecem a natureza divina');
+  renderClasses('#ms-v-envolto',x=>String(x.modo).includes('Envolto'),'Ecos do Envolto','// Classes marcadas pela corrosão ontológica e pelo Espaço Final');
+  const trees=qs('#ms-v-arvores');
+  if(trees){const groups=Object.entries(ARVORES);trees.innerHTML=`<div class="stamp">ÁRVORES DE HABILIDADE</div><h1 class="vt">Progressões e Ascensões</h1><p class="sub">// Consulta por família, requisito e estágio</p><input class="ms-shield-search" id="ms-tree-search" placeholder="Pesquisar potência, ascensão, requisito..."><div id="ms-tree-results"></div>`;const draw=q=>{q=(q||'').toLowerCase();qs('#ms-tree-results').innerHTML=groups.map(([group,arr])=>{const filtered=(arr||[]).filter(x=>`${x.nome} ${x.tema} ${(x.tiers||[]).map(t=>t.t+' '+t.d).join(' ')}`.toLowerCase().includes(q));if(!filtered.length)return'';return `<h3 class="vt" style="font-size:22px">${esc(group.toUpperCase())}</h3>${cards(filtered.map(x=>({...x,desc:(x.tiers||[]).map(t=>`${t.t}: ${t.d}`).join(' • ')})))}`}).join('')||'<div class="panel">Nenhum resultado.</div>'};draw('');qs('#ms-tree-search').addEventListener('input',e=>draw(e.target.value));}
+  const files=qs('#ms-v-arquivos');
+  if(files){const favKey='msShieldFavoritesV1';const favs=()=>{try{return JSON.parse(localStorage.getItem(favKey)||'[]')}catch(_){return[]}};const setFav=a=>localStorage.setItem(favKey,JSON.stringify(a));files.innerHTML=`<div class="stamp">ACERVO INTEGRAL</div><h1 class="vt">Arquivos & Referências</h1><p class="sub">// Busca textual no corpus editorial · favoritos locais por Mestre</p><input class="ms-shield-search" id="ms-doc-search" placeholder="Pesquisar termo, regra, lugar ou entidade..."><div id="ms-doc-results"></div>`;const draw=q=>{q=(q||'').trim().toLowerCase();let data=DOCS;if(q)data=DOCS.filter(d=>`${d.titulo} ${d.texto}`.toLowerCase().includes(q));data=data.slice(0,q?30:12);const active=favs();qs('#ms-doc-results').innerHTML=data.map(d=>{const snippet=String(d.texto||'').replace(/\s+/g,' ').slice(0,520);return `<article class="ms-shield-card" data-doc="${esc(d.id)}"><div style="display:flex;justify-content:space-between;gap:8px"><h4>${esc(d.titulo)}</h4><button type="button" data-fav="${esc(d.id)}">${active.includes(d.id)?'★':'☆'}</button></div><p>${esc(snippet)}${snippet.length>=520?'…':''}</p><small>Fonte editorial: ${esc(d.titulo)} · ID ${esc(d.id)}</small></article>`}).join('')||'<div class="panel">Nenhum documento corresponde à busca.</div>';qs('#ms-doc-results').querySelectorAll('[data-fav]').forEach(b=>b.onclick=()=>{const a=favs(),id=b.dataset.fav,i=a.indexOf(id);if(i>=0)a.splice(i,1);else a.push(id);setFav(a);draw(q)})};draw('');qs('#ms-doc-search').addEventListener('input',e=>draw(e.target.value));}
+})();
+
 
   root.querySelectorAll('.master-shield-nav button, .ms-shield-nav button').forEach(b=>b.addEventListener('click',()=>msGo(b.dataset.msView)));
   window.msShieldNavigate=msGo;

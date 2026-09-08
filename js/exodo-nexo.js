@@ -130,7 +130,6 @@
     const d=document.getElementById('nexo-detail');if(!d)return;
     d.innerHTML=`<h4>${esc(p.name)} · ${esc(p.short)}</h4><p>${esc(p.desc)}</p><div class="form-group" style="margin:8px 0"><label style="font-size:.62rem;color:#7beede">Nível de Capacidade</label><select id="nexo-power-select"><option value="${esc(p.name)}">${esc(p.name)}</option></select><select id="nexo-cap-select" style="margin-left:6px;width:120px">${p.rows.map(r=>`<option value="${r[0]}" ${Number(r[0])===cap?'selected':''}>Capacidade ${r[0]}</option>`).join('')}</select></div><div class="nexo-levels">${p.rows.map(r=>`<button type="button" class="nexo-level ${Number(r[0])===cap?'active':''}" data-cap="${r[0]}">CAP ${r[0]}<br><span>Est. ${r[4]}</span></button>`).join('')}</div><div class="nexo-table-wrap"><table class="nexo-table"><thead><tr><th>Cap.</th><th>Limite / Intensidade</th><th>Efeito / Escala</th><th>Exemplo / Referência</th><th>Estresse</th></tr></thead><tbody>${p.rows.map(r=>`<tr class="${Number(r[0])===cap?'active':''}"><td>${esc(r[0])}</td><td>${esc(r[1])}</td><td>${esc(r[2])}</td><td>${esc(r[3])}</td><td>${esc(r[4])}</td></tr>`).join('')}</tbody></table></div>`;
     d.querySelectorAll('.nexo-level').forEach(b=>b.onclick=()=>selectPotency(p.id,Number(b.dataset.cap)));
-    syncHiddenPower(p.name,cap);
   }
 
   function installHooks(){

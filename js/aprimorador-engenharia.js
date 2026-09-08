@@ -64,7 +64,6 @@
   }
 
   function getInt(){ return num(document.getElementById('attr-int')?.value); }
-  function getVig(){ return num(document.getElementById('attr-vig')?.value); }
   function dsMax(){
     const raw=(getInt()+state.tecnologia)*3;
     const bonus=(currentMastery()?.bonus||0);
@@ -128,8 +127,6 @@
     renderLogs();
   }
 
-  function masteryName(level){ return mastery.find(m=>m.level===level)?.title || `Nível ${level}`; }
-  function isUnlocked(level){ return state.masteryLevel>=level; }
 
   function baseMarkup(){
     return `

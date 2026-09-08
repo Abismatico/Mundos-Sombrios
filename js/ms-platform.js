@@ -153,17 +153,32 @@
         const errors = [];
         const warnings = [];
         const char = character && typeof character === 'object' ? character : {};
-        if (!String(char.name || '').trim()) errors.push('O personagem precisa de um nome.');
-        if (!String(char.mode || '').trim()) warnings.push('O modo de jogo ainda não foi definido.');
-        if (!String(char.nature || '').trim()) warnings.push('A origem/natureza ainda não foi definida.');
-        if (!String(char.className || '').trim()) warnings.push('A classe/arquetipo ainda não foi definida.');
+        const name = String(char.name || '').trim();
+        if (!name) errors.push('O personagem precisa de um nome.');
+        if (!String(char.mode || '').trim()) errors.push('O modo de jogo precisa ser definido.');
+        if (!String(char.nature || '').trim()) errors.push('Escolha uma natureza/expansão antes de salvar.');
+        if (!String(char.className || '').trim()) errors.push('Escolha uma classe antes de salvar.');
+
         const stats = char.stats && typeof char.stats === 'object' ? char.stats : {};
+        const limits = char.mode === 'ocultatun' ? { min: -2, max: 10 } : { min: -2, max: 10 };
         ['for','vig','agi','int','prn','pre'].forEach(key => {
-            if (stats[key] !== undefined && (Number.isNaN(Number(stats[key])) || Number(stats[key]) < 0)) {
-                errors.push(`Atributo ${key.toUpperCase()} inválido.`);
+            if (stats[key] === undefined || stats[key] === null || stats[key] === '') {
+                errors.push(`Atributo ${key.toUpperCase()} não definido.`);
+                return;
             }
+            const value = Number(stats[key]);
+            if (!Number.isFinite(value)) errors.push(`Atributo ${key.toUpperCase()} inválido.`);
+            else if (value < limits.min || value > limits.max) errors.push(`Atributo ${key.toUpperCase()} deve ficar entre ${limits.min} e ${limits.max}.`);
         });
-        if (Array.isArray(char.powersHtml) && char.powersHtml.some(p => typeof p !== 'string')) warnings.push('Há poderes em formato não textual; revise antes de exportar.');
+
+        const points = Number(char.points ?? 0);
+        if (!Number.isFinite(points)) warnings.push('O saldo de pontos livres não é numérico.');
+        if (Array.isArray(char.powersHtml) && char.powersHtml.some(p => typeof p !== 'string')) warnings.push('Há poderes legados em formato não textual; revise antes de exportar.');
+        if (Array.isArray(char.powers) && char.powers.some(p => !p || typeof p !== 'object' || !String(p.name || '').trim())) errors.push('Há um poder estruturado sem nome.');
+        if (char.concept && typeof char.concept === 'object') {
+            if (!String(char.concept.motivation || '').trim()) warnings.push('Motivação ainda não registrada.');
+            if (!String(char.concept.origin || '').trim()) warnings.push('Origem/nacionalidade ainda não registrada.');
+        }
         if (strict && warnings.length) errors.push(...warnings);
         return Object.freeze({ valid: errors.length === 0, errors, warnings });
     }
@@ -232,8 +247,11 @@
         }, true);
     }
 
+    // Compatibilidade com módulos legados que esperam um sanitizador global.
+    if (typeof window.escHtml !== 'function') window.escHtml = escapeHtml;
+
     window.MS_PLATFORM = Object.freeze({
-        version: '0.66.1',
+        version: '0.67.0',
         RESOURCE_KEYS,
         clone,
         on,

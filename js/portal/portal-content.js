@@ -1,4 +1,4 @@
-/* Mundos Sombrios — Portal Oficial / Conteúdo V0.61.3
+/* Mundos Sombrios — Portal Oficial / Conteúdo V2.2
    Fonte única de conteúdo público administrável pelo ADM.
 */
 (function () {
@@ -34,7 +34,7 @@
       { id: 'world-1', key: 'exodo', title: 'Êxodo: Assimilação', eyebrow: 'SALA DE REGISTROS SECRETOS', description: 'Um mundo de protocolos, assimilação e sobrevivência entre registros que deveriam permanecer fechados.', accent: 'tech' },
       { id: 'world-2', key: 'ocultatun', title: 'Ocultatun Ecos', eyebrow: 'BIBLIOTECA DOS SELOS', description: 'Um mundo de rituais, anomalias, símbolos e ecos que atravessam o conhecimento proibido.', accent: 'arcane' }
     ],
-    portalVersion: 'V0.61.3'
+    portalVersion: 'V2.2'
   };
 
   let current = JSON.parse(JSON.stringify(defaults));

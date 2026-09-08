@@ -1,6 +1,6 @@
 {
-  "name": "mundos-sombrios",
-  "version": "0.66.0",
+  "name": "seite-mundos-sombrios",
+  "version": "2.2.0",
   "private": true,
   "type": "module",
   "description": "Portal e plataforma de RPG Mundos Sombrios",

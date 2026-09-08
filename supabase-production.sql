@@ -557,6 +557,53 @@ do $$ begin if not exists(select 1 from pg_publication_tables where pubname='sup
 do $$ begin if not exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='table_state') then alter publication supabase_realtime add table public.table_state; end if; end $$;
 do $$ begin if not exists(select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='tables') then alter publication supabase_realtime add table public.tables; end if; end $$;
 
+-- 13.1) Autorização de Broadcast + Presence para canais privados `ms:table:<id>`.
+-- No painel Supabase > Realtime > Settings, mantenha "Allow public access" DESABILITADO.
+create or replace function public.can_access_ms_realtime_topic(p_topic text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select case
+    when p_topic not like 'ms:table:%' then false
+    else exists(
+      select 1 from public.tables tb
+      where tb.id = substring(p_topic from length('ms:table:') + 1)
+        and (
+          tb.owner_id = auth.uid()::text
+          or exists(
+            select 1 from public.table_members tm
+            where tm.table_id = tb.id
+              and tm.user_id = auth.uid()
+              and tm.status = 'active'
+          )
+        )
+    )
+  end;
+$$;
+revoke all on function public.can_access_ms_realtime_topic(text) from public;
+grant execute on function public.can_access_ms_realtime_topic(text) to authenticated;
+
+drop policy if exists ms_realtime_table_select on realtime.messages;
+drop policy if exists ms_realtime_table_insert on realtime.messages;
+create policy ms_realtime_table_select
+on realtime.messages for select to authenticated
+using (
+  realtime.messages.extension in ('broadcast','presence')
+  and realtime.topic() like 'ms:table:%'
+  and public.can_access_ms_realtime_topic((select realtime.topic()))
+);
+create policy ms_realtime_table_insert
+on realtime.messages for insert to authenticated
+with check (
+  realtime.messages.extension in ('broadcast','presence')
+  and realtime.topic() like 'ms:table:%'
+  and public.can_access_ms_realtime_topic((select realtime.topic()))
+);
+
+
 -- 14) Updated-at triggers nas tabelas novas.
 drop trigger if exists trg_table_members_updated_at on public.table_members;
 create trigger trg_table_members_updated_at before update on public.table_members for each row execute function public.touch_updated_at();

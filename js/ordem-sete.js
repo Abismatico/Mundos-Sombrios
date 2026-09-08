@@ -101,8 +101,6 @@
     }
   ];
 
-  const levelRows = ASC.map(a => a.levels.map((text,i) => ({cap:i+1,text,asc:a.name}))).flat();
-
   function injectStyle(){
     if($('#ordem-sete-v44-style')) return;
     const st=document.createElement('style'); st.id='ordem-sete-v44-style'; st.textContent=`

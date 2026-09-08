@@ -540,21 +540,7 @@ window.ENVOLTO_RITUALS_CANONICAL_SOURCE = 'A corrupção antológica O Envolto �
   // Mercado da Morte: legacy v0.12 renderer/data hooks removed.
   // Canonical ownership is v0.16 (renderMerc16 + normalizeMerc16 + persistence hooks).
 
-  // ---------- Cards: class/expansion symbol, not 3D cube; cross-mode opening ----------
-  const symbolMap={
-    'Mercador da Morte':'⚔','Carrasco Cinzento':'☩','Alquerino':'⚗','Hermético':'☿','Taumatúrgico':'✦','Esotérico':'◈','Combatente':'✦','Especialista':'⌘','Sobrevivente':'◉','Engenheiro Biológico':'🧬','Envolto':'∅','Arauto':'◌','Tocado':'◒','Condenado':'⟁'
-  };
-  function expansionSymbol(ch){ const n=safe(ch.nature), c=ch.className||''; if(c&&symbolMap[c])return symbolMap[c]; if(n.includes('envo'))return '∅'; if(n.includes('ordem'))return '✦'; if(n.includes('linhagem'))return '🧬'; if(n.includes('player'))return '⌘'; return ch.mode==='exodo'?'◈':'☉'; }
-  function decorateCards(){
-    document.querySelectorAll('#character-list .card-wrapper').forEach((w,i)=>{
-      const ch=characters[i]; if(!ch)return; const host=w.querySelector('.card-3d-icon-wrapper'); if(!host)return;
-      host.innerHTML=`<div class="class-symbol-float" aria-label="Símbolo da classe ou expansão">${esc(expansionSymbol(ch))}</div>`;
-      const task=ch.mercadoDaMorte?.forceTasks?.[0]; const card=w.querySelector('.soul-card'); if(task&&card){ let badge=card.querySelector('.force-task-card-badge'); if(!badge){badge=document.createElement('div');badge.className='force-task-card-badge';card.appendChild(badge);} badge.innerHTML=forceTaskSvg(task.name); } else card.querySelector('.force-task-card-badge')?.remove();
-    });
-  }
-  const oldRenderChars=window.renderCharList;
-  if(typeof oldRenderChars==='function') window.renderCharList=function(){ const r=oldRenderChars.apply(this,arguments); decorateCards(); return r; };
-  const oldHandle=window.handleCardClick;
+  // ---------- Cards: cross-mode opening (símbolos pertencem à camada canônica v0.16) ----------
   window.handleCardClick=function(index,wrapper){
     const ch=characters[index]; if(!ch)return false;
     const cardMode=(ch.mode==='ocultatun'||ch.mode==='exodo')?ch.mode:null;
@@ -691,7 +677,7 @@ window.ENVOLTO_RITUALS_CANONICAL_SOURCE = 'A corrupção antológica O Envolto �
   }
   function augmentCardSymbols(){
     const cards=[...document.querySelectorAll('#character-list .card-wrapper')];
-    cards.forEach((w,i)=>{const char=characters?.[i]; if(!char)return;w.querySelector('.card-3d-icon-wrapper')?.remove();w.querySelector('.v16-card-symbol-layer')?.remove();const layer=document.createElement('div');layer.className='v16-card-symbol-layer';layer.innerHTML=sigilSmallForClass(char)+(Array.isArray(char?.mercadoDaMorte?.forceTasks)?char.mercadoDaMorte.forceTasks.map(t=>`<span class="v16-card-task-sigil task-${String(t.id||'').replace(/[^a-z0-9-]/gi,'-')}" title="${esc(t.name||t.code||'Força-Tarefa')}">${taskSvg(t)}</span>`).join(''):'');w.appendChild(layer);});
+    cards.forEach((w,i)=>{const char=characters?.[i]; if(!char)return;w.querySelector('.v16-card-symbol-layer')?.remove();const layer=document.createElement('div');layer.className='v16-card-symbol-layer';layer.innerHTML=sigilSmallForClass(char)+(Array.isArray(char?.mercadoDaMorte?.forceTasks)?char.mercadoDaMorte.forceTasks.map(t=>`<span class="v16-card-task-sigil task-${String(t.id||'').replace(/[^a-z0-9-]/gi,'-')}" title="${esc(t.name||t.code||'Força-Tarefa')}">${taskSvg(t)}</span>`).join(''):'');w.appendChild(layer);});
   }
   const oldRenderCards=window.renderCharList;
   if(typeof oldRenderCards==='function')window.renderCharList=function(){const r=oldRenderCards.apply(this,arguments);setTimeout(augmentCardSymbols,0);return r;};
@@ -723,7 +709,6 @@ window.ENVOLTO_RITUALS_CANONICAL_SOURCE = 'A corrupção antológica O Envolto �
   window.openV16ForceTaskWindow=function(){let m=document.getElementById('v16-force-task-window');if(!m){m=document.createElement('div');m.id='v16-force-task-window';m.className='v16-modal';document.body.appendChild(m);}const d=mm(),active=new Set(d.forceTasks.map(t=>t.id));m.innerHTML=`<div class="v16-modal-card v16-task-modal"><header><div><span class="eyebrow">MERCADO DA MORTE · COMANDO</span><h3>Forças-Tarefa</h3><p>Você pode pertencer a múltiplas unidades. Selecione apenas as manobras concedidas por cada uma.</p></div><button class="v13-modal-close" onclick="this.closest('.v16-modal').remove()">×</button></header><div class="v16-force-grid">${TASKS.map(t=>{const cur=d.forceTasks.find(x=>x.id===t.id), sel=active.has(t.id), idxs=cur?.selectedManeuverIndexes??t.maneuvers.map((_,i)=>i);return `<article class="v16-force-card ${sel?'active':''}"><div class="v16-force-card-top"><div>${taskSvg(t)}</div><div><b>${esc(t.code)}</b><h4>${esc(t.name)}</h4><p>${esc(t.description)}</p></div><button type="button" class="souls-btn small-btn" onclick="v16SelectTask('${t.id}')">${sel?'REMOVER':'DESIGNAR'}</button></div><div class="v16-force-maneuvers">${t.maneuvers.map((mn,i)=>`<label><input type="checkbox" ${idxs.includes(i)?'checked':''} ${sel?'':'disabled'} onchange="v16ToggleTaskManeuver('${t.id}',${i})"><span>${esc(mn)}</span></label>`).join('')}</div></article>`;}).join('')}</div></div>`;};
 
   // Reuse the same construction fields as the official equipment/device forge.
-  let forgeOriginal=null;
   function addSignatureIconField(){
     const grid=q('#forge-grid'); if(!grid||q('#v16-forge-icon'))return;
     const wrap=document.createElement('div');wrap.className='form-group';wrap.innerHTML=`<label>Miniatura do item</label><select id="v16-forge-icon">${Object.entries(ARSENAL_MINI).map(([k,v])=>`<option value="${k}">${esc(k)} ${esc(v)}</option>`).join('')}</select>`;grid.appendChild(wrap);
@@ -1497,7 +1482,7 @@ if(typeof window.syncEnvoltoTab!=='function'){
   // ================================================================
   function stabilizeMarket(){
     const host=q('#specific-content-container'); if(!host||currentCtx().cls!=='Mercador da Morte')return;
-    const head=host.querySelector('.death-market-head'); const modules=[...host.querySelectorAll('.death-module, .v16-death-module, .v14-death-module')];
+    const head=host.querySelector('.death-market-head'); const modules=[...host.querySelectorAll('.death-module')];
     if(!head)return;
     let shell=host.querySelector('.v18-market-stable');
     if(!shell){
@@ -1601,86 +1586,14 @@ if(typeof window.syncEnvoltoTab!=='function'){
   }
 
 
-  /* ---------- IMORTALIZAÇÃO: uma única fonte de persistência ---------- */
-  window.saveCharacter = function saveCharacterV045(event){
-    if(event && typeof event.preventDefault === 'function') event.preventDefault();
-
-    if(!window.currentUser && typeof currentUser !== 'undefined' && currentUser){
-      window.currentUser = currentUser;
-    }
-    if(typeof currentUser === 'undefined' || !currentUser){
-      alert('A sessão não está autenticada. A ficha não foi apagada nem redirecionada. Entre novamente para salvar.');
-      return false;
-    }
-    if(typeof isEditMode !== 'undefined' && !isEditMode) return false;
-
-    try {
-      const builder = document.getElementById('screen-builder');
-      const inVtt = !!(builder && builder.classList.contains('overlay') && typeof isVttGM !== 'undefined' && isVttGM && Array.isArray(tablePlayers) && editingIndex !== null && tablePlayers[editingIndex]);
-
-      /* Captura os estados específicos antes de construir o payload. */
-      if(typeof currentClass !== 'undefined'){
-        if(currentClass === 'Mercador da Morte' && typeof mm === 'function') window.__mmDraft = clone(mm());
-        
-        if(typeof isEnvolto === 'function' && isEnvolto() && typeof envState === 'function') window.__envRitualDraft = clone(envState());
-        if(currentClass === 'Hermético' && typeof hermeticCustoms === 'function') window.__hermeticCustoms = clone(hermeticCustoms());
-      }
-
-      if(typeof buildCharacterPayloadFromBuilder !== 'function') throw new Error('Construtor de ficha indisponível.');
-      const payload = clone(buildCharacterPayloadFromBuilder());
-      if(!payload || typeof payload !== 'object') throw new Error('O construtor não produziu uma ficha válida.');
-
-      const nowId = () => `char-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
-
-      if(inVtt){
-        const target = tablePlayers[editingIndex];
-        const ownerId = target.sourceOwnerId || target.ownerId || currentUser.id;
-        const charId = target.sourceCharId || target.id || payload.id || nowId();
-        payload.id = charId;
-        payload.ownerId = ownerId;
-        payload.sourceOwnerId = ownerId;
-        payload.sourceCharId = charId;
-        tablePlayers[editingIndex] = Object.assign({}, clone(target), payload);
-        if(typeof msPersistCharacterToRepo === 'function') msPersistCharacterToRepo(payload, ownerId, charId);
-        if(typeof renderVttCards === 'function') renderVttCards();
-        if(typeof closeBuilder === 'function') closeBuilder();
-        return true;
-      }
-
-      const isEditing = editingIndex !== null && editingIndex !== undefined && Array.isArray(characters) && !!characters[editingIndex];
-      if(isEditing){
-        payload.id = characters[editingIndex].id || payload.id || nowId();
-      } else {
-        payload.id = payload.id || nowId();
-      }
-      payload.ownerId = currentUser.id;
-
-      if(isEditing) characters[editingIndex] = clone(payload);
-      else characters.push(clone(payload));
-
-      /* Persistência primária por conta. O fallback legado só é chamado depois. */
-      if(typeof saveGlobalCharacters === 'function') saveGlobalCharacters();
-      else if(typeof msPersistCharacterToRepo === 'function') msPersistCharacterToRepo(payload, currentUser.id, payload.id);
-
-      /* Estados refinados que podem ser atualizados depois da construção. */
-      const savedIndex = isEditing ? editingIndex : characters.length - 1;
-      if(characters[savedIndex]){
-        if(currentClass === 'Mercador da Morte' && window.__mmDraft) characters[savedIndex].mercadoDaMorte = clone(window.__mmDraft);
-        
-        if(typeof isEnvolto === 'function' && isEnvolto() && window.__envRitualDraft) characters[savedIndex].envoltoRituals = clone(window.__envRitualDraft);
-        if(currentClass === 'Hermético' && window.__hermeticCustoms) characters[savedIndex].hermeticCustomRituals = clone(window.__hermeticCustoms);
-        if(typeof saveGlobalCharacters === 'function') saveGlobalCharacters();
-      }
-
-      if(typeof renderCharList === 'function') renderCharList();
-      if(typeof closeBuilder === 'function') closeBuilder();
-      return true;
-    } catch(error){
-      console.error('[Mundos Sombrios v0.45] Falha ao imortalizar ficha:', error);
-      alert(`A ficha NÃO foi redirecionada para o login. O salvamento foi interrompido para proteger seus dados.\n\nMotivo: ${error?.message || 'erro desconhecido'}`);
-      return false;
-    }
-  };
+  /* ---------- IMORTALIZAÇÃO: compatibilidade histórica aposentada ---------- */
+  /*
+     V0.45 substituía window.saveCharacter por uma rotina local/memória. Desde a
+     arquitetura online V0.65+, o proprietário canônico é script.js, que valida a
+     ficha, persiste via MS_SERVICES/Supabase, mantém rascunho em falha e só então
+     promove o cache. Não reinstalar uma implementação histórica aqui. Os wrappers
+     especializados V0.16/Esotérico continuam delegando ao salvamento canônico.
+  */
 
   /* Galeria/editor de corte removidos deste patch histórico.
      Proprietário canônico: js/gallery-editor.js.

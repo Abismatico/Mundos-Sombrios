@@ -1,4 +1,4 @@
-# Mundos Sombrios — Arquitetura Atual (0.65.0)
+# Mundos Sombrios — Arquitetura Atual (2.2.0)
 
 ## Fonte de verdade
 Supabase Auth + PostgreSQL + RLS + RPC + Realtime.
@@ -10,6 +10,14 @@ Supabase Auth + PostgreSQL + RLS + RPC + Realtime.
 - `js/ms-platform.js`: eventos, estados, validação, recursos, exportação e feedback.
 - `js/ms-services.js`: serviços de domínio (`Auth`, `Profile`, `Characters`, `Games`, `VTT`, `Content`).
 - `js/supabase-db.js`: único adaptador de transporte para Supabase.
+
+
+### Experiência / apresentação
+- `js/immersive-experience.js`: camada de UX e direção de arte; não é fonte de regra nem persistência de jogo.
+- `css/immersive-experience.css`: identidades visuais de Êxodo, Ocultatun, Envolto e Ordem, níveis Funcional/Imersivo/Cinemático e estados de consequência.
+- `css/portal/portal-editorial-v2.2.css`: camada final do Portal Oficial, responsável por hierarquia editorial, densidade, limites de leitura e responsividade da home/subpáginas.
+- `js/portal/portal-core.js`: shell persistente do Portal, navegação, composição da home e rotas editoriais; não é fonte de regras de jogo.
+- Preferências de interface podem usar `localStorage`, mas nunca fichas, credenciais, mesas, regras ou conteúdo canônico.
 
 ### Dados canônicos
 - `profiles`: identidade e papel.
