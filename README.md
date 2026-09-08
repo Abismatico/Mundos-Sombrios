@@ -1,3 +1,5 @@
+> **V2.5.3:** Imortalização simplificada nos dois modos: somente Nome + Expansão + Classe são pré-requisitos; todo o restante da ficha pode ser completado depois.
+
 > **V2.5.2:** Painel ADM reorganizado em abas Usuários / SoulDrakma para tornar concessões administrativas explicitamente acessíveis.
 
 # Mundos Sombrios — Portal Oficial

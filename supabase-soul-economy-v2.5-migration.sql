@@ -368,6 +368,8 @@ returns public.characters language plpgsql security definer set search_path=publ
 declare v_character public.characters; v_existing public.characters; v_key text; v_count integer; begin
  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
  if trim(coalesce(p_name,''))='' then raise exception 'CHARACTER_NAME_REQUIRED'; end if;
+  if trim(coalesce(p_nature,''))='' then raise exception 'CHARACTER_EXPANSION_REQUIRED'; end if;
+  if trim(coalesce(p_class_name,''))='' then raise exception 'CHARACTER_CLASS_REQUIRED'; end if;
  select * into v_existing from public.characters where id=p_id and user_id=auth.uid()::text;
  v_key:=public.soul_expansion_key_for_nature(p_nature);
  if v_existing.id is null then

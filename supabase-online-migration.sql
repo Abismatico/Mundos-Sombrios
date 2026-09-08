@@ -584,6 +584,8 @@ declare v_character public.characters; v_version integer;
 begin
   if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
   if trim(coalesce(p_name,''))='' then raise exception 'CHARACTER_NAME_REQUIRED'; end if;
+  if trim(coalesce(p_nature,''))='' then raise exception 'CHARACTER_EXPANSION_REQUIRED'; end if;
+  if trim(coalesce(p_class_name,''))='' then raise exception 'CHARACTER_CLASS_REQUIRED'; end if;
   select * into v_character from public.characters where id=p_id and user_id=auth.uid()::text;
   if v_character.id is null then
     insert into public.characters(id,owner_id,user_id,name,mode,nature,class_name,payload)

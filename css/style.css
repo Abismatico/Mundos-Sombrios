@@ -1257,3 +1257,10 @@ body.admin-setup-open {
 #admin-soul-panel .ms-soul-admin-console{margin:0;min-height:240px}
 .admin-soul-placeholder{padding:28px;border:1px dashed rgba(0,255,204,.28);border-radius:16px;color:#6f858f;text-align:center}
 @media(max-width:760px){#admin-panel-modal{padding:8px}.admin-arconte-head{padding:16px;flex-direction:column}.admin-arconte-tabs{padding:10px 16px}.admin-arconte-tabs button{flex:1;padding-inline:8px}.admin-arconte-panel{padding:14px}.admin-users-scroll{max-height:58vh;overflow:auto}.admin-arconte-shell{max-height:96vh!important}.admin-arconte-head .souls-btn{position:absolute;right:16px;top:16px}.admin-arconte-head{padding-right:84px}}
+
+
+/* V2.5.3 — Imortalização mínima: Nome + Expansão + Classe */
+.ms-immortalize-minimum{margin:30px 0 10px;padding:14px 16px;border:1px solid color-mix(in srgb,var(--theme-color,#d4af37) 42%,transparent);border-left:3px solid var(--theme-color,#d4af37);background:linear-gradient(90deg,color-mix(in srgb,var(--theme-color,#d4af37) 8%,transparent),rgba(8,10,14,.58));display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.ms-immortalize-minimum strong{font:700 11px/1.2 'Share Tech Mono',monospace;letter-spacing:1.4px;color:var(--theme-color,#d4af37)}
+.ms-immortalize-minimum span{font:700 14px/1.2 'Barlow Condensed','Roboto Condensed',sans-serif;letter-spacing:.8px;text-transform:uppercase;color:#eef1f4}
+.ms-immortalize-minimum small{flex-basis:100%;color:#9098a3;font-size:12px;line-height:1.35}

@@ -1,4 +1,4 @@
-# Mundos Sombrios — Arquitetura Atual (2.5.1)
+# Mundos Sombrios — Arquitetura Atual (2.5.3)
 
 ## Fonte de verdade
 Supabase Auth + PostgreSQL + RLS + RPC + Realtime.
@@ -30,6 +30,11 @@ Supabase Auth + PostgreSQL + RLS + RPC + Realtime.
 - `table_invites`: convites temporários.
 - `campaigns` e `game_sessions`: camada de campanha/sessão.
 - `gm_notes`, `gm_npcs`, `gm_files`: ferramentas privadas da mesa.
+
+### Imortalização de ficha
+- Nos modos **Êxodo** e **Ocultatun**, os únicos pré-requisitos editoriais para persistir uma ficha são **Nome + Expansão/Origem + Classe**.
+- Atributos, conceito, perícias, poderes, equipamento, retrato e demais campos são progressivos/opcionais e nunca bloqueiam a imortalização.
+- Slots de conta e acesso à expansão continuam sendo autorização econômica separada, validada server-side.
 
 ### Regra de ouro
 Nenhum componente deve criar uma segunda fonte de persistência. `localStorage`/`sessionStorage` não são banco. O estado local é somente de interface/sessão.

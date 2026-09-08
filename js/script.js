@@ -4122,7 +4122,7 @@ function renderCharacterValidation(result) {
     const warnings=Array.isArray(result?.warnings)?result.warnings:[];
     panel.hidden = !(errors.length || warnings.length);
     panel.dataset.valid = result?.valid ? 'true' : 'false';
-    const title=result?.valid ? (warnings.length ? 'Ficha válida com observações' : 'Ficha válida') : 'Ficha com problemas';
+    const title=result?.valid ? (warnings.length ? 'Pronta para imortalizar · campos opcionais pendentes' : 'Pronta para imortalizar') : 'Faltam pré-requisitos para imortalizar';
     panel.innerHTML = `<strong>${title}</strong>${errors.length?`<ul>${errors.map(x=>`<li>Erro: ${escHtml(x)}</li>`).join('')}</ul>`:''}${warnings.length?`<ul>${warnings.map(x=>`<li>Atenção: ${escHtml(x)}</li>`).join('')}</ul>`:''}`;
 }
 

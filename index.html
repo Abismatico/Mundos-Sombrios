@@ -268,7 +268,7 @@
                             <h3 style="color:var(--theme-color, #d4af37); font-family: 'Cinzel', serif; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 5px;">I. A Natureza da Alma (Expansão)</h3>
                             <p style="color:#aaa; font-size:0.85rem; margin-bottom:15px;">Escolha a origem do seu poder. Isto define seus recursos e a estética da sua ficha.</p>
                             <p style="color:#666; font-size:0.75rem; margin-top:-6px;">Repositório pessoal: suas fichas ficam separadas por conta e só aparecem em mesas nas quais foram vinculadas por código.</p>
-                            <input type="hidden" id="char-nature" required>
+                            <input type="hidden" id="char-nature">
                             <div id="nature-grid" class="choice-grid"></div>
                             <div id="nature-description" class="desc-box" style="display:none; margin-top:15px; font-size:1rem;"></div>
                         </div>
@@ -276,7 +276,7 @@
                         <div class="form-group" id="class-container" style="display:none; margin-top: 40px;">
                             <h3 style="color:var(--theme-color, #d4af37); font-family: 'Cinzel', serif; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 5px;">II. Casta de Atuação (Classe)</h3>
                             <p style="color:#aaa; font-size:0.85rem; margin-bottom:15px;">A forma como você age e combate no mundo. Define atributos base e perícias vitais.</p>
-                            <input type="hidden" id="char-class" required>
+                            <input type="hidden" id="char-class">
                             <div id="class-grid" class="choice-grid"></div>
                             <div id="subclass-description" class="desc-box" style="display:none; margin-top:15px; font-size:1rem;"></div>
                         </div>
@@ -557,6 +557,7 @@
                         <div id="specific-content-container"></div>
                     </div>
 
+                    <div class="ms-immortalize-minimum hide-on-view" role="note"><strong>PRÉ-REQUISITOS PARA IMORTALIZAR</strong><span>Nome · Expansão · Classe</span><small>Todos os demais campos são opcionais e podem ser preenchidos ou revisados depois.</small></div>
                     <button type="submit" id="btn-final-save" class="souls-btn submit-btn hide-on-view" style="margin-top: 30px; width:100%;">IMORTALIZAR FICHA</button>
                 </form>
             </div>

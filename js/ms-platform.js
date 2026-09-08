@@ -154,32 +154,38 @@
         const warnings = [];
         const char = character && typeof character === 'object' ? character : {};
         const name = String(char.name || '').trim();
-        if (!name) errors.push('O personagem precisa de um nome.');
-        if (!String(char.mode || '').trim()) errors.push('O modo de jogo precisa ser definido.');
-        if (!String(char.nature || '').trim()) errors.push('Escolha uma natureza/expansão antes de salvar.');
-        if (!String(char.className || '').trim()) errors.push('Escolha uma classe antes de salvar.');
+        const expansion = String(char.nature || '').trim();
+        const className = String(char.className || '').trim();
+
+        // V2.5.3 — Imortalização mínima universal (Êxodo e Ocultatun):
+        // somente Nome + Expansão + Classe podem bloquear o salvamento.
+        if (!name) errors.push('Informe o nome do personagem antes de imortalizar a ficha.');
+        if (!expansion) errors.push('Escolha uma expansão/origem antes de imortalizar a ficha.');
+        if (!className) errors.push('Escolha uma classe antes de imortalizar a ficha.');
+
+        if (!String(char.mode || '').trim()) warnings.push('Modo de jogo não identificado explicitamente; ele será preservado ou inferido pelo fluxo da Forja.');
 
         const stats = char.stats && typeof char.stats === 'object' ? char.stats : {};
-        const limits = char.mode === 'ocultatun' ? { min: -2, max: 10 } : { min: -2, max: 10 };
+        const limits = { min: -2, max: 10 };
         ['for','vig','agi','int','prn','pre'].forEach(key => {
-            if (stats[key] === undefined || stats[key] === null || stats[key] === '') {
-                errors.push(`Atributo ${key.toUpperCase()} não definido.`);
-                return;
-            }
-            const value = Number(stats[key]);
-            if (!Number.isFinite(value)) errors.push(`Atributo ${key.toUpperCase()} inválido.`);
-            else if (value < limits.min || value > limits.max) errors.push(`Atributo ${key.toUpperCase()} deve ficar entre ${limits.min} e ${limits.max}.`);
+            const raw = stats[key];
+            if (raw === undefined || raw === null || raw === '') return; // atributo é opcional para imortalizar
+            const value = Number(raw);
+            if (!Number.isFinite(value)) warnings.push(`Atributo ${key.toUpperCase()} está inválido e pode ser revisado depois.`);
+            else if (value < limits.min || value > limits.max) warnings.push(`Atributo ${key.toUpperCase()} está fora da faixa recomendada (${limits.min} a ${limits.max}) e pode ser revisado depois.`);
         });
 
         const points = Number(char.points ?? 0);
         if (!Number.isFinite(points)) warnings.push('O saldo de pontos livres não é numérico.');
         if (Array.isArray(char.powersHtml) && char.powersHtml.some(p => typeof p !== 'string')) warnings.push('Há poderes legados em formato não textual; revise antes de exportar.');
-        if (Array.isArray(char.powers) && char.powers.some(p => !p || typeof p !== 'object' || !String(p.name || '').trim())) errors.push('Há um poder estruturado sem nome.');
+        if (Array.isArray(char.powers) && char.powers.some(p => !p || typeof p !== 'object' || !String(p.name || '').trim())) warnings.push('Há um poder estruturado sem nome; isso não impede a imortalização.');
         if (char.concept && typeof char.concept === 'object') {
             if (!String(char.concept.motivation || '').trim()) warnings.push('Motivação ainda não registrada.');
             if (!String(char.concept.origin || '').trim()) warnings.push('Origem/nacionalidade ainda não registrada.');
         }
-        if (strict && warnings.length) errors.push(...warnings);
+        // "strict" é mantido por compatibilidade de assinatura, mas campos opcionais
+        // nunca são promovidos a bloqueadores da imortalização.
+        void strict;
         return Object.freeze({ valid: errors.length === 0, errors, warnings });
     }
 
