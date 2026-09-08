@@ -1,0 +1,62 @@
+MUNDOS SOMBRIOS — IMPLANTAÇÃO V2.5.0 / SOUL ECONOMY
+=====================================================
+
+IMPORTANTE
+A V2.5 introduz tabelas, RLS e RPCs novas. Publicar apenas os arquivos HTML/CSS/JS sem aplicar a migração deixará a Soul Economy indisponível.
+
+ORDEM PARA INSTALAÇÃO EXISTENTE
+1. Faça backup do banco Supabase.
+2. Garanta que a migração V2.3 de Mestre/Co-Mestre/Observador já foi aplicada:
+   supabase-master-v2.3-migration.sql
+3. Execute no SQL Editor do Supabase:
+   supabase-soul-economy-v2.5-migration.sql
+4. Confirme que o script terminou com COMMIT e sem erros.
+5. Publique os arquivos da V2.5.0 no GitHub/hosting.
+6. Limpe cache/CDN se aplicável e faça novo login.
+
+INSTALAÇÃO NOVA
+1. Execute supabase-production.sql.
+2. Execute supabase-master-v2.3-migration.sql.
+3. Execute supabase-soul-economy-v2.5-migration.sql.
+4. Publique o frontend V2.5.0.
+
+REGRAS ATIVADAS
+- Jogador: 3 fichas / 0 mesas.
+- Mestre: 5 fichas / 3 mesas.
+- ADM: ilimitado.
+- Mestre e ADM: todas as expansões.
+- Jogador: expansões precisam de entitlement para criação.
+- Cards e Códices continuam consultáveis.
+- Colheita: 10 minutos, 2 SD/minuto.
+- Slot de ficha: 20.000 SD.
+- Slot de mesa (Mestre): 70.000 SD.
+- Aprimorador: 50.000 SD.
+- Projeto Player: 55.000 SD.
+- Linhagem Herdada: 60.000 SD.
+- Envolto: 70.000 SD.
+- Ordem dos Sete: 70.000 SD.
+
+TESTE DE HOMOLOGAÇÃO RECOMENDADO
+A. Conta Jogador
+- confirmar 3 slots de ficha;
+- confirmar ausência de criação de mesa;
+- abrir Códices e visualizar todos os cards;
+- tentar criar expansão bloqueada e confirmar redirecionamento ao Cofre;
+- iniciar uma Colheita e conferir crédito após minuto completo;
+- comprar/desbloquear em conta de teste com saldo concedido pelo ADM.
+
+B. Conta Mestre
+- confirmar 5 slots de ficha;
+- confirmar 3 slots de mesa;
+- confirmar todas as expansões abertas;
+- testar compra de +1 slot de ficha e +1 slot de mesa.
+
+C. Conta ADM
+- confirmar capacidade ilimitada;
+- abrir Controle SoulDrakma;
+- conceder e remover moeda com motivo;
+- conceder e revogar expansão de uma conta Jogador;
+- conferir os eventos correspondentes no Ledger.
+
+SEGURANÇA
+Não habilite INSERT/UPDATE direto nas tabelas soul_* para o frontend. As operações devem continuar pelas RPCs entregues. Não crie RPC de transferência entre contas sem uma revisão antifraude específica.

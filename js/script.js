@@ -1,15 +1,18 @@
-// PARTICLES
+// PARTICLES — V2.4: conjunto fixo, sem churn contínuo de DOM
 function createEmbers() {
     const container = document.getElementById('particles');
-    if(!container) return;
-    setInterval(() => {
+    if(!container || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    container.replaceChildren();
+    const count = window.innerWidth < 700 ? 6 : 12;
+    for(let i=0;i<count;i++) {
         const ember = document.createElement('div');
-        ember.classList.add('ember');
-        ember.style.left = Math.random() * 100 + 'vw';
-        ember.style.animationDuration = (Math.random() * 3 + 2) + 's';
+        ember.className = 'ember';
+        ember.style.left = ((i * 83) % 97 + Math.random() * 3) + 'vw';
+        ember.style.animationDuration = (4.2 + (i % 5) * .65) + 's';
+        ember.style.animationDelay = (-Math.random() * 6) + 's';
+        ember.style.opacity = String(.35 + (i % 4) * .12);
         container.appendChild(ember);
-        setTimeout(() => ember.remove(), 5000);
-    }, 150);
+    }
 }
 createEmbers();
 
@@ -166,7 +169,13 @@ let characters = [];
 let myTables = [];
 let joinedTables = [];
 window.getMasterRoomState = function(){ return { tables: Array.isArray(myTables) ? msClone(myTables) : [], joined: Array.isArray(joinedTables) ? msClone(joinedTables) : [] }; };
-const MAX_TABLES = 10;
+window.msSoulRuntimeCounts = function(){ return { characters:Array.isArray(characters)?characters.length:0, tables:Array.isArray(myTables)?myTables.length:0 }; };
+window.msSoulAdminUsers = function(){ return Array.isArray(usersDB)?usersDB.map(u=>({id:u.id,username:u.username,role:u.role})):[]; };
+function msCharacterCapacity(){ return window.MS_SOUL?.characterCapacity?.() ?? (currentUser?.role==='admin' ? Infinity : currentUser?.role==='mestre' ? 5 : 3); }
+function msTableCapacity(){ return window.MS_SOUL?.tableCapacity?.() ?? (currentUser?.role==='admin' ? Infinity : currentUser?.role==='mestre' ? 3 : 0); }
+function msCapacityLabel(value){ return value===Infinity ? '∞' : String(value); }
+function msCanCreateCharacter(){ return window.MS_SOUL?.canCreateCharacter?.(characters?.length||0) ?? ((characters?.length||0) < msCharacterCapacity()); }
+function msCanCreateTable(){ return window.MS_SOUL?.canCreateTable?.(myTables?.length||0) ?? ((myTables?.length||0) < msTableCapacity()); }
 
 let editingIndex = null;
 let currentAvatarBase64 = '';
@@ -213,7 +222,7 @@ async function msBuildCurrentUser(profileOverride = null) {
     const remote = profileOverride || (await window.MS_DB.fetchMyProfile()).data;
     const profile = remote || { id: session.user.id, username: session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'jogador', email: session.user.email || '', role: 'jogador', banned: false, status: 'active' };
     if (profile.banned || profile.status === 'banned') { await window.MS_DB.signOut(); alert('Esta conta foi banida pelo Arconte.'); return null; }
-    return { id:String(session.user.id), authUserId:session.user.id, profileId:String(profile.id || session.user.id), username:String(profile.username || 'jogador'), email:String(profile.email || session.user.email || ''), role:normalizeUserRole(profile.role || 'jogador'), banned:!!profile.banned, status:profile.status || 'active' };
+    return { id:String(profile.id || session.user.id), authUserId:session.user.id, username:String(profile.username || 'jogador'), email:String(profile.email || session.user.email || ''), role:normalizeUserRole(profile.role || 'jogador'), banned:!!profile.banned, status:profile.status || 'active' };
 }
 
 async function msHydrateRemoteGameState() {
@@ -274,6 +283,7 @@ async function msApplyAuthenticatedSession(profileOverride = null) {
     const shieldButton=document.getElementById('btn-master-shield'); if(shieldButton) shieldButton.style.display=(currentUser.role==='mestre'||currentUser.role==='admin')?'inline-block':'none';
     showScreen('screen-portal');
     if(typeof window.renderOfficialPortal==='function') window.renderOfficialPortal();
+    setTimeout(()=>window.MS_SOUL?.fetchState?.({quiet:true}),0);
     return true;
 }
 
@@ -307,24 +317,8 @@ async function doLogin() {
     window.MS_PLATFORM?.setStatus('auth','loading');
     if(!identifier||!password){window.MS_PLATFORM?.setStatus('auth','error',new Error('Credenciais incompletas')); window.MS_PLATFORM?.toast('Preencha as credenciais.','error'); return false;}
     if(!window.MS_DB?.ready){window.MS_PLATFORM?.setStatus('auth','error',new Error('Supabase indisponível')); window.MS_PLATFORM?.toast('O serviço online de autenticação não está disponível.','error'); return false;}
-    try{ const {error}=await window.MS_DB.signIn(identifier,password); if(error){window.MS_PLATFORM?.setStatus('auth','error',error); console.warn('[Mundos Sombrios] Login:',error); const message=String(error.message||'').toLowerCase(); window.MS_PLATFORM?.toast(message.includes('confirm')?'Confirme o e-mail da conta antes de entrar.':'Login inválido ou conta ainda não confirmada.','error'); return false;} const ok=await msApplyAuthenticatedSession(); if(!ok){await window.MS_DB.signOut(); window.MS_PLATFORM?.setStatus('auth','error',new Error('Perfil não encontrado ou bloqueado')); window.MS_PLATFORM?.toast('Perfil de usuário não encontrado ou bloqueado.','error'); return false;} await msSyncOnlineState(); window.MS_PLATFORM?.setStatus('auth','success'); window.MS_PLATFORM?.emit('auth:signed-in',{user: currentUser}); return true; }
+    try{ const {error}=await window.MS_DB.signIn(identifier,password); if(error){window.MS_PLATFORM?.setStatus('auth','error',error); console.warn('[Mundos Sombrios] Login:',error); window.MS_PLATFORM?.toast('Login inválido ou conta ainda não confirmada.','error'); return false;} const ok=await msApplyAuthenticatedSession(); if(!ok){await window.MS_DB.signOut(); window.MS_PLATFORM?.setStatus('auth','error',new Error('Perfil não encontrado ou bloqueado')); window.MS_PLATFORM?.toast('Perfil de usuário não encontrado ou bloqueado.','error'); return false;} await msSyncOnlineState(); window.MS_PLATFORM?.setStatus('auth','success'); window.MS_PLATFORM?.emit('auth:signed-in',{user: currentUser}); return true; }
     catch(error){window.MS_PLATFORM?.setStatus('auth','error',error); console.error('[Mundos Sombrios] Falha no login online:',error); window.MS_PLATFORM?.toast('Não foi possível autenticar. Verifique o e-mail, senha e conexão.','error'); return false;}
-}
-
-async function resendConfirmation() {
-    const email = document.getElementById('login-user').value.trim().toLowerCase();
-    if (!email || !email.includes('@')) { window.MS_PLATFORM?.toast('Informe seu e-mail no campo de login para reenviar a confirmação.','error'); return false; }
-    if (!window.MS_DB?.ready || typeof window.MS_DB.resendSignupConfirmation !== 'function') { window.MS_PLATFORM?.toast('O serviço online de autenticação não está disponível.','error'); return false; }
-    try {
-        const { error } = await window.MS_DB.resendSignupConfirmation(email);
-        if (error) throw error;
-        window.MS_PLATFORM?.toast('Se a conta existir e ainda não estiver confirmada, um novo e-mail foi enviado.','success');
-        return true;
-    } catch (error) {
-        console.warn('[Mundos Sombrios] Reenvio de confirmação:', error);
-        window.MS_PLATFORM?.toast('Não foi possível reenviar a confirmação agora.','error');
-        return false;
-    }
 }
 
 async function doLogout() {
@@ -459,6 +453,17 @@ function isCurrentAdmin() {
     return !!(currentUser && currentUser.role === 'admin');
 }
 
+function switchAdminPanelTab(tab = 'users') {
+    const modal = document.getElementById('admin-panel-modal');
+    if (!modal) return false;
+    const key = tab === 'soul' ? 'soul' : 'users';
+    modal.querySelectorAll('[data-admin-tab]').forEach(btn => btn.classList.toggle('active', btn.dataset.adminTab === key));
+    modal.querySelectorAll('[data-admin-panel]').forEach(panel => panel.classList.toggle('active', panel.dataset.adminPanel === key));
+    if (key === 'soul') window.MS_SOUL?.refreshAdminConsole?.();
+    return true;
+}
+window.switchAdminPanelTab = switchAdminPanelTab;
+
 async function openAdminPanel() {
     try {
         await hydrateAuthState();
@@ -482,6 +487,8 @@ async function openAdminPanel() {
 
     renderAdminPanel();
     renderAdminRequestsWindows();
+    window.MS_SOUL?.refreshAdminConsole?.();
+    switchAdminPanelTab('users');
     document.getElementById('admin-panel-modal').style.display = 'flex';
     return true;
 }
@@ -926,6 +933,7 @@ function applyNatureTheme(nature) {
 // NAVIGATION
 function showScreen(id) {
     window.MS_PLATFORM?.emit('screen:changing',{screen:id});
+    if((id==='screen-char-select'||id==='screen-mode-select'||id==='screen-builder') && window.MS_FEATURES && !window.MS_FEATURES.isBuilderReady()) { window.MS_FEATURES.ensureBuilder().catch(error=>window.MS_PLATFORM?.toast(error.message||'Falha ao carregar a Forja.','error')); }
     const target = document.getElementById(id);
     if(!target) {
         console.error('[Mundos Sombrios] Tela não encontrada:', id);
@@ -938,7 +946,7 @@ function showScreen(id) {
     if(id === 'screen-char-select') {
         isEditMode = true; 
         if(typeof renderCharList === 'function') renderCharList();
-        if(currentUser) document.getElementById('sanctuary-limits').innerText = `Almas Vivas: ${characters.length} / ${currentUser.role === 'jogador' ? 5 : 10}`;
+        if(currentUser) document.getElementById('sanctuary-limits').innerText = `Almas Vivas: ${characters.length} / ${msCapacityLabel(msCharacterCapacity())}`;
     }
     if(id === 'screen-ancoragem' && typeof renderAncoragem === 'function') {
         renderAncoragem();
@@ -1024,22 +1032,32 @@ function importCharacterJSON(evt) {
     const file = evt?.target?.files?.[0];
     if (!file) return;
     if (!currentUser) { alert('Faça login antes de importar uma ficha.'); evt.target.value=''; return; }
-    const limit = currentUser.role === 'jogador' ? 5 : 10;
-    if (characters.length >= limit) { alert(`O limite de ${limit} almas forjadas foi atingido.`); evt.target.value=''; return; }
+    const limit = msCharacterCapacity();
+    if (!msCanCreateCharacter()) { alert(window.MS_SOUL?.slotMessage?.('character') || `O limite de ${msCapacityLabel(limit)} almas forjadas foi atingido.`); window.MS_SOUL?.openVault?.('store','character_slot'); evt.target.value=''; return; }
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
         try {
             const data = JSON.parse(String(reader.result || '{}'));
-            if (!data || typeof data !== 'object') throw new Error('Formato inválido');
-            data.id = Date.now().toString();
+            if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('INVALID_JSON');
+            if (window.MS_SOUL && !window.MS_SOUL.canUseNature?.(data.nature)) {
+                window.MS_SOUL.showLockedExpansion?.(data.nature);
+                throw new Error('EXPANSION_LOCKED');
+            }
+            data.id = (globalThis.crypto?.randomUUID?.() || `c-${Date.now()}-${Math.random().toString(36).slice(2,10)}`);
             data.ownerId = currentUser.id;
-            characters.push(data);
-            saveGlobalCharacters();
+            data.userId = currentUser.id;
+            const confirmed = await msPersistCharacterToRepo(data, currentUser.id, data.id);
+            if (!confirmed) throw new Error('SAVE_NOT_CONFIRMED');
             loadUserData();
             renderCharList();
-            alert('Ficha importada com sucesso.');
-        } catch (_) {
-            alert('Não foi possível importar a ficha: JSON inválido.');
+            window.MS_SOUL?.fetchState?.({ quiet:true });
+            alert('Ficha importada e sincronizada com sucesso.');
+        } catch (error) {
+            const code=String(error?.message||error||'');
+            if(code.includes('EXPANSION_LOCKED')) alert('Esta ficha usa uma expansão ainda não desbloqueada para sua conta. O arquivo continua intacto; desbloqueie a expansão no Cofre SoulDrakma para importá-lo.');
+            else if(code.includes('CHARACTER_SLOT_LIMIT')) alert(window.MS_SOUL?.slotMessage?.('character') || 'Sua capacidade de fichas foi atingida.');
+            else if(code.includes('INVALID_JSON') || error instanceof SyntaxError) alert('Não foi possível importar a ficha: JSON inválido.');
+            else alert(`Não foi possível importar a ficha com segurança: ${error?.message || 'falha de persistência'}.`);
         } finally { evt.target.value=''; }
     };
     reader.readAsText(file);
@@ -1162,7 +1180,7 @@ function renderArchetypeCards(gridId, entries, options = {}) {
             : `<div class="archetype-mechanics"><strong>Atributos base</strong><div class="archetype-attr-strip">${attrsSummary(data)}</div>${Array.isArray(data?.skills)&&data.skills.length?`<small>Perícias nativas: ${safe(data.skills.join(' · '))}</small>`:''}</div>`;
         viewport.dataset.direction = direction > 0 ? 'next' : direction < 0 ? 'prev' : 'idle';
         viewport.innerHTML = `<article class="archetype-card ${isSelected?'active':''} ${disabled?'archetype-locked':''}" data-archetype="${safe(archetypeSlug(name))}" data-mode="${safe(mode)}" data-type="${safe(type)}" data-art-family="${safe(art?.family || 'unknown')}" style="--archetype-accent:${accent};--archetype-glow:${glow};--art-accent:${accent};--art-glow:${glow}">
-          <div class="archetype-portrait-stage"><img class="archetype-portrait" src="${safe(art?.image || '')}" alt="Personagem representativo de ${safe(name)}"><span class="archetype-portrait-vignette" aria-hidden="true"></span><span class="archetype-scanline" aria-hidden="true"></span><div class="archetype-card-top"><span class="archetype-seal" aria-hidden="true">${safe(art?.icon || (type === 'expansion' ? '▣' : '◇'))}</span><span class="archetype-art-classcode"><span>${safe(art?.codename || name.toUpperCase())}</span>${safe(art?.shot || art?.kicker || '')}</span></div></div>
+          <div class="archetype-portrait-stage"><img class="archetype-portrait" src="${safe(art?.image || '')}" alt="Personagem representativo de ${safe(name)}" loading="lazy" decoding="async"><span class="archetype-portrait-vignette" aria-hidden="true"></span><span class="archetype-scanline" aria-hidden="true"></span><div class="archetype-card-top"><span class="archetype-seal" aria-hidden="true">${safe(art?.icon || (type === 'expansion' ? '▣' : '◇'))}</span><span class="archetype-art-classcode"><span>${safe(art?.codename || name.toUpperCase())}</span>${safe(art?.shot || art?.kicker || '')}</span></div></div>
           <div class="archetype-card-copy"><span class="archetype-kind">${safe(label)}</span><h4>${safe(name)}</h4><p>${safe(summary)}</p><span class="archetype-art-tagline">${safe(art?.call || art?.tone || 'A identidade começa aqui.')}</span>${mechanics}<div class="archetype-select-row"><span>${safe(art?.tag || art?.token || (mode === 'exodo' ? 'GENE' : 'CÓDICE'))}</span><button type="button" class="archetype-confirm" ${disabled?'disabled':''}>${isSelected ? 'SELECIONADO' : (disabled ? 'ESCOLHA FIXADA' : `SELECIONAR ${type === 'expansion' ? 'EXPANSÃO' : 'CLASSE'}`)}</button></div></div>
         </article>`;
         const confirm = viewport.querySelector('.archetype-confirm');
@@ -1173,6 +1191,7 @@ function renderArchetypeCards(gridId, entries, options = {}) {
         });
         const card = viewport.querySelector('.archetype-card');
         if (card && !disabled) card.addEventListener('dblclick', () => confirm?.click());
+        if (type === 'expansion') queueMicrotask(() => window.MS_SOUL?.decorateExpansionCard?.());
         prev.disabled = disabled || entriesList.length < 2;
         next.disabled = disabled || entriesList.length < 2;
     }
@@ -1193,6 +1212,7 @@ function renderArchetypeCards(gridId, entries, options = {}) {
 }
 
 function startBuilder(mode) {
+    if(window.MS_FEATURES && !window.MS_FEATURES.isBuilderReady()) { window.MS_FEATURES.ensureBuilder().then(()=>startBuilder(mode)).catch(error=>window.MS_PLATFORM?.toast(error.message||'Falha ao carregar a Forja.','error')); return true; }
     if(mode !== 'exodo' && mode !== 'ocultatun' || !ruleset[mode]) {
         console.error('[Mundos Sombrios] Modo inválido ao abrir o construtor:', mode);
         return false;
@@ -1209,6 +1229,7 @@ function startBuilder(mode) {
     document.getElementById('class-container').style.display = 'none';
     document.getElementById('char-class').value = '';
     renderArchetypeCards('nature-grid', ruleset[mode].natures, { type: 'expansion', selected: '', onSelect: selectNature });
+    setTimeout(()=>window.MS_SOUL?.decorateExpansionCard?.(),0);
     showScreen('screen-builder');
     openTab('tab-identity');
     return true;
@@ -1217,7 +1238,10 @@ function startBuilder(mode) {
 function selectNature(natureName) {
     if (editingIndex !== null && !isHydratingCharacter) return;
     if(!isEditMode && !document.getElementById('screen-builder').classList.contains('overlay')) return;
-    
+    if (!isHydratingCharacter && window.MS_SOUL && !window.MS_SOUL.canUseNature(natureName)) {
+        window.MS_SOUL.showLockedExpansion(natureName);
+        return false;
+    }
     currentNature = natureName;
     document.getElementById('char-nature').value = natureName;
     
@@ -1612,12 +1636,14 @@ function renderCharList() {
     container.innerHTML = '';
 
     const btnNew = document.getElementById('btn-new-char');
-    const LIMIT = currentUser.role === 'jogador' ? 5 : 10;
+    const LIMIT = msCharacterCapacity();
 
-    if (characters.length >= LIMIT) {
-        btnNew.disabled = true;
-        btnNew.innerText = `SANTUÁRIO LOTADO (${LIMIT}/${LIMIT})`;
+    if (!msCanCreateCharacter()) {
+        btnNew.disabled = false;
+        btnNew.innerText = `AMPLIAR SANTUÁRIO (${characters.length}/${msCapacityLabel(LIMIT)})`;
+        btnNew.onclick = () => window.MS_SOUL?.openVault?.('store','character_slot');
     } else {
+        btnNew.onclick = beginNewCharacter;
         btnNew.disabled = false;
         btnNew.innerText = 'DESPERTAR NOVA ALMA';
     }
@@ -1659,7 +1685,7 @@ function deleteCharacter(index, e) {
         characters.splice(index, 1);
         saveGlobalCharacters();
         renderCharList();
-        document.getElementById('sanctuary-limits').innerText = `Almas Vivas: ${characters.length} / ${currentUser.role === 'jogador' ? 5 : 10}`;
+        document.getElementById('sanctuary-limits').innerText = `Almas Vivas: ${characters.length} / ${msCapacityLabel(msCharacterCapacity())}`;
     }
 }
 
@@ -1731,6 +1757,7 @@ function updateCarousel() {
 
 // PDF DOWNLOAD E EXPORTAÇÃO JSON
 async function downloadPDF() {
+    try { if(!window.html2pdf) await window.MS_VENDOR?.ensure('html2pdf'); } catch(error) { window.MS_PLATFORM?.toast(error.message||'Não foi possível carregar a exportação PDF.','error'); return; }
     if (!msRequireDependency('html2pdf', 'Exportação PDF', 'A biblioteca de PDF não foi carregada.')) return;
     const wasEdit = isEditMode;
     isEditMode = false;
@@ -2038,7 +2065,8 @@ function makeDraggable(el, header, requiresGM) {
 }
 
 // VTT GRID (Fabric.js)
-function initVttGrid() {
+async function initVttGrid() {
+    try { if(!window.fabric) await window.MS_VENDOR?.ensure('fabric'); } catch(error) { window.MS_PLATFORM?.toast(error.message||'Não foi possível carregar o mapa do VTT.','error'); return; }
     if (!msRequireDependency('fabric', 'VTT/Mapa', 'A biblioteca Fabric.js não foi carregada.')) return;
     const container = document.getElementById('canvas-wrapper');
     document.getElementById('vtt-table-name-display').innerText = document.getElementById('vtt-table-name').innerText;
@@ -2069,7 +2097,19 @@ function initVttGrid() {
         vttCanvas.calcOffset(); 
     }
     if (window.MasterTools && typeof window.MasterTools.restoreGrid === 'function') window.MasterTools.restoreGrid(vttCanvas);
+    applyVttSceneContext();
 }
+
+function applyVttSceneContext(){
+    try{
+        const w=window.MasterTools?.getWorkbench?.();const c=w?.command;const scene=c?.scenes?.find?.(x=>x.id===c.activeSceneId);
+        const label=document.getElementById('vtt-table-name-display');if(label&&scene?.title)label.dataset.scene=scene.title;
+        if(!vttCanvas||!scene?.mapUrl||window.__msSceneMapApplied===scene.mapUrl)return;
+        if(!window.fabric?.Image?.fromURL)return;
+        fabric.Image.fromURL(scene.mapUrl,function(img){if(!img)return;vttCanvas.setBackgroundImage(img,vttCanvas.renderAll.bind(vttCanvas),{scaleX:vttCanvas.width/img.width,scaleY:vttCanvas.height/img.height});window.__msSceneMapApplied=scene.mapUrl;},{crossOrigin:'anonymous'});
+    }catch(e){console.warn('[Mundos Sombrios] contexto da cena no VTT:',e);}
+}
+window.applyVttSceneContext=applyVttSceneContext;
 
 function drawGridLines() {
     const objects = vttCanvas.getObjects('line');
@@ -2239,69 +2279,48 @@ function toggleNPCHealthVisibility() {
 }
 
 
-// VTT 3D DICE SIMULATION & HISTORY
+// VTT DICE ROLL — V2.4: malhas poliédricas 3D reais por Canvas
+let diceRollInProgress = false;
 function buildCSSDiceFaces(type, result) {
-    const die = document.getElementById('css-die');
-    die.innerHTML = '';
-    die.className = `die-3d ${type}`;
-    
-    let numFaces = 6;
-    if (type === 'd4') numFaces = 4;
-    else if (type === 'd8') numFaces = 8;
-    else if (type === 'd10' || type === 'd12' || type === 'd20') {
-        die.className = 'die-3d complex-poly';
-        numFaces = 3; 
-    }
-
-    for(let i=0; i<numFaces; i++) {
-        const face = document.createElement('div');
-        face.className = 'die-face';
-        
-        if (type === 'd4' || type === 'd8') {
-            face.setAttribute('data-val', result);
-        } else {
-            face.innerText = result;
-        }
-        die.appendChild(face);
-    }
+    // Compatibilidade com chamadas legadas: a representação agora é Canvas 3D.
+    window.MS_DICE_3D?.setStatic?.(type, result);
 }
-
-function roll3DDice(type) {
-    const die = document.getElementById('css-die');
+function secureDieResult(max) {
+    if (window.crypto?.getRandomValues) {
+        const a = new Uint32Array(1); window.crypto.getRandomValues(a);
+        return (a[0] % max) + 1;
+    }
+    return Math.floor(Math.random() * max) + 1;
+}
+async function roll3DDice(type) {
+    if (diceRollInProgress) return;
     const resultText = document.getElementById('dice-result-text');
-    
-    die.style.transition = 'none';
-    die.style.transform = 'rotateX(0deg) rotateY(0deg) rotateZ(0deg)';
-    resultText.innerText = 'Rolando...';
-    
-    buildCSSDiceFaces(type, '?');
-    
-    setTimeout(() => {
-        die.style.transition = 'transform 2s cubic-bezier(0.1, 0.8, 0.2, 1)';
-        const rotX = Math.floor(Math.random() * 720) + 720;
-        const rotY = Math.floor(Math.random() * 720) + 720;
-        const rotZ = Math.floor(Math.random() * 360);
-        die.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg) rotateZ(${rotZ}deg)`;
-        
-        setTimeout(() => {
-            let max = parseInt(type.substring(1));
-            let result = Math.floor(Math.random() * max) + 1;
-            
-            buildCSSDiceFaces(type, result); 
-            
-            resultText.innerText = `Resultado: ${result}`;
-            
-            let sender = "Mestre";
-            if(!isVttGM) {
-                const me = tablePlayers.find(p => p.isMe);
-                sender = me ? me.name : "Jogador";
-            }
-            
-            addDiceRollToHistory(type, result, sender);
-            addChatMessage('Sistema', `(${sender}) Rolou um ${type} e tirou ${result}!`, '#d4af37');
-            if (window.MasterTools && typeof window.MasterTools.onDiceRoll === 'function') window.MasterTools.onDiceRoll(type, result, sender);
-        }, 2000);
-    }, 50);
+    if (!resultText) return;
+    const max = Number.parseInt(String(type).slice(1), 10);
+    if (!Number.isFinite(max) || max < 2) return;
+    diceRollInProgress = true;
+    const buttons = document.querySelectorAll('#vtt-dice-box .souls-btn');
+    buttons.forEach(b => { if (/^d\d+$/i.test(b.textContent.trim())) b.disabled = true; });
+    const finalResult = secureDieResult(max);
+    resultText.textContent = `Rolando ${type.toUpperCase()}...`;
+    resultText.classList.add('rolling');
+    try {
+        if(window.MS_DICE_3D?.play) await window.MS_DICE_3D.play(type, finalResult, {duration:1050});
+        else await new Promise(resolve=>setTimeout(resolve,220));
+        resultText.classList.remove('rolling');
+        resultText.textContent = `Resultado: ${finalResult}`;
+        let sender = 'Mestre';
+        if(!isVttGM) {
+            const me = tablePlayers.find(p => p.isMe);
+            sender = me ? me.name : 'Jogador';
+        }
+        addDiceRollToHistory(type, finalResult, sender);
+        addChatMessage('Sistema', `(${sender}) Rolou um ${type} e tirou ${finalResult}!`, '#d4af37');
+        if (window.MasterTools && typeof window.MasterTools.onDiceRoll === 'function') window.MasterTools.onDiceRoll(type, finalResult, sender);
+    } finally {
+        buttons.forEach(b => { if (/^d\d+$/i.test(b.textContent.trim())) b.disabled = false; });
+        diceRollInProgress = false;
+    }
 }
 
 function addDiceRollToHistory(type, result, sender) {
@@ -3776,11 +3795,27 @@ function openCreateTableModal() {
         return;
     }
     if (currentUser.role === 'jogador') {
-        alert('Apenas Mestres ou Administradores têm o poder de abrir novas Fendas.');
+        alert('Contas de Jogador não possuem slots de criação de mesa.');
+        return;
+    }
+    if (!msCanCreateTable()) {
+        alert(window.MS_SOUL?.slotMessage?.('table') || 'Capacidade de mesas atingida.');
+        window.MS_SOUL?.openVault?.('store','master_table_slot');
         return;
     }
     document.getElementById('new-table-name').value = '';
-    document.getElementById('create-table-modal').style.display = 'flex';
+    const modal=document.getElementById('create-table-modal');
+    modal.style.display = 'flex';
+    const scroll=modal.querySelector('.create-table-scroll'); if(scroll)scroll.scrollTop=0;
+    updateCreateTableModeGuide();
+}
+
+function updateCreateTableModeGuide() {
+    const mode = document.getElementById('new-table-mode')?.value || 'exodo';
+    const ex = document.getElementById('new-table-exodo-profile');
+    const oc = document.getElementById('new-table-ocultatun-profile');
+    if (ex) ex.hidden = mode !== 'exodo';
+    if (oc) oc.hidden = mode !== 'ocultatun';
 }
 
 function confirmCreateTable() {
@@ -3788,9 +3823,9 @@ function confirmCreateTable() {
         alert('Faça login para criar mesas.');
         return;
     }
-    if ((myTables || []).length >= MAX_TABLES) {
-        alert("Você atingiu o limite máximo de 10 Fendas (Mesas).");
-        return;
+    if (!msCanCreateTable()) {
+        const message=window.MS_SOUL?.slotMessage?.('table') || `Você atingiu o limite de ${msCapacityLabel(msTableCapacity())} Fendas.`;
+        alert(message); window.MS_SOUL?.openVault?.('store','master_table_slot'); return;
     }
     const nameInput = document.getElementById('new-table-name');
     const name = nameInput ? nameInput.value.trim() : '';
@@ -3804,7 +3839,9 @@ function confirmCreateTable() {
     currentDraftSettings = {
         description: msFieldValue('new-table-description'), era: msFieldValue('new-table-era'), region: msFieldValue('new-table-region'),
         expansions: msFieldValue('new-table-expansions').split(',').map(x=>x.trim()).filter(Boolean),
-        initialConditions: msFieldValue('new-table-initial'), houseRules: msFieldValue('new-table-rules')
+        initialConditions: msFieldValue('new-table-initial'), houseRules: msFieldValue('new-table-rules'),
+        tone: msFieldValue('new-table-tone'), focus: msFieldValue('new-table-focus'), secrecy: msFieldValue('new-table-secrecy'), threat: msFieldValue('new-table-threat'), historyBaseline: msFieldValue('new-table-history') || 'y80-100',
+        tsinPosture: msFieldValue('new-table-tsin'), technologyScale: msFieldValue('new-table-tech'), paranormalExposure: msFieldValue('new-table-exposure'), institution: msFieldValue('new-table-institution')
     };
     document.getElementById('create-table-modal').style.display = 'none';
 
@@ -4124,6 +4161,7 @@ function syncVttCharacterToOwner(char) {
 }
 
 function loadCharacterToBuilder(index, sourceArray = characters, restrictToIdentity = false) {
+    if(window.MS_FEATURES && !window.MS_FEATURES.isBuilderReady()) { window.MS_FEATURES.ensureBuilder().then(()=>loadCharacterToBuilder(index,sourceArray,restrictToIdentity)).catch(error=>window.MS_PLATFORM?.toast(error.message||'Falha ao carregar módulos da ficha.','error')); return false; }
     editingIndex = index;
     const char = sourceArray[index];
     window.__msBuilderCharacterId = char?.sourceCharId || char?.id || null;
@@ -4263,8 +4301,8 @@ function beginNewCharacter() {
         selectedGameMode = mode;
         try { msSeedRepoStoreFromLegacyCharacters(); msSeedTablesFromLegacy(); msSyncCurrentUserView(); }
         catch (e) { console.warn('[Mundos Sombrios] Falha não-bloqueante no repositório:', e); if (!Array.isArray(characters)) characters=[]; }
-        const limit = currentUser.role === 'jogador' ? 5 : 10;
-        if (characters.length >= limit) { alert(`O limite de ${limit} almas forjadas foi atingido.`); return false; }
+        const limit = msCharacterCapacity();
+        if (!msCanCreateCharacter()) { alert(window.MS_SOUL?.slotMessage?.('character') || `O limite de ${msCapacityLabel(limit)} almas forjadas foi atingido.`); window.MS_SOUL?.openVault?.('store','character_slot'); return false; }
         const required=['char-form','char-name','nature-grid','class-container','specific-content-container'];
         const missing=required.filter(id=>!document.getElementById(id));
         if(missing.length){ console.error('[Mundos Sombrios] Construtor incompleto:',missing); alert('A janela de criação não foi carregada corretamente. Recarregue o site.'); return false; }
@@ -4296,10 +4334,11 @@ function initBuilderForSelectedMode() {
     msSeedTablesFromLegacy();
     msSyncCurrentUserView();
 
-    const LIMIT = currentUser.role === 'jogador' ? 5 : 10;
+    const LIMIT = msCharacterCapacity();
     if (!Array.isArray(characters)) characters = [];
-    if (characters.length >= LIMIT) {
-        alert(`O limite de ${LIMIT} almas forjadas foi atingido.`);
+    if (!msCanCreateCharacter()) {
+        alert(window.MS_SOUL?.slotMessage?.('character') || `O limite de ${msCapacityLabel(LIMIT)} almas forjadas foi atingido.`);
+        window.MS_SOUL?.openVault?.('store','character_slot');
         return false;
     }
 
@@ -4379,9 +4418,10 @@ function initBuilderForSelectedMode() {
                 if (!Array.isArray(characters)) characters = [];
             }
 
-            const limit = currentUser.role === 'jogador' ? 5 : 10;
-            if (characters.length >= limit) {
-                alert(`O limite de ${limit} almas forjadas foi atingido.`);
+            const limit = msCharacterCapacity();
+            if (!msCanCreateCharacter()) {
+                alert(window.MS_SOUL?.slotMessage?.('character') || `O limite de ${msCapacityLabel(limit)} almas forjadas foi atingido.`);
+                window.MS_SOUL?.openVault?.('store','character_slot');
                 return false;
             }
 

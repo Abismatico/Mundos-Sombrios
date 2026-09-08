@@ -5,11 +5,13 @@ import { join } from 'node:path';
 const root=new URL('..',import.meta.url).pathname;
 const read=f=>readFileSync(join(root,f),'utf8');
 
-test('Portal V2.2 carrega a camada editorial depois da experiência imersiva',()=>{
-  const html=read('index.html');
+test('Portal V2.2 carrega a camada editorial no boot e mantém a experiência imersiva sob demanda',()=>{
+  const html=read('index.html'),loader=read('js/feature-loader.js');
   const css='css/portal/portal-editorial-v2.2.css';
   assert.ok(existsSync(join(root,css)),css);
-  assert.match(html,/css\/immersive-experience\.css[\s\S]*css\/portal\/portal-editorial-v2\.2\.css/);
+  assert.match(html,/css\/portal\/portal-editorial-v2\.2\.css/);
+  assert.doesNotMatch(html,/css\/immersive-experience\.css/);
+  assert.match(loader,/css\/immersive-experience\.css/);
 });
 
 test('home compacta omite painéis editoriais sem conteúdo e oferece índice direto',()=>{

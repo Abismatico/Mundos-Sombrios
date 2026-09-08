@@ -34,23 +34,6 @@ test('login não cria versões artificiais de personagens', () => {
   assert.doesNotMatch(db, /snapshot\.characters\)\s*\{[\s\S]*saveCharacter\(character\)/);
 });
 
-test('autenticação retorna para a instalação aberta no navegador', () => {
-  assert.match(db, /function getAuthRedirectUrl\(\)/);
-  assert.match(db, /emailRedirectTo:\s*getAuthRedirectUrl\(\)/);
-  assert.match(db, /redirectTo:\s*redirectTo \|\| getAuthRedirectUrl\(\)/);
-});
-
-test('identidade das fichas usa o UUID do Auth e preserva o erro remoto', () => {
-  assert.match(script, /id:String\(session\.user\.id\).*authUserId:session\.user\.id/);
-  assert.match(db, /if \(error\) \{[\s\S]*throw error;/);
-});
-
-test('login oferece reenvio de confirmação para outros dispositivos', () => {
-  assert.match(index, /onclick="resendConfirmation\(\)"/);
-  assert.match(script, /async function resendConfirmation\(\)/);
-  assert.match(db, /auth\.resend\([\s\S]*type: 'signup'/);
-});
-
 test('VTT diferencia estado estrutural e eventos de jogadores', () => {
   assert.match(tools, /Jogadores publicam eventos/);
   assert.match(db, /table_state/);

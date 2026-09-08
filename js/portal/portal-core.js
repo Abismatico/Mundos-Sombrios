@@ -75,6 +75,10 @@
     return `<section class="portal-archive-strip"><header><span class="portal-label">ÍNDICE DO PORTAL</span><h2>Acesso rápido ao arquivo oficial.</h2></header><div class="portal-archive-links">${entries.map(([section,label,count])=>`<button data-section="${section}"><span>${label}</span><b>${String(count).padStart(2,'0')}</b></button>`).join('')}<button data-act="codex"><span>Códices</span><b>↗</b></button></div></section>`;
   }
   function home(c){
+    const elevated=['mestre','admin'].includes(String(role()).toLowerCase());
+    const roomSnapshot=typeof window.getMasterRoomState==='function'?window.getMasterRoomState():{tables:[]};
+    const masterTables=Array.isArray(roomSnapshot?.tables)?roomSnapshot.tables:[];
+    const masterCenter=elevated?`<section class="portal-masters portal-masters-command"><div><span class="portal-label">CENTRO DE OPERAÇÕES</span><h2>O mundo não para entre sessões.</h2><p>${masterTables.length} campanha(s) sob sua guarda. Prepare cenas, consulte os Registros Históricos, acompanhe facções e conduza a mesa pelo Centro de Comando.</p><div class="portal-master-shortcuts"><button data-act="masters">CENTRO DE COMANDO</button><button data-act="master-history">REGISTROS HISTÓRICOS</button><button data-act="shield">ESCUDO DO MESTRE</button></div></div><div class="portal-master-seal"><b>${masterTables.length}</b><span>FENDAS</span><small>${String(role()).toUpperCase()}</small></div></section>`:`<section class="portal-masters"><div><span class="portal-label">CENTRO DOS MESTRES</span><h2>Prepare a próxima sessão.</h2><p>Mesas, Códices, NPCs, arquivos privados e Escudo do Mestre reunidos em um único centro operacional.</p></div><button class="portal-btn primary" data-act="masters">ENTRAR NA SALA DOS MESTRES</button></section>`;
     const announcements=PortalContent.published(c.announcements).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
     const events=PortalContent.published(c.events).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date)));
     const classes=PortalContent.published(c.classes);
@@ -100,7 +104,7 @@
       </section>
       ${archiveStrip(c)}
       ${editorial?`<section class="portal-home-editorial">${editorial}</section>`:''}
-      <section class="portal-masters"><div><span class="portal-label">CENTRO DOS MESTRES</span><h2>Prepare a próxima sessão.</h2><p>Mesas, Códices, NPCs, arquivos privados e Escudo do Mestre reunidos em um único centro operacional.</p></div><button class="portal-btn primary" data-act="masters">ENTRAR NA SALA DOS MESTRES</button></section>`;
+      ${masterCenter}`;
     return portalShell(body,c,true);
   }
   function cardFor(type,x){
@@ -126,7 +130,7 @@
     r.querySelectorAll('[data-detail]').forEach(b=>b.addEventListener('click',()=>{state.section='detail';state.detail=b.dataset.detail;render();}));
     r.querySelectorAll('[data-act]').forEach(b=>b.addEventListener('click',()=>handleAction(b.dataset.act)));
   }
-  function handleAction(act){if(act==='login'){openLogin();return;}if(act==='logout'){if(typeof window.doLogout==='function')window.doLogout();return;}if(act==='create'){if(user())show('screen-mode-select');else openLogin();return;}if(act==='game'){if(user())show('screen-mode-select');else openLogin();return;}if(act==='codex'){show('screen-codex');if(typeof window.renderWorldCodex==='function')window.renderWorldCodex();return;}if(act==='masters'){if(!user()){openLogin();return;}show('screen-ancoragem');if(typeof window.switchAncoragemTab==='function')window.switchAncoragemTab(role()==='jogador'?'player':'gm');return;}if(act==='shield'){if(!['mestre','admin'].includes(String(role()).toLowerCase())){alert('Acesso restrito a Mestres e ADM.');return;}if(typeof window.openMasterShield==='function')window.openMasterShield();return;}if(act==='admin'){window.openPortalAdmin&&window.openPortalAdmin();return;}if(act==='back'||act==='top'){backToPortal();}}
+  function handleAction(act){if(act==='login'){openLogin();return;}if(act==='logout'){if(typeof window.doLogout==='function')window.doLogout();return;}if(act==='create'){if(user())show('screen-mode-select');else openLogin();return;}if(act==='game'){if(user())show('screen-mode-select');else openLogin();return;}if(act==='codex'){show('screen-codex');if(typeof window.renderWorldCodex==='function')window.renderWorldCodex();return;}if(act==='masters'){if(!user()){openLogin();return;}show('screen-ancoragem');if(typeof window.switchAncoragemTab==='function')window.switchAncoragemTab(role()==='jogador'?'player':'gm');return;}if(act==='master-history'){if(!['mestre','admin'].includes(String(role()).toLowerCase())){openLogin();return;}show('screen-ancoragem');if(typeof window.switchAncoragemTab==='function')window.switchAncoragemTab('gm');setTimeout(()=>{window.MasterCommandCenter?.setPane?.('history');document.querySelector('.master-command-center')?.scrollIntoView({behavior:'smooth',block:'start'});},60);return;}if(act==='shield'){if(!['mestre','admin'].includes(String(role()).toLowerCase())){alert('Acesso restrito a Mestres e ADM.');return;}if(typeof window.openMasterShield==='function')window.openMasterShield();return;}if(act==='admin'){window.openPortalAdmin&&window.openPortalAdmin();return;}if(act==='back'||act==='top'){backToPortal();}}
   window.renderOfficialPortal=render;window.openOfficialPortal=async()=>{state.section='home';await PortalContent.hydrate();await render();show('screen-portal');};window.returnToOfficialPortal=backToPortal;window.backToOfficialPortal=backToPortal;
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>window.openOfficialPortal());else window.openOfficialPortal();
 })();

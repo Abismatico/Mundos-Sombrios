@@ -1,3 +1,5 @@
+> **V2.5.2:** Painel ADM reorganizado em abas Usuários / SoulDrakma para tornar concessões administrativas explicitamente acessíveis.
+
 # Mundos Sombrios — Portal Oficial
 
 Site estático do portal oficial em HTML/CSS/JS, preparado para publicação em GitHub Pages.
@@ -52,7 +54,7 @@ Consulte `ARCHITECTURE/CURRENT.md` antes de criar uma nova funcionalidade.
 
 ## Publicação do banco
 
-Para uma instalação nova, execute `supabase-production.sql` no SQL Editor do Supabase. Ele reúne o schema base e a migração online, incluindo Auth, RLS, RPC, Realtime, convites, histórico de fichas, campanhas e sessões.
+Para uma instalação nova, execute `supabase-production.sql` no SQL Editor do Supabase e depois as migrações incrementais atuais: `supabase-master-v2.3-migration.sql` e `supabase-soul-economy-v2.5-migration.sql`.
 
 Para instalações existentes, execute apenas `supabase-online-migration.sql` depois de revisar o estado atual das tabelas. Nunca desabilite RLS em produção.
 
@@ -65,3 +67,15 @@ A camada `js/immersive-experience.js` é exclusivamente de UX/direção de arte.
 ## Portal Oficial V2.2
 
 A home pública usa `css/portal/portal-editorial-v2.2.css` como camada final de apresentação. O Portal V2.2 reduz a extensão vertical, limita comprimentos de leitura, omite painéis editoriais vazios na página inicial, mantém um índice de acesso rápido e preserva a navegação principal nas subpáginas. Conteúdo publicado continua vindo de `PortalContent`/Supabase; o redesign não cria uma segunda fonte editorial.
+
+
+## Centro de Comando do Mestre V2.3
+A experiência do Mestre agora inclui fundação guiada de campanha, modo sessão, storyboard de cenas, Combat Director, NPCs com memória, pistas em três estados, facções vivas, mapa de relações, busca universal (`Ctrl/Cmd+K`), visão do jogador, encerramento de sessão e Registros Históricos integrados. Para colaboração por Co-Mestre/Observador, aplique `supabase-master-v2.3-migration.sql`.
+
+
+## V2.4 — Mestre, dados 3D e performance
+A V2.4 integra Campanha em Movimento à mesa selecionada, corrige o enquadramento da fundação de campanha, adiciona animações 3D próprias para D4/D6/D8/D10/D12/D20 e torna Forja, Fabric.js e html2pdf recursos sob demanda. O boot local de JavaScript foi reduzido em aproximadamente 61%. Consulte `AUDIT/MASTER-PERFORMANCE-V2.4.0.md`.
+
+
+## V2.5 — Soul Economy
+A V2.5 adiciona progressão de conta com SoulDrakma: Wallet/Ledger server-side, Colheita de 10 minutos a 2 SD/minuto, slots por papel, entitlements de expansão, Cofre, conquistas e console econômico do ADM. Jogadores continuam podendo consultar cards e Códices de todas as expansões; o bloqueio atua somente na criação. A migração `supabase-soul-economy-v2.5-migration.sql` é obrigatória em produção. Consulte `AUDIT/SOUL-ECONOMY-V2.5.0.md`. A V2.5.1 substitui o pseudo-3D do Orbe por renderização facetada em Canvas com animação contínua e registra a varredura por papel em `AUDIT/ROLE-SWEEP-V2.5.1.md`.

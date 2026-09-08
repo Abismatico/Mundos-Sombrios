@@ -5,24 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mundos Sombrios — Portal Oficial</title>
     <link rel="icon" href="assets/archetypes/natures/exo-nexo.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Roboto:wght@300;400;700&family=MedievalSharp&family=Orbitron&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/ms-platform.css">
     <link rel="stylesheet" href="css/ms-online.css">
-    <link rel="stylesheet" href="css/esoterico-surgery.css">
     <link rel="stylesheet" href="css/world-codices.css">
     <link rel="stylesheet" href="css/master-room.css">
     <link rel="stylesheet" href="css/master-tools.css">
+    <link rel="stylesheet" href="css/master-command-center.css">
     <link rel="stylesheet" href="css/master-shield.css">
+    <link rel="stylesheet" href="css/soul-economy.css">
     <link rel="stylesheet" href="css/portal/portal.css">
-    <link rel="stylesheet" href="css/archetype-art-direction-v0.63.css">
     <link rel="stylesheet" href="css/portal/portal-visual-v0.62.css">
-    <link rel="stylesheet" href="css/builder/builder-modern-v0.62.css">
-    <link rel="stylesheet" href="css/builder/builder-art-direction-v0.63.css">
-    <link rel="stylesheet" href="css/immersive-experience.css">
     <link rel="stylesheet" href="css/portal/portal-editorial-v2.2.css">
 
 </head>
@@ -65,7 +61,6 @@
                     <input type="password" id="login-pass" placeholder="Sua chave secreta...">
                 </div>
                 <button class="souls-btn" style="width:100%; margin: 20px 0 10px 0;" onclick="doLogin()">ATRAVESSAR PORTAL</button>
-                <button class="souls-btn small-btn" style="border:none; color:#d4af37; width:100%;" onclick="resendConfirmation()">Reenviar confirmação do e-mail</button>
                 
                 <div style="display:flex; justify-content:space-between; margin-top:15px;">
                     <button class="souls-btn small-btn" style="border:none; color:#00ffcc;" onclick="openRegister()">Despertar Conta</button>
@@ -200,6 +195,7 @@
                     <button type="button" data-ms-view="ordem">Ordem</button>
                     <button type="button" data-ms-view="envolto">Envolto</button>
                     <button type="button" data-ms-view="arvores">Árvores</button>
+                    <button type="button" data-ms-view="historia">Registros Históricos</button>
                     <button type="button" data-ms-view="arquivos">Arquivos</button>
                 </div>
                 <div class="master-shield-body">
@@ -211,6 +207,7 @@
                     <section id="ms-v-ordem" class="ms-view"></section>
                     <section id="ms-v-envolto" class="ms-view"></section>
                     <section id="ms-v-arvores" class="ms-view"></section>
+                    <section id="ms-v-historia" class="ms-view"></section>
                     <section id="ms-v-arquivos" class="ms-view"></section>
                     <div id="ms-tooltip" style="position:fixed;display:none;z-index:99999"></div>
                 </div>
@@ -653,10 +650,9 @@
                     <button class="win-close-btn" onclick="toggleVttWindow('vtt-dice-box')">X</button>
                 </div>
                 <div class="vtt-window-body" style="text-align:center; max-height:80vh; overflow-y:auto;">
-                    <div id="dice-3d-container" class="dice-container">
-                        <div id="css-die" class="die-3d">
-                            <div class="die-face">?</div>
-                        </div>
+                    <div id="dice-3d-container" class="dice-container dice-stage" aria-live="polite">
+                        <canvas id="dice-3d-canvas" width="260" height="260" aria-label="Modelo tridimensional do dado"></canvas>
+                        <div id="dice-3d-overlay" class="dice-3d-overlay"><small>D20</small><strong>?</strong></div>
                     </div>
                     <div style="margin-top:25px; display:flex; gap:5px; justify-content:center; flex-wrap:wrap;">
                         <button class="souls-btn small-btn" onclick="roll3DDice('d4')">d4</button>
@@ -752,28 +748,39 @@
         </div>
 
         <div id="admin-panel-modal" class="modal">
-            <div class="modal-content" style="max-width: 800px; width:90%;">
-                <h3 style="color: #00ffcc; font-family: 'Cinzel', serif; margin-bottom: 15px;">Sistema do Arconte (Gestão de Almas)</h3>
-                <p style="font-size:0.8rem; color:#888; margin-bottom:15px;">Acesso irrestrito aos registros akáshicos.</p>
-                
-                <div style="max-height: 50vh; overflow-y:auto; background:rgba(0,0,0,0.8); border:1px solid #333;">
-                    <table class="admin-table" style="width:100%; border-collapse:collapse; text-align:left; font-size:0.9rem;">
-                        <thead>
-                            <tr style="background:#111; color:#d4af37;">
-                                <th style="padding:10px; border-bottom:1px solid #444;">ID</th>
-                                <th style="padding:10px; border-bottom:1px solid #444;">Usuário</th>
-                                <th style="padding:10px; border-bottom:1px solid #444;">Senha</th>
-                                <th style="padding:10px; border-bottom:1px solid #444;">Permissão</th>
-                                <th style="padding:10px; border-bottom:1px solid #444;">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody id="admin-users-list">
-                            <!-- Injetado via JS -->
-                        </tbody>
-                    </table>
+            <div class="modal-content admin-arconte-shell">
+                <div class="admin-arconte-head">
+                    <div>
+                        <span class="admin-arconte-kicker">∆ SISTEMA DO ARCONTE</span>
+                        <h3>Gestão de Almas</h3>
+                        <p>Acesso irrestrito aos registros akáshicos e à economia SoulDrakma.</p>
+                    </div>
+                    <button type="button" class="souls-btn small-btn" style="border-color:#ff3333;color:#ff7777" onclick="document.getElementById('admin-panel-modal').style.display='none'">Fechar</button>
                 </div>
-                <div class="modal-actions" style="margin-top:20px;">
-                    <button class="souls-btn small-btn" style="border-color: #ff3333; color: #ff3333;" onclick="document.getElementById('admin-panel-modal').style.display='none'">Fechar Sistema</button>
+                <nav class="admin-arconte-tabs" aria-label="Áreas administrativas">
+                    <button type="button" class="active" data-admin-tab="users" onclick="switchAdminPanelTab('users')">USUÁRIOS</button>
+                    <button type="button" data-admin-tab="soul" onclick="switchAdminPanelTab('soul')">SOULDRΔKMA</button>
+                </nav>
+                <div class="admin-arconte-body">
+                    <section id="admin-users-panel" class="admin-arconte-panel active" data-admin-panel="users">
+                        <div class="admin-users-scroll">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Usuário</th>
+                                        <th>Permissão</th>
+                                        <th>Ações</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-users-list"><!-- Injetado via JS --></tbody>
+                            </table>
+                        </div>
+                    </section>
+                    <section id="admin-soul-panel" class="admin-arconte-panel" data-admin-panel="soul">
+                        <div class="admin-soul-placeholder">Carregando Controle SoulDrakma…</div>
+                    </section>
                 </div>
             </div>
         </div>
@@ -791,9 +798,13 @@
             </div>
         </div>
 
-        <div id="create-table-modal" class="modal">
-            <div class="modal-content">
-                <h3 style="color: #ff00ff; font-family: 'Cinzel', serif; margin-bottom: 15px;">Configurar Nova Fenda</h3>
+        <div id="create-table-modal" class="modal create-table-modal">
+            <div class="modal-content create-table-dialog" role="dialog" aria-modal="true" aria-labelledby="create-table-title">
+                <header class="create-table-head">
+                    <div><span class="mr-kicker">FUNDAÇÃO DE CAMPANHA</span><h3 id="create-table-title">Configurar Nova Fenda</h3><p>Defina o necessário para abrir a campanha. Os detalhes permanecem editáveis depois, dentro da própria mesa.</p></div>
+                    <button type="button" class="win-close-btn" aria-label="Fechar" onclick="document.getElementById('create-table-modal').style.display='none'">×</button>
+                </header>
+                <div class="create-table-scroll">
                 <div class="form-group">
                     <label>Nome da Campanha/Sessão:</label>
                     <input type="text" id="new-table-name" placeholder="Ex: O Cântico do Vazio">
@@ -802,6 +813,13 @@
                     <label>Descrição da campanha:</label>
                     <textarea id="new-table-description" placeholder="Premissa, tom e conflito central"></textarea>
                 </div>
+                <div class="ms-table-meta-grid master-foundation-grid">
+                    <div class="form-group"><label>Tom da campanha</label><select id="new-table-tone"><option>Horror e investigação</option><option>Ação tática</option><option>Conspiração</option><option>Sobrevivência</option><option>Política e guerra</option><option>Exploração</option><option>Híbrido</option></select></div>
+                    <div class="form-group"><label>Foco estrutural</label><select id="new-table-focus"><option>Investigação</option><option>Operações</option><option>Guerra</option><option>Sobrevivência</option><option>Intriga</option><option>Exploração</option></select></div>
+                    <div class="form-group"><label>Nível de sigilo</label><select id="new-table-secrecy"><option>Absoluto</option><option>Alto</option><option>Instável</option><option>Rompido</option></select></div>
+                    <div class="form-group"><label>Pressão inicial</label><select id="new-table-threat"><option>Baixa</option><option>Média</option><option>Alta</option><option>Crítica</option></select></div>
+                </div>
+                <div class="form-group"><label>Marco histórico</label><select id="new-table-history"><option value="y80-100">Ano 100 · Presente</option><option value="y41-70">Anos 41–70 · Grande Silêncio</option><option value="y16-40">Anos 16–40 · Era Fria</option><option value="y11-16">Anos 11–16 · Tratado das Fronteiras</option><option value="y6-10">Anos 6–10 · Grande Fratura</option><option value="y3-5">Anos 3–5 · Protheus</option><option value="y2">Ano 2 · Cisão das Potências</option><option value="y1b">Ano 1 · Segundo semestre</option><option value="y1a">Ano 1 · Primeiro semestre</option></select><small>O Centro de Comando usará este período como referência de geopolítica, economia e ganchos.</small></div>
                 <div class="ms-table-meta-grid">
                     <div class="form-group"><label>Época</label><input id="new-table-era" placeholder="Ex.: 2038 / Pós-Colheita"></div>
                     <div class="form-group"><label>Região</label><input id="new-table-region" placeholder="Cidade, país, setor ou plano"></div>
@@ -811,10 +829,18 @@
                 <div class="form-group"><label>Regras específicas da mesa</label><textarea id="new-table-rules" placeholder="House rules, limites e exceções"></textarea></div>
                 <div class="form-group">
                     <label>Modo de Jogo:</label>
-                    <select id="new-table-mode">
+                    <select id="new-table-mode" onchange="updateCreateTableModeGuide()">
                         <option value="exodo">Êxodo · Assimilação</option>
                         <option value="ocultatun">Ocultatun · Ecos da Decadência</option>
                     </select>
+                </div>
+                <div id="new-table-exodo-profile" class="master-mode-profile">
+                    <span class="eyebrow">ÊXODO · FUNDAÇÃO GEOPOLÍTICA</span>
+                    <div class="ms-table-meta-grid"><div class="form-group"><label>Postura diante do T.S.I.N.</label><select id="new-table-tsin"><option>Pró-Nexo</option><option>Ambígua / Cinza</option><option>Ant-Nexo</option></select></div><div class="form-group"><label>Escala tecnológica</label><select id="new-table-tech"><option>Urbana / comum</option><option>Biotecnologia avançada</option><option>Black Ops / Eras Perdidas</option><option>Orbital / Ápice</option></select></div></div>
+                </div>
+                <div id="new-table-ocultatun-profile" class="master-mode-profile" hidden>
+                    <span class="eyebrow">OCULTATUN · PROTOCOLO DE CONTENÇÃO</span>
+                    <div class="ms-table-meta-grid"><div class="form-group"><label>Exposição pública ao paranormal</label><select id="new-table-exposure"><option>Sigilo absoluto</option><option>Rumores controlados</option><option>Vazamentos recorrentes</option><option>Ruptura iminente</option></select></div><div class="form-group"><label>Vínculo operacional</label><select id="new-table-institution"><option>Sala Branca / Ocultatun</option><option>Célula independente</option><option>Protheus / Nova Ordem</option><option>Ordem dos Sete</option><option>Outro / ambíguo</option></select></div></div>
                 </div>
                 <div class="form-group">
                     <label>Tema Estético Inicial:</label>
@@ -825,10 +851,11 @@
                         <option value="cosmic">Horror Cósmico / Vazio</option>
                     </select>
                 </div>
-                <div class="modal-actions">
-                    <button class="souls-btn small-btn" onclick="confirmCreateTable()">Forjar Mesa</button>
-                    <button class="souls-btn small-btn" style="border-color: #ff3333; color: #ff3333;" onclick="document.getElementById('create-table-modal').style.display='none'">Cancelar</button>
                 </div>
+                <footer class="modal-actions create-table-actions">
+                    <button class="souls-btn small-btn" onclick="confirmCreateTable()">FORJAR MESA</button>
+                    <button class="souls-btn small-btn" style="border-color: #ff3333; color: #ff3333;" onclick="document.getElementById('create-table-modal').style.display='none'">CANCELAR</button>
+                </footer>
             </div>
         </div>
 
@@ -949,26 +976,22 @@
     <script src="js/portal/portal-media.js"></script>
     <script src="js/portal/portal-core.js"></script>
     <script src="js/portal/portal-admin.js"></script>
-    <script src="js/hermetico-rituais.js"></script>
     <script src="js/archetype-art-direction.js"></script>
+    <script src="js/vendor-loader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/supabase-db.js"></script>
     <script src="js/ms-services.js"></script>
     <script src="js/ms-realtime.js"></script>
     <script src="js/master-shield-loader.js"></script>
+    <script src="js/feature-loader.js"></script>
     <script src="js/script.js"></script>
-    <script src="js/linhagem-tree.js"></script>
-    <script src="js/exodo-nexo.js"></script>
-    <script src="js/aprimorador-engenharia.js"></script>
-    <script src="js/projeto-player-interface.js"></script>
-    <script src="js/mundos-updates.js"></script>
-    <script src="js/esoterico-surgery.js"></script>
-    <script src="js/gallery-editor.js"></script>
+    <script src="js/dice-3d.js"></script>
+    <script src="js/master-history-data.js"></script>
+    <script src="js/master-command-center.js"></script>
     <script src="js/master-room.js"></script>
     <script src="js/master-tools.js"></script>
-    <script src="js/ordem-sete.js"></script>
-    <script src="js/power-registry.js"></script>
     <script src="js/ms-online-ui.js"></script>
-    <script src="js/immersive-experience.js"></script>
+    <script src="js/soul-economy.js"></script>
 
 
     <!-- MODAL GLOBAL: configuração inicial do ADM; mantido fora de qualquer .screen para evitar sobreposição/stacking context -->

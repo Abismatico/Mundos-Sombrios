@@ -28,7 +28,9 @@
     const tables=Array.isArray(snapshot.tables)?snapshot.tables:[];
     const joined=Array.isArray(snapshot.joined)?snapshot.joined:[];
     const people=tables.reduce((sum,t)=>sum+(Array.isArray(t.participants)?t.participants.length:0),0);
-    const limit=10;
+    const limit=window.MS_SOUL?.tableCapacity?.() ?? (currentUser.role==='admin'?Infinity:3);
+    const limitLabel=limit===Infinity?'∞':String(limit);
+    const free=limit===Infinity?'∞':Math.max(0,limit-tables.length);
     const selectedId=String(window.__msMasterRoomTableId||tables[0]?.id||'');
     const selectedTable=tables.find(t=>String(t.id)===selectedId)||tables[0]||null;
     if(selectedTable) window.__msMasterRoomTableId=selectedTable.id;
@@ -39,21 +41,30 @@
           <div class="mr-seal" aria-label="Acesso de Mestre">♛<span>${currentUser.role==='admin'?'ARCONTE':'MESTRE'}</span></div>
         </header>
         <section class="mr-actions" aria-label="Ações da Mesa">
-          <button type="button" class="mr-action primary" id="mr-create">＋ <span>FORJAR NOVA MESA</span><small>Até ${limit} mesas por conta</small></button>
+          <button type="button" class="mr-action primary" id="mr-create">＋ <span>${limit!==Infinity&&tables.length>=limit?'AMPLIAR CAPACIDADE':'FORJAR NOVA MESA'}</span><small>${limit===Infinity?'Capacidade ilimitada':`Capacidade ${tables.length}/${limitLabel}`}</small></button>
           <button type="button" class="mr-action" id="mr-refresh">↻ <span>ATUALIZAR REGISTROS</span><small>Sincroniza o acervo local</small></button>
           <button type="button" class="mr-action" id="mr-player-view">👁 <span>VISÃO DO JOGADOR</span><small>Ver mesas conectadas</small></button>
         </section>
         <section class="mr-metrics" aria-label="Resumo da Sala">
-          <article><b>${tables.length}</b><span>Mesas próprias</span><small>${limit-tables.length} espaços livres</small></article>
+          <article><b>${tables.length}</b><span>Mesas próprias</span><small>${free} espaços livres</small></article>
           <article><b>${people}</b><span>Participantes registrados</span><small>nas suas mesas</small></article>
           <article><b>${joined.length}</b><span>Conexões externas</span><small>como participante</small></article>
         </section>
         <section class="mr-registry">
-          <header><div><span class="mr-kicker">REGISTRO DE FENDAS</span><h3>Mesas sob sua guarda</h3></div><span class="mr-count">${tables.length}/${limit}</span></header>
+          <header><div><span class="mr-kicker">REGISTRO DE FENDAS</span><h3>Mesas sob sua guarda</h3></div><span class="mr-count">${tables.length}/${limitLabel}</span></header>
           <div id="mr-table-list" class="mr-table-list">${tables.length?tables.map(tableCard).join(''):`<div class="mr-empty"><span>∴</span><strong>Nenhuma mesa foi forjada.</strong><p>Abra uma nova fenda para começar sua sala.</p></div>`}</div>
         </section>
       </div>`;
-    if (typeof window.renderMasterTools === 'function') window.renderMasterTools(root, selectedTable);
+    if(selectedTable && typeof window.renderMasterTools === 'function') {
+      const commandRoot=root.querySelector(`[data-command-host="${CSS.escape(String(selectedTable.id))}"]`);
+      const toolsRoot=root.querySelector(`[data-tools-host="${CSS.escape(String(selectedTable.id))}"]`);
+      if(toolsRoot) window.renderMasterTools(toolsRoot, selectedTable, {commandRoot});
+    }
+    root.querySelectorAll('[data-workspace-tab]').forEach(btn=>btn.addEventListener('click',()=>{
+      const shell=btn.closest('.mr-table-operational'); if(!shell)return;
+      shell.querySelectorAll('[data-workspace-tab]').forEach(x=>x.classList.toggle('active',x===btn));
+      shell.querySelectorAll('[data-workspace-panel]').forEach(x=>x.hidden=x.dataset.workspacePanel!==btn.dataset.workspaceTab);
+    }));
     root.querySelector('#mr-create').addEventListener('click',window.openCreateTableModal);
     root.querySelector('#mr-refresh').addEventListener('click',syncRemote);
     root.querySelector('#mr-player-view').addEventListener('click',()=>window.switchAncoragemTab('player'));
@@ -81,8 +92,15 @@
     const theme=t.theme||'default';
     const mode=t.gameMode==='exodo'?'ÊXODO':'OCULTATUN';
     const settings=t.settings||{}; const selected=String(window.__msMasterRoomTableId||'')===String(t.id);
-    return `<article class="mr-table-card ${selected?'selected':''}"><div class="mr-table-mark">◈</div><div class="mr-table-main"><div class="mr-table-meta"><span>${selected?'EM PREPARAÇÃO':'FENDA ATIVA'}</span><span>${esc(theme)}</span><span>${mode}</span></div><h4>${esc(t.name||'Mesa sem nome')}</h4><p>Código <strong>${esc(t.code||'—')}</strong> · ${participants} participante(s)</p>${settings.description?`<p>${esc(settings.description)}</p>`:''}<small>${esc(settings.era||'Época aberta')} · ${esc(settings.region||'Região aberta')}${Array.isArray(settings.expansions)&&settings.expansions.length?` · ${esc(settings.expansions.join(', '))}`:''}</small></div><div class="mr-table-actions"><button type="button" data-prepare="${esc(t.id)}">PREPARAR</button><button type="button" class="mr-enter" data-enter="${esc(t.id)}">ENTRAR</button><button type="button" data-invite="${esc(t.id)}">CRIAR CONVITE</button><button type="button" data-copy="${esc(t.code)}">COPIAR CÓDIGO</button><button type="button" class="danger" data-delete="${esc(t.id)}">EXCLUIR</button></div></article>`;
+    const id=esc(t.id);
+    const workspace=selected?`<section class="mr-table-operational" aria-label="Centro operacional de ${esc(t.name||'mesa')}">
+      <nav class="mr-table-workspace-tabs" aria-label="Áreas da mesa"><button type="button" class="active" data-workspace-tab="command">CAMPANHA EM MOVIMENTO</button><button type="button" data-workspace-tab="tools">COFRE DO MESTRE</button></nav>
+      <div class="mr-table-workspace-panel" data-workspace-panel="command"><div class="mr-command-host" data-command-host="${id}"></div></div>
+      <div class="mr-table-workspace-panel" data-workspace-panel="tools" hidden><div class="mr-tools-host" data-tools-host="${id}"></div></div>
+    </section>`:'';
+    return `<article class="mr-table-card ${selected?'selected':''}"><div class="mr-table-mark">◈</div><div class="mr-table-main"><div class="mr-table-meta"><span>${selected?'OPERAÇÃO ABERTA':'FENDA ATIVA'}</span><span>${esc(theme)}</span><span>${mode}</span></div><h4>${esc(t.name||'Mesa sem nome')}</h4><p>Código <strong>${esc(t.code||'—')}</strong> · ${participants} participante(s)</p>${settings.description?`<p>${esc(settings.description)}</p>`:''}<small>${esc(settings.era||'Época aberta')} · ${esc(settings.region||'Região aberta')}${Array.isArray(settings.expansions)&&settings.expansions.length?` · ${esc(settings.expansions.join(', '))}`:''}</small></div><div class="mr-table-actions"><button type="button" data-prepare="${id}">${selected?'ATUALIZAR OPERAÇÃO':'ABRIR OPERAÇÃO'}</button><button type="button" class="mr-enter" data-enter="${id}">ENTRAR</button><button type="button" data-invite="${id}">CRIAR CONVITE</button><button type="button" data-copy="${esc(t.code)}">COPIAR CÓDIGO</button><button type="button" class="danger" data-delete="${id}">EXCLUIR</button></div>${workspace}</article>`;
   }
+
   window.renderPlayerConnections=renderPlayerConnections;
   window.renderMasterRoom=render;
   window.renderAncoragem=render;

@@ -31,10 +31,6 @@
 
     const activeRealtimeChannels = new Map();
 
-    function getAuthRedirectUrl() {
-        return window.location.href.split('#')[0];
-    }
-
     const tableNames = {
         profiles: 'profiles',
         tables: 'tables',
@@ -122,22 +118,11 @@
             return { data, error };
         },
 
-        async resendSignupConfirmation(email) {
-            return supabase.auth.resend({
-                type: 'signup',
-                email: String(email || '').trim().toLowerCase(),
-                options: { emailRedirectTo: getAuthRedirectUrl() }
-            });
-        },
-
         async signUp({ username, email, password, requestMaster = false }) {
             const { data, error } = await supabase.auth.signUp({
                 email: String(email || '').trim(),
                 password: String(password || ''),
-                options: {
-                    emailRedirectTo: getAuthRedirectUrl(),
-                    data: { username: String(username || '').trim(), request_master: !!requestMaster }
-                }
+                options: { data: { username: String(username || '').trim(), request_master: !!requestMaster } }
             });
             if (!error && data?.user && data.user.identities?.length === 0) {
                 return { data, error: new Error('Este e-mail já possui uma conta.') };
@@ -150,7 +135,7 @@
         },
 
         async resetPasswordForEmail(email, redirectTo) {
-            return supabase.auth.resetPasswordForEmail(String(email || '').trim(), { redirectTo: redirectTo || getAuthRedirectUrl() });
+            return supabase.auth.resetPasswordForEmail(String(email || '').trim(), { redirectTo });
         },
 
         async updatePassword(password) {
@@ -192,6 +177,41 @@
         async adminSetUserBanned(userId, banned) {
             const { data, error } = await supabase.rpc('admin_set_user_banned', { p_user_id: String(userId), p_banned: !!banned });
             return { data, error };
+        },
+
+        async fetchSoulAccountState() {
+            const { data, error } = await supabase.rpc('soul_get_account_state');
+            return { data: data || null, error };
+        },
+
+        async touchSoulActivity(source = 'interaction') {
+            const { data, error } = await supabase.rpc('soul_touch_activity', { p_source: String(source || 'interaction').slice(0,80) });
+            return { data: data || null, error };
+        },
+
+        async tickSoulHarvest() {
+            const { data, error } = await supabase.rpc('soul_harvest_tick');
+            return { data: data || null, error };
+        },
+
+        async purchaseSoulProduct(productKey) {
+            const { data, error } = await supabase.rpc('soul_purchase', { p_product_key: String(productKey || '') });
+            return { data: data || null, error };
+        },
+
+        async adminGetSoulAccount(profileId) {
+            const { data, error } = await supabase.rpc('soul_admin_get_account', { p_profile_id: String(profileId || '') });
+            return { data: data || null, error };
+        },
+
+        async adminAdjustSoulBalance(profileId, amount, reason) {
+            const { data, error } = await supabase.rpc('soul_admin_adjust_balance', { p_profile_id: String(profileId || ''), p_amount: Number(amount || 0), p_reason: String(reason || '') });
+            return { data: data || null, error };
+        },
+
+        async adminSetSoulEntitlement(profileId, type, key, quantity, reason) {
+            const { data, error } = await supabase.rpc('soul_admin_set_entitlement', { p_profile_id: String(profileId || ''), p_type: String(type || ''), p_key: String(key || ''), p_quantity: Number(quantity || 0), p_reason: String(reason || '') });
+            return { data: data || null, error };
         },
 
         async createTableRemote(table) {
@@ -236,6 +256,11 @@
 
         async setTableMemberStatus(tableId, userId, status) {
             const { data, error } = await supabase.rpc('set_table_member_status', { p_table_id: String(tableId), p_user_id: String(userId), p_status: String(status) });
+            return { data, error };
+        },
+
+        async setTableMemberRole(tableId, userId, role) {
+            const { data, error } = await supabase.rpc('set_table_member_role', { p_table_id: String(tableId), p_user_id: String(userId), p_role: String(role) });
             return { data, error };
         },
 
@@ -480,16 +505,13 @@
 
         async saveCharacter(character) {
             const payload = normalizeCharacterPayload(character);
-            if (!payload) return null;
+            if (!payload) return { data: null, error: new Error('Ficha inválida.') };
             const { data, error } = await supabase.rpc('save_character_secure', {
                 p_id: payload.id, p_name: payload.name, p_mode: payload.mode, p_nature: payload.nature || null,
                 p_class_name: payload.class_name || null, p_payload: payload.payload || {}
             });
-            if (error) {
-                console.warn('[Mundos Sombrios] saveCharacter falhou:', error);
-                throw error;
-            }
-            return data || null;
+            if (error) console.warn('[Mundos Sombrios] saveCharacter falhou:', error);
+            return { data: data || null, error };
         },
 
         async deleteMyCharacter(characterId) {

@@ -9,8 +9,11 @@ test('V2.1 carrega a camada imersiva sem substituir os módulos consolidados',()
   const html=read('index.html');
   assert.ok(existsSync(join(root,'js/immersive-experience.js')));
   assert.ok(existsSync(join(root,'css/immersive-experience.css')));
-  assert.match(html,/css\/immersive-experience\.css/);
-  assert.match(html,/js\/immersive-experience\.js/);
+  const loader=read('js/feature-loader.js');
+  assert.doesNotMatch(html,/css\/immersive-experience\.css/);
+  assert.doesNotMatch(html,/js\/immersive-experience\.js/);
+  assert.match(loader,/css\/immersive-experience\.css/);
+  assert.match(loader,/js\/immersive-experience\.js/);
 });
 
 test('Portal oferece os quatro acessos primários da experiência',()=>{

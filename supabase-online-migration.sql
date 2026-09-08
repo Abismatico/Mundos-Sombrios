@@ -757,3 +757,5 @@ as $$
 $$;
 revoke all on function public.fetch_table_characters(text) from public;
 grant execute on function public.fetch_table_characters(text) to authenticated;
+
+-- V2.3: execute também supabase-master-v2.3-migration.sql para habilitar Co-Mestre/Observador e colaboração segura.

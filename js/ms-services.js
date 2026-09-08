@@ -1,4 +1,4 @@
-/* Mundos Sombrios — Online Services / v0.67
+/* Mundos Sombrios — Online Services / V2.5
  * Uma única camada de domínio entre UI e Supabase.
  * Regras: Supabase é a fonte de verdade; estado de interface permanece local/efêmero.
  */
@@ -44,7 +44,7 @@
 
   const CharacterService = Object.freeze({
     listMine: () => run('persistence', () => db().fetchMyCharacters(), { entity: 'characters' }),
-    save: character => run('persistence', () => db().saveCharacter(character), { entity: 'character', id: character?.id }),
+    save: character => run('persistence', () => unwrapDB(db().saveCharacter(character)), { entity: 'character', id: character?.id }),
     delete: id => run('persistence', () => db().deleteMyCharacter(id), { entity: 'character', id }),
     getHistory: id => run('persistence', () => db().fetchCharacterVersions(id), { entity: 'character-history', id }),
     restore: (id, versionId) => run('persistence', () => db().restoreCharacterVersion(id, versionId), { entity: 'character-restore', id })
@@ -60,6 +60,7 @@
     roster: id => run('persistence', () => db().fetchTableRoster(id), { entity: 'table-roster', id }),
     characters: id => run('persistence', () => db().fetchTableCharacters(id), { entity: 'table-characters', id }),
     setMemberStatus: (id, userId, status) => run('persistence', () => db().setTableMemberStatus(id, userId, status), { entity: 'table-member', action: status }),
+    setMemberRole: (id, userId, role) => run('persistence', () => db().setTableMemberRole(id, userId, role), { entity: 'table-member', action: 'role:'+role }),
     linkCharacter: (id, characterId) => run('persistence', () => db().linkTableCharacter(id, characterId), { entity: 'table-member', action: 'link-character' }),
     createInvite: (id, expiresAt, maxUses) => run('persistence', () => db().createTableInvite(id, expiresAt, maxUses), { entity: 'table-invite', action: 'create' })
   });
@@ -88,8 +89,24 @@
     posts: () => db().fetchPosts()
   });
 
+  async function unwrapDB(task) {
+    const result = await task;
+    if (result?.error) throw result.error;
+    return result?.data !== undefined ? result.data : result;
+  }
+
+  const SoulService = Object.freeze({
+    state: () => run('persistence', () => unwrapDB(db().fetchSoulAccountState()), { entity: 'soul-economy', action: 'state' }),
+    touch: source => run('persistence', () => unwrapDB(db().touchSoulActivity(source)), { entity: 'soul-harvest', action: 'touch' }),
+    tick: () => run('persistence', () => unwrapDB(db().tickSoulHarvest()), { entity: 'soul-harvest', action: 'tick' }),
+    purchase: productKey => run('persistence', () => unwrapDB(db().purchaseSoulProduct(productKey)), { entity: 'soul-purchase', action: productKey }),
+    adminAccount: profileId => run('persistence', () => unwrapDB(db().adminGetSoulAccount(profileId)), { entity: 'soul-admin', action: 'account' }),
+    adminAdjustBalance: (profileId, amount, reason) => run('persistence', () => unwrapDB(db().adminAdjustSoulBalance(profileId, amount, reason)), { entity: 'soul-admin', action: amount >= 0 ? 'grant' : 'remove' }),
+    adminSetEntitlement: (profileId, type, key, quantity, reason) => run('persistence', () => unwrapDB(db().adminSetSoulEntitlement(profileId, type, key, quantity, reason)), { entity: 'soul-admin', action: 'entitlement' })
+  });
+
   window.MS_SERVICES = Object.freeze({
-    version: '0.67.0',
+    version: '2.5.0',
     Auth: AuthService,
     Profile: ProfileService,
     Characters: CharacterService,
@@ -98,9 +115,10 @@
     Sessions: SessionService,
     VTT: VTTService,
     Content: ContentService,
+    Soul: SoulService,
     clone,
     currentUserId: uid
   });
 
-  platform()?.emit('ms:services:ready', { version: '0.67.0' });
+  platform()?.emit('ms:services:ready', { version: '2.5.0' });
 })();

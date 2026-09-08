@@ -9,3 +9,39 @@
 .player-table-card small{color:#78cfe8;letter-spacing:.12em}.player-table-card h4{margin:.2rem 0}.player-table-card p{margin:0;color:#a9b4bd}
 .player-table-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}.player-table-actions button{border:1px solid rgba(123,225,255,.28);background:#111b24;color:#dff8ff;padding:.6rem .8rem;cursor:pointer}.player-table-actions .danger{border-color:rgba(255,91,108,.34);color:#ff8d99}
 @media(max-width:720px){.player-table-card{grid-template-columns:auto 1fr}.player-table-actions{grid-column:1/-1;justify-content:stretch}.player-table-actions button{flex:1}}
+
+/* V2.3 — Fundação guiada de campanha */
+.master-foundation-grid{margin-top:4px}.master-mode-profile{margin:10px 0;padding:12px;border:1px solid rgba(212,175,55,.22);background:linear-gradient(135deg,rgba(17,14,10,.8),rgba(8,9,12,.82))}.master-mode-profile[hidden]{display:none!important}.master-mode-profile .eyebrow{display:block;margin-bottom:8px;color:#d4af37;font:.58rem "Cinzel",serif;letter-spacing:.12em}
+
+/* V2.4 — Fundação de campanha enquadrada no viewport */
+#create-table-modal{padding:clamp(10px,2.5vh,24px);box-sizing:border-box;align-items:center;overflow:hidden}
+#create-table-modal .create-table-dialog{width:min(920px,96vw);max-width:920px;height:min(92vh,860px);max-height:92vh;padding:0;text-align:left;display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden;border-radius:12px;background:linear-gradient(155deg,#11100f,#090909 68%,#0d0810);box-shadow:0 26px 90px rgba(0,0,0,.82),0 0 0 1px rgba(255,0,255,.06) inset}
+.create-table-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;padding:18px 20px 14px;border-bottom:1px solid #302632;background:linear-gradient(180deg,rgba(34,13,35,.72),rgba(14,12,15,.9));position:relative;z-index:2}
+.create-table-head h3{margin:4px 0 5px;color:#ff72ff;font:700 clamp(1.05rem,2vw,1.4rem) "Cinzel",serif;letter-spacing:.04em}
+.create-table-head p{max-width:680px;margin:0;color:#928c94;font-size:.72rem;line-height:1.5}
+.create-table-head .win-close-btn{flex:0 0 auto}
+.create-table-scroll{min-height:0;overflow:auto;overscroll-behavior:contain;padding:16px 20px 20px;scrollbar-gutter:stable}
+.create-table-scroll>.form-group{margin-bottom:12px}
+#create-table-modal .ms-table-meta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 14px}
+#create-table-modal .form-group label{font-size:.68rem;letter-spacing:.035em}
+#create-table-modal .form-group input,#create-table-modal .form-group select,#create-table-modal .form-group textarea{box-sizing:border-box;width:100%;min-width:0}
+#create-table-modal .form-group textarea{min-height:72px;max-height:150px;resize:vertical}
+#create-table-modal .form-group small{display:block;margin-top:5px;color:#6f6971;font-size:.6rem;line-height:1.4}
+.create-table-actions{margin:0;padding:13px 20px;border-top:1px solid #302632;background:rgba(8,8,9,.96);justify-content:flex-end;position:relative;z-index:2}
+.create-table-actions .souls-btn{min-width:140px}
+@media(max-width:680px){#create-table-modal{padding:8px}.create-table-head{padding:14px}.create-table-scroll{padding:12px 14px 16px}#create-table-modal .ms-table-meta-grid{grid-template-columns:1fr}.create-table-actions{padding:10px 14px}.create-table-actions .souls-btn{flex:1;min-width:0}.create-table-head p{font-size:.67rem}}
+@media(max-height:620px){#create-table-modal .create-table-dialog{height:96vh;max-height:96vh}.create-table-head{padding-top:10px;padding-bottom:9px}.create-table-head p{display:none}.create-table-scroll{padding-top:10px}.create-table-actions{padding-top:8px;padding-bottom:8px}}
+
+/* V2.4 — Campanha em Movimento integrada à própria mesa */
+.mr-table-card.selected{border-color:rgba(212,175,55,.58);box-shadow:0 18px 50px rgba(0,0,0,.36),inset 3px 0 #d4af37}
+.mr-table-operational{grid-column:1/-1;margin:6px -2px -2px;border-top:1px solid #322e27;padding-top:12px;min-width:0}
+.mr-table-workspace-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.mr-table-workspace-tabs button{border:1px solid #373229;background:#0a0908;color:#817a70;padding:9px 12px;font:700 .58rem "Cinzel",serif;letter-spacing:.08em;cursor:pointer}
+.mr-table-workspace-tabs button.active{border-color:#d4af37;color:#d4af37;background:#15120d;box-shadow:inset 0 -2px rgba(212,175,55,.25)}
+.mr-table-workspace-panel[hidden]{display:none!important}
+.mr-table-workspace-panel{min-width:0}
+.mr-command-host .master-command-center,.mr-tools-host .gm-tools-suite{margin:0;border:0;box-shadow:none;background:transparent}
+.mr-command-host .mcc-head,.mr-tools-host .gm-tools-head{border-color:#2e2a24}
+.mr-command-host .master-command-center{border-top:1px solid rgba(212,175,55,.13)}
+.mr-tools-host .gm-tools-suite{padding-top:2px}
+@media(max-width:800px){.mr-table-operational{margin-top:10px}.mr-table-workspace-tabs button{flex:1}.mr-command-host .mcc-head{padding-left:0;padding-right:0}}
