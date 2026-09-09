@@ -7,3 +7,10 @@ __pycache__/
 
 # Local deployment artifacts
 *.local
+
+# Build e segredos locais
+dist/
+node_modules/
+.env
+.env.*
+!.env.example

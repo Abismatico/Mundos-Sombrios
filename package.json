@@ -7,7 +7,7 @@
   "scripts": {
     "check": "node --test tests/*.test.js",
     "syntax": "node tests/syntax-check.mjs",
-    "build": "npm run audit",
+    "build": "npm run audit && node scripts/build-site.mjs",
     "test": "node --test tests/*.test.js",
     "audit": "npm run syntax && npm run test"
   },

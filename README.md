@@ -22,12 +22,10 @@ A autenticação do administrador deve acontecer via Supabase:
 
 ## Publicar no GitHub Pages
 
-1. Crie um repositório público ou privado no GitHub.
-2. Envie este diretório como raiz do repositório.
-3. No GitHub, vá em Settings → Pages.
-4. Source: Deploy from a branch.
-5. Branch: `main` e folder: `/root`.
-6. Salve.
+1. Envie os arquivos para a raiz do repositório, na branch `main`.
+2. Em Settings → Pages → Source, selecione **GitHub Actions**.
+3. O workflow `.github/workflows/pages.yml` valida JavaScript, executa os testes e publica somente os arquivos públicos de `dist/`.
+4. Consulte `IMPLANTACAO.md` para concluir a configuração do Supabase antes de abrir o site aos usuários.
 
 ## Fonte de verdade
 
@@ -56,10 +54,14 @@ Consulte `ARCHITECTURE/CURRENT.md` antes de criar uma nova funcionalidade.
 
 ## Publicação do banco
 
-Para uma instalação nova, execute `supabase-production.sql` no SQL Editor do Supabase e depois as migrações incrementais atuais: `supabase-master-v2.3-migration.sql` e `supabase-soul-economy-v2.5-migration.sql`.
+Para uma instalação nova, execute, nesta ordem:
 
-Para instalações existentes, execute apenas `supabase-online-migration.sql` depois de revisar o estado atual das tabelas. Nunca desabilite RLS em produção.
+1. `supabase-production.sql`
+2. `supabase-master-v2.3-migration.sql`
+3. `supabase-soul-economy-v2.5-migration.sql`
+4. `supabase-character-minimum-v2.5.3-migration.sql`
 
+Para instalações existentes, compare as tabelas, funções e migrações já aplicadas antes de executar apenas as mudanças pendentes. Não reaplique indiscriminadamente o schema inicial. Nunca desabilite RLS em produção.
 
 ## Experiência V2.1
 
