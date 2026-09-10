@@ -1,3 +1,5 @@
+> **V2.6.0:** o Escudo do Mestre agora possui Atlas Global em Leaflet, dossiês visitáveis com artes, solicitações cartográficas Mestre→ADM e simulador econômico global controlado exclusivamente pelo ADM.
+
 > **V2.5.3:** Imortalização simplificada nos dois modos: somente Nome + Expansão + Classe são pré-requisitos; todo o restante da ficha pode ser completado depois.
 
 > **V2.5.2:** Painel ADM reorganizado em abas Usuários / SoulDrakma para tornar concessões administrativas explicitamente acessíveis.
@@ -60,6 +62,7 @@ Para uma instalação nova, execute, nesta ordem:
 2. `supabase-master-v2.3-migration.sql`
 3. `supabase-soul-economy-v2.5-migration.sql`
 4. `supabase-character-minimum-v2.5.3-migration.sql`
+5. `supabase-atlas-v2.6-migration.sql`
 
 Para instalações existentes, compare as tabelas, funções e migrações já aplicadas antes de executar apenas as mudanças pendentes. Não reaplique indiscriminadamente o schema inicial. Nunca desabilite RLS em produção.
 

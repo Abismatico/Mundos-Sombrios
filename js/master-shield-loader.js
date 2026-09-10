@@ -1,4 +1,4 @@
-/* Mundos Sombrios — carregamento sob demanda do Escudo do Mestre v0.67 */
+/* Mundos Sombrios — carregamento sob demanda do Escudo do Mestre v2.6 */
 (function(){
   'use strict';
   let pending=null;
@@ -8,7 +8,7 @@
     if(typeof window.showScreen==='function')window.showScreen('screen-master-shield');
     const root=document.getElementById('master-shield-content');
     if(root&&!window.msShieldNavigate)root.querySelector('.master-shield-body')?.insertAdjacentHTML('afterbegin','<div id="ms-shield-loading" class="panel"><b>ABRINDO ACERVO RESTRITO…</b><p>Carregando cronologia, cartografia e compêndio somente agora.</p></div>');
-    if(!pending)pending=(async()=>{await load('js/master-shield-data.js','ms-shield-data');await load('js/master-shield.js','ms-shield-core');})();
+    if(!pending)pending=(async()=>{await load('js/master-shield-data.js','ms-shield-data');await load('js/master-atlas-data.js','ms-atlas-data');await load('js/master-atlas.js','ms-atlas-core');await load('js/master-shield.js','ms-shield-core');})();
     try{await pending;document.getElementById('ms-shield-loading')?.remove();if(window.openMasterShield!==loaderOpen)return window.openMasterShield();}
     catch(e){pending=null;document.getElementById('ms-shield-loading')?.remove();window.MS_PLATFORM?.toast(e.message||'Não foi possível carregar o Escudo.','error');}
   };

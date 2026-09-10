@@ -551,20 +551,19 @@ function renderAdminRequestsWindows() {
     const container = document.getElementById('admin-requests-container');
     if (!container) return false;
 
-    if (window.MS_DB && window.MS_DB.ready) {
-        requestsDB = dedupeRequests(requestsDB);
-    }
+    if (window.MS_DB && window.MS_DB.ready) requestsDB = dedupeRequests(requestsDB);
     const visibleRequests = requestsDB.filter(req => String(req.status || 'pending').toLowerCase() === 'pending');
-
     container.innerHTML = '';
 
     visibleRequests.forEach((req, idx) => {
+        const requestType = String(req?.data?.type || 'master_role').toLowerCase();
+        const isAtlasRequest = requestType === 'atlas_change';
         const top = 100 + (idx * 30);
         const left = 100 + (idx * 30);
         const win = document.createElement('div');
         win.id = `req-win-${req.id}`;
         win.className = 'vtt-floating-window';
-        win.style.cssText = `position:absolute; top:${top}px !important; left:${left}px !important; transform:none !important; width:300px; display:flex; pointer-events:auto; z-index:9500;`;
+        win.style.cssText = `position:absolute; top:${top}px !important; left:${left}px !important; transform:none !important; width:${isAtlasRequest ? 360 : 300}px; display:flex; pointer-events:auto; z-index:9500;`;
 
         const header = document.createElement('div');
         header.className = 'vtt-window-header';
@@ -574,66 +573,77 @@ function renderAdminRequestsWindows() {
         const title = document.createElement('span');
         title.className = 'vtt-font';
         title.style.fontSize = '0.9rem';
-        title.textContent = 'Elevação de Mestre';
+        title.textContent = isAtlasRequest ? 'Solicitação Cartográfica' : 'Elevação de Mestre';
 
         const closeBtn = document.createElement('button');
         closeBtn.type = 'button';
         closeBtn.className = 'win-close-btn';
         closeBtn.textContent = 'X';
-        closeBtn.addEventListener('click', () => {
-            const target = document.getElementById(`req-win-${req.id}`);
-            if (target) target.remove();
-        });
-
-        header.appendChild(title);
-        header.appendChild(closeBtn);
+        closeBtn.addEventListener('click', () => document.getElementById(`req-win-${req.id}`)?.remove());
+        header.appendChild(title); header.appendChild(closeBtn);
 
         const body = document.createElement('div');
         body.className = 'vtt-window-body';
-        body.style.textAlign = 'center';
+        body.style.textAlign = isAtlasRequest ? 'left' : 'center';
 
-        const text = document.createElement('p');
+        const text = document.createElement('div');
         text.style.marginBottom = '15px';
         text.style.fontSize = '0.9rem';
-        text.innerHTML = `<b>${String(req.username || 'desconhecido')}</b> deseja forjar Fendas (Mestre).`;
+        if (isAtlasRequest) {
+            const kindLabels = { correction:'Correção', lore:'Lore', position:'Posição', economy:'Economia', art:'Arte / visitação', other:'Outra' };
+            const location = String(req?.data?.atlasPointName || 'Registro do Atlas');
+            const kind = kindLabels[String(req?.data?.kind || 'other')] || 'Alteração';
+            const who = String(req.username || 'Mestre');
+            const reason = String(req?.data?.reason || 'Sem justificativa.');
+            const suggestion = String(req?.data?.suggestion || 'Sem proposta detalhada.');
+            const titleLine = document.createElement('p');
+            titleLine.style.margin = '0 0 8px';
+            titleLine.innerHTML = `<b>${who.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</b> solicita revisão de <b>${location.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</b>.`;
+            const meta = document.createElement('p'); meta.style.margin = '0 0 8px'; meta.style.color = '#69e8ff'; meta.textContent = `Tipo: ${kind}`;
+            const reasonEl = document.createElement('p'); reasonEl.style.margin = '0 0 8px'; reasonEl.textContent = `Justificativa: ${reason}`;
+            const suggestionEl = document.createElement('p'); suggestionEl.style.margin = '0'; suggestionEl.textContent = `Sugestão: ${suggestion}`;
+            text.append(titleLine, meta, reasonEl, suggestionEl);
+        } else {
+            const p = document.createElement('p'); p.style.margin = '0';
+            const strong = document.createElement('b'); strong.textContent = String(req.username || 'desconhecido');
+            p.append(strong, document.createTextNode(' deseja forjar Fendas (Mestre).')); text.appendChild(p);
+        }
 
         const actions = document.createElement('div');
-        actions.style.display = 'flex';
-        actions.style.gap = '10px';
-        actions.style.justifyContent = 'center';
-
+        actions.style.display = 'flex'; actions.style.gap = '10px'; actions.style.justifyContent = 'center';
         const acceptBtn = document.createElement('button');
-        acceptBtn.type = 'button';
-        acceptBtn.className = 'souls-btn small-btn';
-        acceptBtn.style.borderColor = '#a8ff00';
-        acceptBtn.style.color = '#a8ff00';
-        acceptBtn.textContent = 'Aceitar';
-        acceptBtn.addEventListener('click', () => {
-            handleReq(req.id, true);
-        });
-
+        acceptBtn.type = 'button'; acceptBtn.className = 'souls-btn small-btn'; acceptBtn.style.borderColor = '#a8ff00'; acceptBtn.style.color = '#a8ff00';
+        acceptBtn.textContent = isAtlasRequest ? 'Revisar no Atlas' : 'Aceitar';
+        acceptBtn.addEventListener('click', () => isAtlasRequest ? reviewAtlasRequest(req.id) : handleReq(req.id, true));
         const rejectBtn = document.createElement('button');
-        rejectBtn.type = 'button';
-        rejectBtn.className = 'souls-btn small-btn';
-        rejectBtn.style.borderColor = '#ff3333';
-        rejectBtn.style.color = '#ff3333';
-        rejectBtn.textContent = 'Negar';
-        rejectBtn.addEventListener('click', () => {
-            handleReq(req.id, false);
-        });
-
-        actions.appendChild(acceptBtn);
-        actions.appendChild(rejectBtn);
-        body.appendChild(text);
-        body.appendChild(actions);
-
-        win.appendChild(header);
-        win.appendChild(body);
-        container.appendChild(win);
-
+        rejectBtn.type = 'button'; rejectBtn.className = 'souls-btn small-btn'; rejectBtn.style.borderColor = '#ff3333'; rejectBtn.style.color = '#ff3333'; rejectBtn.textContent = 'Negar';
+        rejectBtn.addEventListener('click', () => handleReq(req.id, false));
+        actions.append(acceptBtn, rejectBtn); body.append(text, actions); win.append(header, body); container.appendChild(win);
         makeDraggable(win, header, false);
     });
+    return true;
+}
 
+async function reviewAtlasRequest(reqId) {
+    if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
+    const req = (Array.isArray(requestsDB) ? requestsDB : []).find(r => String(r.id) === String(reqId)) ||
+        (window.MS_DB?.ready ? await window.MS_DB.fetchAdminRequests().then(items => (Array.isArray(items) ? items : []).find(r => String(r.id) === String(reqId))) : null);
+    if (!req) { alert('Solicitação cartográfica não encontrada.'); return false; }
+    window.MS_ATLAS_REVIEW_REQUEST = req;
+    try {
+        await Promise.resolve(window.openMasterShield?.());
+        setTimeout(() => {
+            window.msShieldNavigate?.('mapa');
+            if (window.MSAtlas?.reviewRequest) {
+                window.MSAtlas.reviewRequest(req);
+                delete window.MS_ATLAS_REVIEW_REQUEST;
+            }
+        }, 180);
+    } catch (error) {
+        console.error('[Mundos Sombrios] Revisão do Atlas:', error);
+        alert(error.message || 'Não foi possível abrir o Atlas.');
+        return false;
+    }
     return true;
 }
 
@@ -644,9 +654,11 @@ async function handleReq(reqId, approved) {
     if (!req) return false;
 
     const normalizedReq = normalizeRequestEntry(req);
+    const requestType = String(normalizedReq?.data?.type || 'master_role').toLowerCase();
+    if (requestType === 'atlas_change' && approved) return reviewAtlasRequest(reqId);
     const resolvedReq = { ...normalizedReq, status: approved ? 'approved' : 'rejected', updatedAt: new Date().toISOString() };
 
-    if (approved) {
+    if (approved && requestType !== 'atlas_change') {
         const userCandidate = usersDB.find(u => String(u.id) === String(normalizedReq.userId || normalizedReq.user_id)) ||
             usersDB.find(u => String(u.username || '').trim().toLowerCase() === String(normalizedReq.username || '').trim().toLowerCase());
         if (userCandidate) {
@@ -664,7 +676,8 @@ async function handleReq(reqId, approved) {
     msWriteStorageJSON('mundosSombriosRequests', requestsDB);
 
     if (window.MS_DB && window.MS_DB.ready) {
-        await window.MS_DB.saveAdminRequest(resolvedReq);
+        if (typeof window.MS_DB.updateAdminRequestStatus === 'function') await window.MS_DB.updateAdminRequestStatus(resolvedReq.id, resolvedReq.status, resolvedReq.data || {});
+        else await window.MS_DB.saveAdminRequest(resolvedReq);
         const remoteReqs = await window.MS_DB.fetchAdminRequests();
         requestsDB = dedupeRequests(Array.isArray(remoteReqs) ? remoteReqs : []).filter(r => String(r.status || 'pending').toLowerCase() === 'pending');
         msWriteStorageJSON('mundosSombriosRequests', requestsDB);

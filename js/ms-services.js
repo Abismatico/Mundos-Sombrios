@@ -1,4 +1,4 @@
-/* Mundos Sombrios — Online Services / V2.5
+/* Mundos Sombrios — Online Services / V2.6
  * Uma única camada de domínio entre UI e Supabase.
  * Regras: Supabase é a fonte de verdade; estado de interface permanece local/efêmero.
  */
@@ -89,6 +89,37 @@
     posts: () => db().fetchPosts()
   });
 
+  const AtlasService = Object.freeze({
+    points: () => run('persistence', () => db().fetchMapPoints(), { entity: 'master-atlas', action: 'fetch' }),
+    savePoints: points => run('persistence', () => db().saveMapPoints(points), { entity: 'master-atlas', action: 'save' }),
+    economy: () => run('persistence', () => db().fetchGlobalEconomy(), { entity: 'global-economy', action: 'fetch' }),
+    saveEconomy: state => run('persistence', () => db().saveGlobalEconomy(state), { entity: 'global-economy', action: 'save' }),
+    requestChange: payload => {
+      const user = window.currentUser || {};
+      const request = {
+        id: `atlas-${Date.now()}-${Math.random().toString(36).slice(2,8)}`,
+        userId: String(user.id || user.authUserId || ''),
+        username: String(user.username || user.name || user.email || 'mestre'),
+        status: 'pending',
+        createdAt: new Date().toISOString(),
+        data: { type: 'atlas_change', ...(payload || {}) }
+      };
+      return run('persistence', () => db().saveAdminRequest(request), { entity: 'atlas-request', action: 'create' });
+    },
+    resolveRequest: (request, status) => {
+      const normalized = {
+        ...(request || {}),
+        id: String(request?.id || ''),
+        userId: String(request?.userId || request?.user_id || ''),
+        username: String(request?.username || 'desconhecido'),
+        status: String(status || 'approved'),
+        updatedAt: new Date().toISOString(),
+        data: request?.data || {}
+      };
+      return run('persistence', () => db().updateAdminRequestStatus(normalized.id, normalized.status, normalized.data), { entity: 'atlas-request', action: normalized.status });
+    }
+  });
+
   async function unwrapDB(task) {
     const result = await task;
     if (result?.error) throw result.error;
@@ -106,7 +137,7 @@
   });
 
   window.MS_SERVICES = Object.freeze({
-    version: '2.5.0',
+    version: '2.6.0',
     Auth: AuthService,
     Profile: ProfileService,
     Characters: CharacterService,
@@ -115,10 +146,11 @@
     Sessions: SessionService,
     VTT: VTTService,
     Content: ContentService,
+    Atlas: AtlasService,
     Soul: SoulService,
     clone,
     currentUserId: uid
   });
 
-  platform()?.emit('ms:services:ready', { version: '2.5.0' });
+  platform()?.emit('ms:services:ready', { version: '2.6.0' });
 })();

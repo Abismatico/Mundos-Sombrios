@@ -16,7 +16,12 @@
             async fetchUsers() { return []; },
             async fetchTables() { return []; },
             async fetchCharacters() { return []; },
-            async fetchAdminRequests() { return []; }
+            async fetchAdminRequests() { return []; },
+            async updateAdminRequestStatus() { return null; },
+            async fetchMapPoints() { return null; },
+            async saveMapPoints() { return null; },
+            async fetchGlobalEconomy() { return null; },
+            async saveGlobalEconomy() { return null; }
         };
         return;
     }
@@ -565,6 +570,16 @@
             return Array.isArray(data) ? data : [];
         },
 
+        async updateAdminRequestStatus(requestId, status, dataPayload) {
+            const patch = { status: String(status || 'pending'), updated_at: new Date().toISOString() };
+            if (dataPayload && typeof dataPayload === 'object') patch.data = dataPayload;
+            const { data, error } = await runQuery(tableNames.admin_requests, (tableName) =>
+                supabase.from(tableName).update(patch).eq('id', String(requestId)).select().maybeSingle()
+            );
+            if (error) console.warn('[Mundos Sombrios] updateAdminRequestStatus falhou:', error);
+            return data || null;
+        },
+
         async saveSiteContent(content, key = 'portal-official') {
             if (!content || typeof content !== 'object') return null;
             const payload = {
@@ -641,6 +656,31 @@
             const rows = await this.fetchSiteSettings();
             const row = rows.find(x => x.key === 'master_shield_map_points');
             return Array.isArray(row?.value?.points) ? row.value.points : null;
+        },
+
+        async saveMapPoints(points) {
+            if (!Array.isArray(points)) return null;
+            return this.saveSiteSetting('master_shield_map_points', {
+                version: 2,
+                points,
+                updatedBy: String(window.currentUser?.id || ''),
+                updatedAt: new Date().toISOString()
+            });
+        },
+
+        async fetchGlobalEconomy() {
+            const rows = await this.fetchSiteSettings();
+            const row = rows.find(x => x.key === 'master_shield_global_economy');
+            return row?.value && typeof row.value === 'object' ? row.value : null;
+        },
+
+        async saveGlobalEconomy(state) {
+            if (!state || typeof state !== 'object') return null;
+            return this.saveSiteSetting('master_shield_global_economy', {
+                ...state,
+                updatedBy: String(window.currentUser?.id || ''),
+                updatedAt: new Date().toISOString()
+            });
         },
 
         async saveSiteSetting(key, value) {
