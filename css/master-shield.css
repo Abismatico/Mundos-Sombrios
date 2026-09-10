@@ -83,3 +83,7 @@
 @media (max-width:1100px){.master-shield-screen .ms-history-archive-layout{grid-template-columns:1fr}.master-shield-screen .ms-history-cabinet{position:relative;top:auto}.master-shield-screen .ms-history-file-head{flex-direction:column}.master-shield-screen .ms-history-file-actions{align-items:flex-start}.master-shield-screen .ms-history-focus-tabs{justify-content:flex-start}}
 @media (max-width:760px){.master-shield-screen .ms-history-cabinet-drawers{padding:14px}.master-shield-screen .ms-history-drawer-tab{inset:auto 16px 12px 64px}.master-shield-screen .ms-history-file-head h2{font-size:30px}.master-shield-screen .ms-history-file-sheet{padding:16px}.master-shield-screen .ms-history-mini-timeline{grid-template-columns:1fr;max-height:260px;overflow:auto}.master-shield-screen .ms-history-focus-tabs button{width:100%;text-align:center}}
 @media (prefers-reduced-motion:reduce){.master-shield-screen .ms-history-drawer,.master-shield-screen .ms-history-open-file{transition:none;animation:none}}
+
+
+/* V2.7.2 — retorno contextual Escudo ↔ Mesa */
+.master-shield-screen .master-shield-table-return{border-color:#69e8ff!important;color:#69e8ff!important;box-shadow:0 0 18px rgba(105,232,255,.12)}

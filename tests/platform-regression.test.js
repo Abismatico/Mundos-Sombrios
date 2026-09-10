@@ -78,7 +78,7 @@ test('Ancoragem renderiza conexões para jogador e mantém ações de entrada e 
   assert.match(s,/player-tables-list/);
   assert.match(s,/data-player-enter/);
   assert.match(s,/data-player-leave/);
-  assert.ok(s.indexOf('renderPlayerConnections();') < s.indexOf('if(!canGM())return;'));
+  assert.ok(s.indexOf('renderPlayerConnections();syncGmTab();') < s.indexOf('if(!canUseGmLobby())return;'));
 });
 
 test('Cofre do Mestre é idempotente e não duplica suítes em renderizações concorrentes',()=>{

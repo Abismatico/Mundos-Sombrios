@@ -1,4 +1,4 @@
-/* Mundos Sombrios — Ferramentas do Mestre + Escudo V0.60
+/* Mundos Sombrios — Ferramentas do Mestre + Memórias do Mundo V2.7.3
    Proprietário único das ferramentas privadas da Sala dos Mestres e do assistente de regras.
    Não substitui o motor VTT: integra-se por hooks explícitos.
 */
@@ -7,7 +7,8 @@
   const FILES='mundosSombriosGMFilesV1', NOTES='mundosSombriosGMNotesV1', NPCS='mundosSombriosGMNPCsV1', VTT='mundosSombriosVttStateV1';
   const MAX_FILE=3*1024*1024;
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const gm=()=>{try{return !!(currentUser&&(currentUser.role==='mestre'||currentUser.role==='admin'))}catch(_){return false}};
+  const gm=()=>{try{return typeof window.msCanUseMasterAuthority==='function'?window.msCanUseMasterAuthority(contextTable||currentTableData||null):!!(currentUser&&(currentUser.role==='mestre'||currentUser.role==='admin'))}catch(_){return false}};
+  const canAccessShield=()=>{try{return typeof window.msCanAccessMasterShield==='function'?window.msCanAccessMasterShield(contextTable||currentTableData||null):!!(currentUser&&(currentUser.role==='mestre'||currentUser.role==='admin'))}catch(_){return false}};
   const uid=()=>{try{return String(currentUser?.id||'')}catch(_){return ''}};
   let contextTable=null;
   const tableId=()=>{try{return String(contextTable?.id||currentTableData?.id||'draft')}catch(_){return 'draft'}};
@@ -21,21 +22,53 @@
     if(kind==='npcs'){ for(const n of next) await window.MS_DB.saveGMNpc(tableId(),n); for(const n of old) if(!next.some(x=>String(x.id)===String(n.id))) await window.MS_DB.deleteGMNpc(n.id); }
   }
   const setScoped=(key,val)=>{const kind=keyKind(key);const next=Array.isArray(val)?val:[];const prev=kind&&Array.isArray(online[kind])?online[kind].slice():[];if(kind) online[kind]=next;persistScoped(key,next,prev).catch(e=>console.warn('[Mundos Sombrios] persistência GM:',e));};
-  async function hydrateOnline(){
+  async function hydrateOnline(options={}){
     if(!window.MS_DB?.ready || !gm() || tableId()==='draft' || online.hydrated) return;
     try{
       const [notes,npcs,files,state]=await Promise.all([window.MS_DB.fetchGMNotes(tableId()),window.MS_DB.fetchGMNpcs(tableId()),window.MS_DB.fetchGMFiles(tableId()),window.MS_DB.fetchTableState(tableId())]);
-      online.notes=notes.data||[]; online.npcs=npcs.data||[]; online.files=files.data||[]; online.vtt=state.data||online.vtt||{chat:[],dice:[],gallery:[]}; online.hydrated=true;
+      online.notes=notes.data||[]; online.npcs=npcs.data||[]; online.files=files.data||[]; if(!options.keepVtt) online.vtt=window.MS_TABLE_SESSION?.normalizeState?.(state.data||online.vtt)||state.data||online.vtt||{chat:[],dice:[],gallery:[]}; online.hydrated=true;
     }catch(e){console.warn('[Mundos Sombrios] hidratação das ferramentas do Mestre:',e);}
   }
   const mode=()=>{try{return contextTable?.gameMode || currentTableData?.gameMode || (typeof currentDraftGameMode!=='undefined'?currentDraftGameMode:null) || (typeof currentMode!=='undefined'?currentMode:'exodo')}catch(_){return 'exodo'}};
 
   const state={activeTool:'files', shield:null};
+  const MEMORY_POS_KEY='ms:ui:world-memory:position:v1';
+  function readMemoryPosition(){
+    try{const v=JSON.parse(localStorage.getItem(MEMORY_POS_KEY)||'null');return v&&Number.isFinite(v.left)&&Number.isFinite(v.top)?v:null;}catch(_){return null;}
+  }
+  function saveMemoryPosition(left,top){try{localStorage.setItem(MEMORY_POS_KEY,JSON.stringify({left,top}));}catch(_){}}
+  function clampMemoryPanel(box,left,top){
+    const pad=8,w=box.offsetWidth||500,h=box.offsetHeight||300;
+    return {left:Math.max(pad,Math.min(Number(left)||pad,Math.max(pad,innerWidth-w-pad))),top:Math.max(pad,Math.min(Number(top)||pad,Math.max(pad,innerHeight-h-pad)))};
+  }
+  function positionMemoryPanel(box){
+    const saved=readMemoryPosition();if(!saved)return;
+    const p=clampMemoryPanel(box,saved.left,saved.top);box.style.left=p.left+'px';box.style.top=p.top+'px';box.style.right='auto';box.style.bottom='auto';
+  }
+  function setMemoryPanelOpen(open){
+    const button=state.shield?.button,box=state.shield?.box;if(!button||!box)return;
+    box.hidden=!open;button.classList.toggle('is-open',!!open);button.setAttribute('aria-expanded',open?'true':'false');
+    if(open){positionMemoryPanel(box);setTimeout(()=>box.querySelector('#shield-query')?.focus(),0);}
+  }
+  function makeMemoryPanelDraggable(box){
+    const handle=box.querySelector('[data-memory-drag]');if(!handle)return;let drag=null;
+    handle.addEventListener('pointerdown',e=>{
+      if(e.button!==0||e.target.closest('button,input,textarea,a'))return;
+      const r=box.getBoundingClientRect();drag={dx:e.clientX-r.left,dy:e.clientY-r.top,id:e.pointerId};
+      box.classList.add('is-dragging');handle.setPointerCapture?.(e.pointerId);e.preventDefault();
+    });
+    handle.addEventListener('pointermove',e=>{if(!drag||e.pointerId!==drag.id)return;const p=clampMemoryPanel(box,e.clientX-drag.dx,e.clientY-drag.dy);box.style.left=p.left+'px';box.style.top=p.top+'px';box.style.right='auto';box.style.bottom='auto';});
+    const finish=e=>{if(!drag||e.pointerId!==drag.id)return;const r=box.getBoundingClientRect();saveMemoryPosition(r.left,r.top);box.classList.remove('is-dragging');drag=null;};
+    handle.addEventListener('pointerup',finish);handle.addEventListener('pointercancel',finish);
+    const onResize=()=>{if(!box.hidden)positionMemoryPanel(box);};
+    window.addEventListener('resize',onResize);
+    return ()=>window.removeEventListener('resize',onResize);
+  }
 
   async function renderMasterTools(root, table=null, options={}){
-    if(!gm()) return;
     if(table && String(table?.id||'')!==String(contextTable?.id||'')){ contextTable=table; online.hydrated=false; online.notes=[]; online.npcs=[]; online.files=[]; }
     else if(table) contextTable=table;
+    if(!gm()) return;
     await hydrateOnline();
     // Renderização idempotente: chamadas concorrentes da Ancoragem não podem
     // empilhar duas suítes do Cofre do Mestre no mesmo contêiner.
@@ -147,11 +180,17 @@
     }catch(e){console.warn('[Mundos Sombrios] sessões:',e);panel.innerHTML='<div class="gm-empty">Não foi possível carregar as sessões desta campanha.</div>'}
   }
 
-  function mountShield(isGM){ try{window.__msVttIsGM=!!isGM}catch(_){}
-    unmountShield(); if(!isGM)return;
-    const button=document.createElement('button');button.type='button';button.id='master-shield-cube';button.className='master-shield-cube';button.setAttribute('aria-label','Abrir Escudo do Mestre');button.innerHTML='<span>◈</span><small>ESCUDO</small>';document.body.appendChild(button);
-    const box=document.createElement('section');box.id='master-shield-panel';box.className='master-shield-panel';box.hidden=true;box.innerHTML=`<header><div><span class="mr-kicker">ESCUDO DO MESTRE</span><h3>Memória dos Mundos</h3><p id="shield-context"></p></div><button type="button" id="shield-close" aria-label="Fechar">×</button></header><div class="shield-search"><input id="shield-query" placeholder="Pergunte sobre regras, testes, alcance, CDs..."><button type="button" id="shield-ask">CONSULTAR</button></div><div id="shield-answer" class="shield-answer"><div class="shield-empty">Digite uma pergunta. O Escudo consulta apenas o compêndio oficial carregado no site.</div></div>`;document.body.appendChild(box);
-    state.shield={button,box}; button.addEventListener('click',()=>{box.hidden=!box.hidden;if(!box.hidden)box.querySelector('#shield-query').focus();});box.querySelector('#shield-close').addEventListener('click',()=>box.hidden=true);box.querySelector('#shield-ask').addEventListener('click',()=>answer(box));box.querySelector('#shield-query').addEventListener('keydown',e=>{if(e.key==='Enter')answer(box)});setContext(box);
+  function mountShield(isGM){
+    unmountShield();
+    try{window.__msVttIsGM=!!isGM}catch(_){}
+    if(!canAccessShield())return;
+    const button=document.createElement('button');button.type='button';button.id='master-shield-cube';button.className='master-shield-cube';button.setAttribute('aria-label','Abrir Memórias do Mundo');button.setAttribute('aria-expanded','false');button.innerHTML='<span>◈</span><small>MEMÓRIAS</small>';document.body.appendChild(button);
+    const box=document.createElement('section');box.id='master-shield-panel';box.className='master-shield-panel world-memory-panel';box.hidden=true;box.setAttribute('role','dialog');box.setAttribute('aria-label','Memórias do Mundo');box.innerHTML=`<header data-memory-drag title="Arraste para mover as Memórias do Mundo"><div><span class="mr-kicker">ACERVO CONTEXTUAL</span><h3>Memórias do Mundo</h3><p id="shield-context"></p></div><div class="world-memory-head-actions"><button type="button" id="shield-full" aria-label="Abrir Escudo do Mestre completo">◇</button><button type="button" id="shield-close" aria-label="Recolher Memórias do Mundo">×</button></div></header><div class="world-memory-hint">ARRASTE PELO CABEÇALHO · CLIQUE NO ÍCONE PARA RECOLHER</div><div class="shield-search"><input id="shield-query" placeholder="Pergunte sobre regras, testes, alcance, CDs..."><button type="button" id="shield-ask">CONSULTAR</button></div><div id="shield-answer" class="shield-answer"><div class="shield-empty">Digite uma pergunta. As Memórias consultam apenas o compêndio oficial carregado no site.</div></div>`;document.body.appendChild(box);
+    state.shield={button,box,cleanup:null};state.shield.cleanup=makeMemoryPanelDraggable(box);
+    button.addEventListener('click',()=>setMemoryPanelOpen(box.hidden));
+    box.querySelector('#shield-close').addEventListener('click',()=>setMemoryPanelOpen(false));
+    box.querySelector('#shield-full').addEventListener('click',()=>{setMemoryPanelOpen(false);window.openMasterShield?.();});
+    box.querySelector('#shield-ask').addEventListener('click',()=>answer(box));box.querySelector('#shield-query').addEventListener('keydown',e=>{if(e.key==='Enter')answer(box)});setContext(box);
   }
   function setContext(box){const m=mode();box.querySelector('#shield-context').textContent=m==='ocultatun'?'Ocultatun · Ecos da Decadência':'Êxodo · Assimilação';}
   let rulesLoadPromise=null;
@@ -180,34 +219,85 @@
     try{rules=await ensureShieldRules();}catch(err){out.innerHTML='<div class="shield-error">O compêndio do Escudo não pôde ser carregado. Tente novamente.</div>';return;}
     const qn=q.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');const terms=qn.split(/[^a-z0-9]+/).filter(x=>x.length>2);const preferred=mode();const scored=rules.map(r=>{const text=(r.text+' '+r.keywords.join(' ')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');let score=0;terms.forEach(t=>{if(text.includes(t))score+=2;if(r.keywords.includes(t))score+=1});if(r.mode===preferred)score+=3;return {...r,score};}).filter(r=>r.score>4).sort((a,b)=>b.score-a.score).slice(0,3);const history=(window.MS_MASTER_HISTORY?.search?.(q)||[]).slice(0,2);if(!scored.length&&!history.length){out.innerHTML='<div class="shield-error">Não encontrei uma referência suficientemente próxima. Tente mencionar o modo, a regra, o evento, a facção ou o período histórico.</div>';return;}out.innerHTML=`<div class="shield-response"><strong>Consulta contextual</strong><p>Modo priorizado: <b>${esc(preferred==='exodo'?'Êxodo':'Ocultatun')}</b></p>${scored.map(r=>`<article><b>${esc(r.title)}</b><p>${esc(r.text)}</p><small>Regra · ${esc(r.source)} · índice ${r.line}</small></article>`).join('')}${history.map(h=>`<article><b>${esc(h.label)} · ${esc(h.title)}</b><p>${esc(h.summary)}</p><small>Registro histórico canônico · ${esc(window.MS_MASTER_HISTORY.source)}</small></article>`).join('')}</div>`;
   }
-  function unmountShield(){document.getElementById('master-shield-cube')?.remove();document.getElementById('master-shield-panel')?.remove();state.shield=null;try{window.__msVttIsGM=false}catch(_){}}
+  function unmountShield(){try{state.shield?.cleanup?.();}catch(_){}document.getElementById('master-shield-cube')?.remove();document.getElementById('master-shield-panel')?.remove();state.shield=null;try{window.__msVttIsGM=false}catch(_){}}
 
-  function vttState(){return online.vtt||{chat:[],dice:[],gallery:[]};}
-  function saveVtt(state){
-    online.vtt=state;
-    // Estado estrutural (grid, galeria, locks) pertence ao Mestre. Jogadores publicam eventos, não sobrescrevem a mesa.
-    if(window.MS_DB?.ready&&tableId()!=='draft'&&gm()) window.MS_DB.saveTableState(tableId(),state).catch(e=>console.warn('[Mundos Sombrios] Estado VTT:',e));
+  function vttState(){online.vtt=window.MS_TABLE_SESSION?.normalizeState?.(online.vtt)||online.vtt||{chat:[],dice:[],gallery:[]};return online.vtt;}
+  function saveVtt(nextState){
+    online.vtt=window.MS_TABLE_SESSION?.normalizeState?.(nextState)||nextState;
+    // Snapshot é apenas estrutural. Chat/dados são event log e não dependem deste write.
+    if(window.MS_DB?.ready&&tableId()!=='draft'&&gm()) window.MS_SERVICES?.VTT?.saveState?.(tableId(),online.vtt).catch(e=>console.warn('[Mundos Sombrios] Estado VTT:',e));
   }
   async function onVttEnter(table,isGM){
+    try{window.__msVttIsGM=!!isGM}catch(_){}
     if(table) contextTable=table;
     if(online.unsubscribe){try{online.unsubscribe();}catch(_){} online.unsubscribe=null;}
-    if(window.MS_REALTIME?.disconnect) window.MS_REALTIME.disconnect();
-    online.hydrated=false; online.notes=[];online.npcs=[];online.files=[];
+    online.hydrated=false; online.notes=[];online.npcs=[];online.files=[];online.vtt=window.MS_TABLE_SESSION?.normalizeState?.(null)||{chat:[],dice:[],gallery:[]};
     if(table?.id&&window.MS_DB?.ready){
-      try{ const [remote,events]=await Promise.all([window.MS_DB.fetchTableState(table.id),window.MS_DB.fetchTableEvents(table.id,200)]); online.vtt=remote.data||{chat:[],dice:[],gallery:[]};
-        (events.data||[]).forEach(ev=>applyRemoteEvent(ev)); online.hydrated=false; await hydrateOnline();
-        if(window.MS_REALTIME?.connect) online.unsubscribe=await window.MS_REALTIME.connect(table.id,applyRemoteEvent);
-      }catch(e){console.warn('[Mundos Sombrios] Realtime da mesa:',e);}
+      try{
+        const boot=await window.MS_TABLE_SESSION.connect(table.id,applyRemoteEvent);
+        online.vtt=window.MS_TABLE_SESSION.normalizeState(boot.state);
+        // Chat/dados são reconstituídos do event log; snapshot fica reservado ao estado estrutural.
+        replayBootstrapEvents(boot.events||[]);
+        online.hydrated=false; await hydrateOnline({keepVtt:true});
+        restoreVttState();
+      }catch(e){
+        console.warn('[Mundos Sombrios] Sessão da mesa:',e);
+        window.MS_PLATFORM?.toast('A mesa não conseguiu concluir a sincronização. Recursos locais foram bloqueados até a reconexão.','error');
+      }
     }
+  }
+
+  function replayBootstrapEvents(events){
+    const rows=Array.isArray(events)?events:[];
+    const chatRows=rows.filter(e=>e?.event_type==='chat');
+    const diceRows=rows.filter(e=>e?.event_type==='dice');
+    if(chatRows.length) online.vtt.chat=chatRows.slice(-150).map(e=>({id:e.id,sender:e.payload?.sender||'Jogador',msg:e.payload?.msg||'',color:e.payload?.color||'#00ffcc',at:Date.parse(e.created_at||'')||Date.now()}));
+    if(diceRows.length) online.vtt.dice=diceRows.slice(-100).map(e=>({id:e.id,type:e.payload?.type||'d20',result:e.payload?.result,sender:e.payload?.sender||'Jogador',at:Date.parse(e.created_at||'')||Date.now()}));
+    const control=[...rows].reverse().find(e=>e?.event_type==='control');
+    if(control?.payload&&typeof control.payload.chatLocked==='boolean'){online.vtt.controls={...(online.vtt.controls||{}),chatLocked:control.payload.chatLocked};online.vtt.chatLocked=control.payload.chatLocked;}
+    // Totens também são event-sourced: quem entra depois reconstrói adições,
+    // movimentos e remoções mesmo que nenhum Mestre estivesse online para salvar snapshot.
+    rows.filter(e=>['token_add','token_move','token_remove'].includes(e?.event_type)).forEach(applyTokenEventToState);
+  }
+  function gridObjects(){const s=vttState();s.grid=s.grid&&typeof s.grid==='object'?s.grid:{};s.grid.objects=Array.isArray(s.grid.objects)?s.grid.objects:[];return s.grid.objects;}
+  function applyTokenEventToState(event){
+    const p=event?.payload||{},id=String(p.tokenId||p.token?.msTokenId||'');if(!id)return;
+    const objects=gridObjects(),idx=objects.findIndex(o=>String(o?.msTokenId||'')===id);
+    if(event.event_type==='token_add'&&p.token&&typeof p.token==='object'){
+      if(p.actorCanManage!==true&&String(p.token.ownerAuthId||'')!==String(event?.actor_id||''))return;
+      if(idx<0)objects.push({...p.token,msTokenId:id});else objects[idx]={...objects[idx],...p.token,msTokenId:id};return;
+    }
+    if(idx<0||!tokenActorAllowed(event,objects[idx]))return;
+    if(event.event_type==='token_remove'){objects.splice(idx,1);return;}
+    if(event.event_type==='token_move')objects[idx]={...objects[idx],left:Number(p.left)||0,top:Number(p.top)||0,angle:Number(p.angle)||0,scaleX:Number(p.scaleX)||objects[idx].scaleX||1,scaleY:Number(p.scaleY)||objects[idx].scaleY||1};
+  }
+  function tokenActorAllowed(event,obj){
+    const p=event?.payload||{};if(p.actorCanManage===true)return true;
+    const actor=String(event?.actor_id||'');if(!actor)return false;
+    const direct=String(obj?.ownerAuthId||'');if(direct)return direct===actor;
+    const linked=(Array.isArray(tablePlayers)?tablePlayers:[]).find(x=>String(x?.sourceCharId||x?.id||'')===String(obj?.characterId||''));
+    return !!linked&&String(linked.participantUserId||'')===actor;
+  }
+
+  async function verifyCurrentMembership(){
+    if(!currentTableData?.id||!window.MS_SERVICES?.Games?.summaries)return true;
+    try{
+      const rows=await window.MS_SERVICES.Games.summaries();
+      const summary=(Array.isArray(rows)?rows:[]).find(t=>String(t.id)===String(currentTableData.id));
+      if(!summary){window.MS_PLATFORM?.toast('Sua conexão com esta Fenda foi encerrada pelo Mestre.','error');setTimeout(()=>window.leaveVTT?.({force:true,reason:'membership_revoked'}),50);return false;}
+      if(String(summary.status||'active')==='archived'){window.MS_PLATFORM?.toast('Esta Fenda foi arquivada e a sessão ao vivo foi encerrada.','error');setTimeout(()=>window.leaveVTT?.({force:true,reason:'table_archived'}),50);return false;}
+      window.msRefreshCurrentTableAuthority?.(summary);
+      return true;
+    }catch(e){console.warn('[Mundos Sombrios] verificação de membro:',e);return true;}
   }
   async function refreshTableRoster(){
     if(!currentTableData?.id || !window.MS_SERVICES?.Games) return;
     try{
       const result=await window.MS_SERVICES.Games.characters(currentTableData.id);
-      const remoteCharacters=result?.data||[];
+      const remoteCharacters=result?.data||result||[];
       tablePlayers = remoteCharacters.map(c=>{
         const payload=c?.payload&&typeof c.payload==='object'?msClone(c.payload):{};
-        payload.id=c.id; payload.ownerId=c.owner_id; payload.userId=c.user_id; payload.name=payload.name||c.name; payload.mode=payload.mode||c.mode; payload.nature=payload.nature||c.nature; payload.className=payload.className||c.class_name; payload.updatedAt=c.updated_at; payload.isMe=String(c.user_id)===String(currentUser?.id); payload.sourceOwnerId=c.owner_id; payload.sourceCharId=c.id; payload.participantUserId=c.user_id; return payload;
+        payload.id=c.id; payload.ownerId=c.owner_id; payload.userId=c.user_id; payload.name=payload.name||c.name; payload.mode=payload.mode||c.mode; payload.nature=payload.nature||c.nature; payload.className=payload.className||c.class_name; payload.updatedAt=c.updated_at; payload.isMe=String(c.user_id)===String(currentUser?.authUserId||currentUser?.id); payload.sourceOwnerId=c.owner_id; payload.sourceCharId=c.id; payload.participantUserId=c.user_id; return payload;
       });
       renderVttCards?.();
       window.MS_PLATFORM?.emit('table:roster-refreshed',{tableId:currentTableData.id,count:tablePlayers.length});
@@ -215,24 +305,44 @@
   }
   function applyRemoteEvent(event){
     if(!event||!event.event_type)return; const p=event.payload||{};
+    if(event.event_type==='table_deleted'){
+      window.MS_PLATFORM?.toast('Esta Fenda foi encerrada pelo responsável.','error');
+      setTimeout(()=>{try{window.leaveVTT?.({force:true,reason:'table_deleted'});}catch(_){}},30); return;
+    }
     if(event.event_type==='table_refresh'){
-      if(p.entity==='table_members') refreshTableRoster();
-      if(p.entity==='table_state') window.MS_DB?.fetchTableState?.(currentTableData?.id).then(r=>{if(r?.data){online.vtt=r.data;restoreVttState();}}).catch(()=>{});
+      if(p.entity==='table_members') verifyCurrentMembership().then(ok=>{if(ok)refreshTableRoster();});
+      if(p.entity==='table'&&String(p.status||'')==='archived'){window.MS_PLATFORM?.toast('Esta Fenda foi arquivada. A sessão será encerrada.','error');setTimeout(()=>window.leaveVTT?.({force:true,reason:'table_archived'}),30);return;}
+      if(p.entity==='table_state') window.MS_DB?.fetchTableState?.(currentTableData?.id).then(r=>{if(r?.data){online.vtt=window.MS_TABLE_SESSION?.normalizeState?.(r.data)||r.data;restoreVttState();}}).catch(()=>{});
       if(p.entity==='game_sessions') window.MS_PLATFORM?.emit('table:sessions-changed',{tableId:currentTableData?.id});
       return;
     }
-    if(event.event_type==='table_state'){ online.vtt=p.state || p || online.vtt; restoreVttState(); return; }
+    if(event.event_type==='table_state'){ online.vtt=window.MS_TABLE_SESSION?.normalizeState?.(p.state||p||online.vtt)||p.state||p||online.vtt; restoreVttState(); return; }
+    if(event.event_type==='table_status'){ const paused=String(p.status)==='paused'; online.vtt.controls={...(online.vtt.controls||{}),paused}; if(currentTableData)currentTableData.status=paused?'paused':'active'; window.__msTableLivePaused=paused; window.MS_PLATFORM?.emit('table:live-status',{tableId:currentTableData?.id,status:paused?'paused':'active'}); window.MS_PLATFORM?.toast(paused?'A sessão foi pausada pelo Mestre.':'A sessão foi retomada.','success'); return; }
+    if(event.event_type==='master_notice'){ window.MS_PLATFORM?.toast(String(p.message||'Aviso do Mestre'),'success'); showDramaticReveal({title:'AVISO DO MESTRE',body:String(p.message||'')}); return; }
     if(event.event_type==='chat'){
       const duplicate=online.vtt.chat.some(x=>String(x.sender)===String(p.sender)&&String(x.msg)===String(p.msg)&&Date.now()-Number(x.at||0)<5000);
       if(!duplicate){ const item={sender:p.sender,msg:p.msg,color:p.color||'#00ffcc',id:event.id,at:Date.now()}; online.vtt.chat.push(item); online.vtt.chat=online.vtt.chat.slice(-150); if(typeof addChatMessage==='function')addChatMessage(item.sender,item.msg,item.color); }
     }
     if(event.event_type==='reveal'){ showDramaticReveal(p); return; }
     if(event.event_type==='scene'){ window.MS_PLATFORM?.toast(`Cena: ${p.title||'Nova cena'}`,'success'); return; }
-    if(event.event_type==='token_move'){
-      const tokenId=String(p.tokenId||''); const canvas=window.vttCanvas||vttCanvas;
-      const obj=canvas?.getObjects()?.find(o=>String(o.msTokenId||'')===tokenId);
-      if(obj){ window.__msApplyingRemoteToken=true; obj.set({left:Number(p.left)||0,top:Number(p.top)||0,angle:Number(p.angle)||0,scaleX:Number(p.scaleX)||obj.scaleX,scaleY:Number(p.scaleY)||obj.scaleY}); canvas.renderAll(); window.__msApplyingRemoteToken=false; if(isVttGM && window.MasterTools?.saveGrid) window.MasterTools.saveGrid(canvas); }
-      return;
+    if(['token_add','token_move','token_remove'].includes(event.event_type)){
+      const tokenId=String(p.tokenId||p.token?.msTokenId||''),canvas=window.vttCanvas||vttCanvas;
+      let obj=canvas?.getObjects?.()?.find(o=>String(o.msTokenId||'')===tokenId)||null;
+      if(event.event_type==='token_add'){
+        if(obj){applyTokenEventToState(event);return;}
+        if(!p.token||typeof p.token!=='object')return;
+        // Para jogador comum, o servidor reescreve ownerAuthId e actorCanManage.
+        if(p.actorCanManage!==true&&String(p.token.ownerAuthId||'')!==String(event.actor_id||''))return;
+        applyTokenEventToState(event);
+        if(canvas&&window.fabric?.util?.enlivenObjects){window.__msApplyingRemoteToken=true;try{window.fabric.util.enlivenObjects([p.token],items=>{const item=items?.[0];if(item&&!canvas.getObjects().some(o=>String(o.msTokenId||'')===tokenId)){canvas.add(item);canvas.renderAll();if(isVttGM()&&window.MasterTools?.saveGrid)window.MasterTools.saveGrid(canvas);}window.__msApplyingRemoteToken=false;});}catch(_){window.__msApplyingRemoteToken=false;}}
+        return;
+      }
+      if(!obj){applyTokenEventToState(event);return;}
+      if(!tokenActorAllowed(event,obj))return;
+      window.__msApplyingRemoteToken=true;
+      if(event.event_type==='token_remove')canvas?.remove?.(obj);
+      else obj.set({left:Number(p.left)||0,top:Number(p.top)||0,angle:Number(p.angle)||0,scaleX:Number(p.scaleX)||obj.scaleX,scaleY:Number(p.scaleY)||obj.scaleY});
+      canvas?.renderAll?.();window.__msApplyingRemoteToken=false;applyTokenEventToState(event);if(isVttGM()&&window.MasterTools?.saveGrid)window.MasterTools.saveGrid(canvas);return;
     }
     if(event.event_type==='control'){ if(typeof p.chatLocked==='boolean'){ chatLocked=p.chatLocked; const btn=document.getElementById('btn-lock-chat'); if(btn)btn.innerText=chatLocked?'🔏':'🔓'; } return; }
     if(event.event_type==='dice'){
@@ -251,16 +361,16 @@
   }
   function restoreVttState(){const s=vttState();const chat=document.getElementById('chat-messages');if(chat){chat.innerHTML='';(s.chat||[]).forEach(x=>{if(typeof addChatMessage==='function')addChatMessage(x.sender,x.msg,x.color);});}if(typeof diceHistory!=='undefined'){diceHistory=Array.isArray(s.dice)?s.dice.slice():[];if(typeof renderDiceHistory==='function')renderDiceHistory();}const c=document.getElementById('camp-gallery-container');if(c){c.innerHTML='';(s.gallery||[]).forEach(f=>addGalleryDom(f));}}
   function addGalleryDom(f){const c=document.getElementById('camp-gallery-container');if(!c)return;c.insertAdjacentHTML('beforeend',`<div class="gallery-thumb"><img src="${f.src}" alt="${esc(f.name||'Imagem')}" onclick="viewFullscreen(this.src)"><button type="button" class="delete-btn hide-on-view" data-gallery-src="${encodeURIComponent(f.src||'')}">X</button></div>`);}
-  function onChatMessage(sender,msg,isGM){const s=vttState();s.chat=Array.isArray(s.chat)?s.chat:[];const local={id:'local-'+Date.now()+'-'+Math.random(),sender,msg,color:isGM?'#ff00ff':'#00ffcc',at:Date.now()};s.chat.push(local);s.chat=s.chat.slice(-150);if(gm()) saveVtt(s);if(window.MS_DB?.ready&&tableId()!=='draft')window.MS_SERVICES?.VTT?.event?.(tableId(),'chat',{sender,msg,color:local.color});}
-  function onDiceRoll(type,result,sender){if(gm())window.MasterCommandCenter?.log?.('dice',`${sender} rolou ${type}: ${result}`);const s=vttState();s.dice=Array.isArray(s.dice)?s.dice:[];s.dice.push({id:'local-'+Date.now()+'-'+Math.random(),type,result,sender,at:Date.now()});s.dice=s.dice.slice(-100);if(gm()) saveVtt(s);if(window.MS_DB?.ready&&tableId()!=='draft')window.MS_SERVICES?.VTT?.event?.(tableId(),'dice',{type,result,sender});}
+  async function onChatMessage(sender,msg,isGM){const s=vttState();s.chat=Array.isArray(s.chat)?s.chat:[];const local={id:'local-'+Date.now()+'-'+Math.random(),sender,msg,color:isGM?'#ff00ff':'#00ffcc',at:Date.now()};s.chat.push(local);s.chat=s.chat.slice(-150);if(window.MS_DB?.ready&&tableId()!=='draft'){try{return await window.MS_TABLE_SESSION?.send?.('chat',{sender,msg,color:local.color});}catch(error){window.MS_PLATFORM?.toast('Mensagem exibida localmente, mas não foi confirmada pela mesa.','error');throw error;}}return local;}
+  async function onDiceRoll(type,result,sender){if(gm())window.MasterCommandCenter?.log?.('dice',`${sender} rolou ${type}: ${result}`);const s=vttState();s.dice=Array.isArray(s.dice)?s.dice:[];s.dice.push({id:'local-'+Date.now()+'-'+Math.random(),type,result,sender,at:Date.now()});s.dice=s.dice.slice(-100);if(window.MS_DB?.ready&&tableId()!=='draft'){try{return await window.MS_TABLE_SESSION?.send?.('dice',{type,result,sender});}catch(error){window.MS_PLATFORM?.toast('Rolagem local concluída, mas não foi confirmada pela mesa.','error');throw error;}}return result;}
   function syncDice(list){const s=vttState();s.dice=Array.isArray(list)?list.slice(-100):[];saveVtt(s);}
-  function saveTableControlState(patch){ if(!gm()||tableId()==='draft') return; online.vtt={...(online.vtt||{}),...patch}; saveVtt(online.vtt); }
+  function saveTableControlState(patch){ if(!gm()||tableId()==='draft') return; const s=vttState(); s.controls={...(s.controls||{}),...(patch||{})}; if(typeof patch?.chatLocked==='boolean') s.chatLocked=patch.chatLocked; saveVtt(s); }
   function saveGalleryImage(src,name){if(!isVttGM())return;const s=vttState();s.gallery=Array.isArray(s.gallery)?s.gallery:[];s.gallery.push({src,name:name||'Imagem',at:Date.now()});s.gallery=s.gallery.slice(-40);saveVtt(s);}
   function isVttGM(){try{return !!window.__msVttIsGM}catch(_){return false;}}
   function removeGalleryImage(src){const s=vttState();s.gallery=(s.gallery||[]).filter(f=>f.src!==src);saveVtt(s);document.querySelectorAll('[data-gallery-src]').forEach(b=>{try{if(decodeURIComponent(b.dataset.gallerySrc||'')===src)b.parentElement?.remove()}catch(_){}})}
 
-  function saveGrid(canvas){if(!canvas)return;const s=vttState();const props=['owner','ownerId','characterId','msTokenId','borderColor','isGridLine','isRuler'];const objects=canvas.getObjects().filter(o=>!o.isGridLine&&!o.isRuler);s.grid=canvas.toJSON(props);s.grid.objects=objects.map(o=>o.toObject(props));saveVtt(s);}
-  function restoreGrid(canvas){const s=vttState();if(!canvas||!s.grid||!s.grid.objects?.length)return;try{window.__msRestoringGrid=true;canvas.loadFromJSON({version:s.grid.version||'6.0.0',objects:s.grid.objects},()=>{drawGridLines?.();canvas.getObjects().forEach(o=>o.set('selectable',!o.isGridLine&&!o.isRuler&&(gm()||!o.owner||o.owner==='me'||String(o.ownerId||'')===uid())));canvas.renderAll();window.__msRestoringGrid=false;});}catch(_){window.__msRestoringGrid=false}}
+  function saveGrid(canvas){if(!canvas)return;const s=vttState();const props=['owner','ownerId','ownerAuthId','characterId','msTokenId','borderColor','isGridLine','isRuler'];const objects=canvas.getObjects().filter(o=>!o.isGridLine&&!o.isRuler);s.grid=canvas.toJSON(props);s.grid.objects=objects.map(o=>o.toObject(props));saveVtt(s);}
+  function restoreGrid(canvas){const s=vttState();if(!canvas||!s.grid||!s.grid.objects?.length)return;try{window.__msRestoringGrid=true;canvas.loadFromJSON({version:s.grid.version||'6.0.0',objects:s.grid.objects},()=>{drawGridLines?.();canvas.getObjects().forEach(o=>o.set('selectable',!o.isGridLine&&!o.isRuler&&(gm()||String(o.ownerId||'')===uid()||String(o.ownerAuthId||'')===String(currentUser?.authUserId||''))));canvas.renderAll();window.__msRestoringGrid=false;});}catch(_){window.__msRestoringGrid=false}}
   window.renderMasterTools=renderMasterTools;
-  window.MasterTools={renderMasterTools,mountShield,unmountShield,onVttEnter,restoreVttState,onChatMessage,onDiceRoll,syncDice,saveGalleryImage,removeGalleryImage,saveGrid,restoreGrid,saveTableControlState,getWorkbench:workbench,persistWorkbench,getNPCs:()=>scoped(NPCS),getContextTable:()=>contextTable,setActiveTool(tool){state.activeTool=tool;const suite=document.querySelector('.gm-tools-suite');if(!suite)return;suite.querySelectorAll('.gm-tools-tab').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));renderPanel(suite.querySelector('#gm-tools-panel'));}};
+  window.MasterTools={renderMasterTools,mountShield,unmountShield,collapseMemoryPanel:()=>setMemoryPanelOpen(false),toggleMemoryPanel:()=>setMemoryPanelOpen(!!state.shield?.box?.hidden),onVttEnter,restoreVttState,onChatMessage,onDiceRoll,syncDice,saveGalleryImage,removeGalleryImage,saveGrid,restoreGrid,saveTableControlState,getWorkbench:workbench,persistWorkbench,getNPCs:()=>scoped(NPCS),getContextTable:()=>contextTable,setActiveTool(tool){state.activeTool=tool;const suite=document.querySelector('.gm-tools-suite');if(!suite)return;suite.querySelectorAll('.gm-tools-tab').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));renderPanel(suite.querySelector('#gm-tools-panel'));}};
 })();

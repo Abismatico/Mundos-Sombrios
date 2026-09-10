@@ -1,4 +1,4 @@
-/* Mundos Sombrios — Online Services / V2.6
+/* Mundos Sombrios — Online Services / V2.8
  * Uma única camada de domínio entre UI e Supabase.
  * Regras: Supabase é a fonte de verdade; estado de interface permanece local/efêmero.
  */
@@ -52,17 +52,32 @@
 
   const GameService = Object.freeze({
     listMine: () => run('persistence', () => db().fetchMyTables(), { entity: 'tables' }),
-    create: payload => run('persistence', () => db().createTableRemote(payload), { entity: 'table', action: 'create' }),
-    join: (code, characterId) => run('persistence', () => db().joinTableRemote(code, characterId), { entity: 'table', action: 'join' }),
-    leave: code => run('persistence', () => db().leaveTableRemote(code), { entity: 'table', action: 'leave' }),
-    delete: id => run('persistence', () => db().deleteTableSecure(id), { entity: 'table', action: 'delete', id }),
-    updateSettings: (id, settings) => run('persistence', () => db().updateTableSettingsSecure(id, settings), { entity: 'table', action: 'settings', id }),
-    roster: id => run('persistence', () => db().fetchTableRoster(id), { entity: 'table-roster', id }),
-    characters: id => run('persistence', () => db().fetchTableCharacters(id), { entity: 'table-characters', id }),
-    setMemberStatus: (id, userId, status) => run('persistence', () => db().setTableMemberStatus(id, userId, status), { entity: 'table-member', action: status }),
-    setMemberRole: (id, userId, role) => run('persistence', () => db().setTableMemberRole(id, userId, role), { entity: 'table-member', action: 'role:'+role }),
-    linkCharacter: (id, characterId) => run('persistence', () => db().linkTableCharacter(id, characterId), { entity: 'table-member', action: 'link-character' }),
-    createInvite: (id, expiresAt, maxUses) => run('persistence', () => db().createTableInvite(id, expiresAt, maxUses), { entity: 'table-invite', action: 'create' })
+    create: payload => run('persistence', () => unwrapDB(db().createTableRemote(payload)), { entity: 'table', action: 'create' }),
+    join: (code, characterId) => run('persistence', () => unwrapDB(db().joinTableRemote(code, characterId)), { entity: 'table', action: 'join' }),
+    leave: code => run('persistence', () => unwrapDB(db().leaveTableRemote(code)), { entity: 'table', action: 'leave' }),
+    delete: id => run('persistence', () => unwrapDB(db().deleteTableSecure(id)), { entity: 'table', action: 'delete', id }),
+    updateSettings: (id, settings) => run('persistence', () => unwrapDB(db().updateTableSettingsSecure(id, settings)), { entity: 'table', action: 'settings', id }),
+    roster: id => run('persistence', () => unwrapDB(db().fetchTableRoster(id)), { entity: 'table-roster', id }),
+    characters: id => run('persistence', () => unwrapDB(db().fetchTableCharacters(id)), { entity: 'table-characters', id }),
+    setMemberStatus: (id, userId, status) => run('persistence', () => unwrapDB(db().setTableMemberStatus(id, userId, status)), { entity: 'table-member', action: status }),
+    setMemberRole: (id, userId, role) => run('persistence', () => unwrapDB(db().setTableMemberRole(id, userId, role)), { entity: 'table-member', action: 'role:'+role }),
+    linkCharacter: (id, characterId) => run('persistence', () => unwrapDB(db().linkTableCharacter(id, characterId)), { entity: 'table-member', action: 'link-character' }),
+    createInvite: (id, expiresAt, maxUses) => run('persistence', () => unwrapDB(db().createTableInvite(id, expiresAt, maxUses)), { entity: 'table-invite', action: 'create' }),
+    summaries: () => run('persistence', () => unwrapDB(db().fetchMyTableSummaries()), { entity: 'table-summaries' }),
+    archive: (id, archived=true) => run('persistence', () => unwrapDB(db().archiveTableSecure(id, archived)), { entity: 'table', action: archived ? 'archive' : 'restore', id }),
+    setLiveStatus: (id, status) => run('persistence', () => unwrapDB(db().setTableLiveStatus(id, status)), { entity: 'table', action: 'live-status:'+status, id }),
+    directory: () => run('persistence', () => unwrapDB(db().fetchPublicTableDirectory()), { entity: 'table-directory', action: 'fetch' }),
+    requestJoin: (id, characterId) => run('persistence', () => unwrapDB(db().requestTableJoin(id, characterId)), { entity: 'table-join-request', action: 'create', id }),
+    cancelJoinRequest: requestId => run('persistence', () => unwrapDB(db().cancelTableJoinRequest(requestId)), { entity: 'table-join-request', action: 'cancel' }),
+    joinRequests: id => run('persistence', () => unwrapDB(db().fetchTableJoinRequests(id)), { entity: 'table-join-requests', action: 'fetch', id }),
+    resolveJoinRequest: (requestId, approved, reason='') => run('persistence', () => unwrapDB(db().resolveTableJoinRequest(requestId, approved, reason)), { entity: 'table-join-request', action: approved?'approve':'reject' }),
+    recruitmentInvites: id => run('persistence', () => unwrapDB(db().fetchTableRecruitmentInvites(id)), { entity: 'table-recruitment-invites', action: 'fetch', id }),
+    createRecruitmentInvite: (id, scope, targetUsername, message, expiresAt) => run('persistence', () => unwrapDB(db().createTableRecruitmentInvite(id, scope, targetUsername, message, expiresAt)), { entity: 'table-recruitment-invite', action: 'create', id }),
+    acceptRecruitmentInvite: (inviteId, characterId) => run('persistence', () => unwrapDB(db().acceptTableRecruitmentInvite(inviteId, characterId)), { entity: 'table-recruitment-invite', action: 'accept' }),
+    cancelRecruitmentInvite: inviteId => run('persistence', () => unwrapDB(db().cancelTableRecruitmentInvite(inviteId)), { entity: 'table-recruitment-invite', action: 'cancel' }),
+    updateRecruitment: (id, mode, description, recruitment) => run('persistence', () => unwrapDB(db().updateTableRecruitment(id, mode, description, recruitment)), { entity: 'table-recruitment', action: 'update', id }),
+    touchPresence: (id, online=true) => run('realtime', () => unwrapDB(db().touchTablePresence(id, online)), { entity: 'table-presence', action: online?'online':'offline', id }),
+    subscribeDirectory: (refresh,status) => db().subscribeTableDirectory(refresh,status)
   });
 
   const CampaignService = Object.freeze({
@@ -77,10 +92,10 @@
   });
 
   const VTTService = Object.freeze({
-    state: id => run('vtt', () => db().fetchTableState(id), { entity: 'vtt-state', id }),
-    saveState: (id, state) => run('vtt', () => db().saveTableState(id, state), { entity: 'vtt-state', id }),
-    event: (id, type, payload) => run('vtt', () => db().publishTableEvent(id, type, payload), { entity: 'vtt-event', type }),
-    events: id => run('vtt', () => db().fetchTableEvents(id), { entity: 'vtt-events', id }),
+    state: id => run('vtt', () => unwrapDB(db().fetchTableState(id)), { entity: 'vtt-state', id }),
+    saveState: (id, state) => run('vtt', () => unwrapDB(db().saveTableState(id, state)), { entity: 'vtt-state', id }),
+    event: (id, type, payload, options={}) => run('vtt', () => unwrapDB(db().publishTableEvent(id, type, payload, options)), { entity: 'vtt-event', type }),
+    events: id => run('vtt', () => unwrapDB(db().fetchTableEvents(id)), { entity: 'vtt-events', id }),
     subscribe: (id, handlers) => db().subscribeTable(id, handlers)
   });
 
@@ -137,7 +152,7 @@
   });
 
   window.MS_SERVICES = Object.freeze({
-    version: '2.6.0',
+    version: '2.8.0',
     Auth: AuthService,
     Profile: ProfileService,
     Characters: CharacterService,
@@ -152,5 +167,5 @@
     currentUserId: uid
   });
 
-  platform()?.emit('ms:services:ready', { version: '2.6.0' });
+  platform()?.emit('ms:services:ready', { version: '2.8.0' });
 })();

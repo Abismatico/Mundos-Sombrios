@@ -1,115 +1,94 @@
-/* Mundos Sombrios — Sala dos Mestres V0.59
-   Fonte única de verdade da apresentação da Ancoragem/Mesa do Mestre.
-   O motor VTT e o armazenamento permanecem em script.js; este módulo é dono da sala.
-*/
+/* Mundos Sombrios — Ancoragem V3 / V2.8.0
+ * Lobby canônico: table_members/summaries definem associação; participants é legado.
+ */
 (function(){
   'use strict';
-  function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-  function canGM(){try{return !!(currentUser && (currentUser.role==='mestre'||currentUser.role==='admin'));}catch(_){return false;}}
-  function room(){return document.getElementById('ancoragem-gm-tab');}
+  const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const accountRole=()=>String(window.currentUser?.role||'').toLowerCase();
+  const isAdmin=()=>accountRole()==='admin';
+  const canForge=()=>['mestre','admin'].includes(accountRole());
+  const room=()=>document.getElementById('ancoragem-gm-tab');
+  const all=()=>Array.isArray(window.allTablesDB)?window.allTablesDB:(typeof allTablesDB!=='undefined'&&Array.isArray(allTablesDB)?allTablesDB:[]);
+  const memberRole=t=>String(t?.myMemberRole||t?.my_member_role||'').toLowerCase();
+  const isOwner=t=>isAdmin()||!!t?.isOwner||!!t?.is_owner||String(t?.ownerId||t?.owner_id||'')===String(window.currentUser?.id||'');
+  const canManage=t=>isOwner(t)||['mestre','co_mestre'].includes(memberRole(t));
+  const managed=()=>all().filter(canManage);
+  const joined=()=>all().filter(t=>t.status!=='archived'&&!canManage(t)&&!!memberRole(t));
+  const canUseGmLobby=()=>canForge()||managed().length>0;
+  function myCharacter(table){const id=table?.myCharacterId||table?.my_character_id;if(!id)return null;return (window.msGetCurrentCharacters?.()||[]).find(c=>String(c.id)===String(id))||null;}
+  const modeLabel=m=>m==='ocultatun'?'OCULTATUN · ECOS':m==='hybrid'?'HÍBRIDA · ÊXODO + OCULTATUN':'ÊXODO · ASSIMILAÇÃO';
+  function syncGmTab(){const tab=document.getElementById('tab-btn-gm');if(tab)tab.style.display=canUseGmLobby()?'inline-block':'none';}
+
   function renderPlayerConnections(){
-    const root=document.getElementById('player-tables-list'); if(!root)return;
-    const snapshot=typeof window.getMasterRoomState==='function'?window.getMasterRoomState():{joined:[]};
-    const joined=Array.isArray(snapshot.joined)?snapshot.joined:[];
-    root.innerHTML=joined.length?joined.map(t=>{
-      const mode=t.gameMode==='ocultatun'?'OCULTATUN':'ÊXODO';
-      const people=Array.isArray(t.participants)?t.participants.length:0;
-      return `<article class="player-table-card"><div class="player-table-sigil">◈</div><div><small>FENDA CONECTADA · ${mode}</small><h4>${esc(t.name||'Mesa sem nome')}</h4><p>Código <strong>${esc(t.code||'—')}</strong> · ${people} participante(s)</p></div><div class="player-table-actions"><button type="button" data-player-enter="${esc(t.id)}">ENTRAR</button><button type="button" class="danger" data-player-leave="${esc(t.code||'')}">DESCONECTAR</button></div></article>`;
-    }).join(''):`<div class="mr-empty player-empty"><span>∴</span><strong>Nenhuma Fenda conectada.</strong><p>Use “Atravessar Véu” e informe o código recebido do Mestre.</p></div>`;
-    root.querySelectorAll('[data-player-enter]').forEach(b=>b.addEventListener('click',()=>window.enterVTT?.(b.dataset.playerEnter,false)));
-    root.querySelectorAll('[data-player-leave]').forEach(b=>b.addEventListener('click',()=>window.leaveJoinedTable?.(b.dataset.playerLeave)));
+    const root=document.getElementById('player-tables-list');if(!root)return;
+    const rows=joined();
+    root.className='anchor-v3-list';
+    root.innerHTML=rows.length?rows.map(t=>{const ch=myCharacter(t);return `<article class="anchor-v3-card"><div class="anchor-v3-sigil">◈</div><div class="anchor-v3-main"><small>${esc(modeLabel(t.gameMode||t.game_mode))}</small><h4>${esc(t.name||'Mesa sem nome')}</h4><p>${esc(t.settings?.description||'Campanha conectada ao Nexo.')}</p><div class="anchor-v3-meta"><span>CÓDIGO <b>${esc(t.code||'—')}</b></span><span>${Number(t.activeMembers||0)} MEMBROS</span><span>${ch?`ALMA · ${esc(ch.name)}`:'ALMA VINCULADA'}</span></div></div><div class="anchor-v3-actions"><button data-player-enter="${esc(t.id)}">ENTRAR NA SESSÃO</button><button class="danger" data-player-leave="${esc(t.code||'')}">ABANDONAR CAMPANHA</button></div></article>`}).join(''):`<div class="anchor-v3-empty"><span>∴</span><strong>Nenhuma campanha conectada</strong><p>Use “Atravessar Véu” e informe o código recebido do Mestre.</p></div>`;
+    root.querySelectorAll('[data-player-enter]').forEach(b=>b.onclick=()=>window.enterVTT?.(b.dataset.playerEnter,false));
+    root.querySelectorAll('[data-player-leave]').forEach(b=>b.onclick=async()=>{if(await window.leaveJoinedTable?.(b.dataset.playerLeave))await render();});
   }
-  function render(){
-    renderPlayerConnections();
-    if(!canGM())return;
-    const root=room(); if(!root)return;
-    msSeedRepoStoreFromLegacyCharacters(); msSeedTablesFromLegacy(); msSyncCurrentUserView();
-    const snapshot=typeof window.getMasterRoomState==='function'?window.getMasterRoomState():{tables:[],joined:[]};
-    const tables=Array.isArray(snapshot.tables)?snapshot.tables:[];
-    const joined=Array.isArray(snapshot.joined)?snapshot.joined:[];
-    const people=tables.reduce((sum,t)=>sum+(Array.isArray(t.participants)?t.participants.length:0),0);
-    const limit=window.MS_SOUL?.tableCapacity?.() ?? (currentUser.role==='admin'?Infinity:3);
-    const limitLabel=limit===Infinity?'∞':String(limit);
-    const free=limit===Infinity?'∞':Math.max(0,limit-tables.length);
-    const selectedId=String(window.__msMasterRoomTableId||tables[0]?.id||'');
-    const selectedTable=tables.find(t=>String(t.id)===selectedId)||tables[0]||null;
-    if(selectedTable) window.__msMasterRoomTableId=selectedTable.id;
-    root.innerHTML=`
-      <div class="master-room">
-        <header class="master-room-header">
-          <div><span class="mr-kicker">CÂMARA DE REGISTROS</span><h2>Sala dos Mestres</h2><p>Administre suas fendas, prepare sessões e mantenha os registros dos participantes em um único lugar, com sincronização pelo Supabase online.</p></div>
-          <div class="mr-seal" aria-label="Acesso de Mestre">♛<span>${currentUser.role==='admin'?'ARCONTE':'MESTRE'}</span></div>
-        </header>
-        <section class="mr-actions" aria-label="Ações da Mesa">
-          <button type="button" class="mr-action primary" id="mr-create">＋ <span>${limit!==Infinity&&tables.length>=limit?'AMPLIAR CAPACIDADE':'FORJAR NOVA MESA'}</span><small>${limit===Infinity?'Capacidade ilimitada':`Capacidade ${tables.length}/${limitLabel}`}</small></button>
-          <button type="button" class="mr-action" id="mr-refresh">↻ <span>ATUALIZAR REGISTROS</span><small>Sincroniza o acervo local</small></button>
-          <button type="button" class="mr-action" id="mr-player-view">👁 <span>VISÃO DO JOGADOR</span><small>Ver mesas conectadas</small></button>
-        </section>
-        <section class="mr-metrics" aria-label="Resumo da Sala">
-          <article><b>${tables.length}</b><span>Mesas próprias</span><small>${free} espaços livres</small></article>
-          <article><b>${people}</b><span>Participantes registrados</span><small>nas suas mesas</small></article>
-          <article><b>${joined.length}</b><span>Conexões externas</span><small>como participante</small></article>
-        </section>
-        <section class="mr-registry">
-          <header><div><span class="mr-kicker">REGISTRO DE FENDAS</span><h3>Mesas sob sua guarda</h3></div><span class="mr-count">${tables.length}/${limitLabel}</span></header>
-          <div id="mr-table-list" class="mr-table-list">${tables.length?tables.map(tableCard).join(''):`<div class="mr-empty"><span>∴</span><strong>Nenhuma mesa foi forjada.</strong><p>Abra uma nova fenda para começar sua sala.</p></div>`}</div>
-        </section>
-      </div>`;
-    if(selectedTable && typeof window.renderMasterTools === 'function') {
-      const commandRoot=root.querySelector(`[data-command-host="${CSS.escape(String(selectedTable.id))}"]`);
-      const toolsRoot=root.querySelector(`[data-tools-host="${CSS.escape(String(selectedTable.id))}"]`);
-      if(toolsRoot) window.renderMasterTools(toolsRoot, selectedTable, {commandRoot});
+
+  async function refreshRemote(silent=false){
+    if(!window.currentUser||!window.msHydrateRemoteGameState)return;
+    try{await window.msHydrateRemoteGameState();if(!silent)window.MS_PLATFORM?.toast('Ancoragem sincronizada com o servidor.','success');}
+    catch(e){if(!silent)window.MS_PLATFORM?.toast(e?.message||'Falha ao sincronizar a Ancoragem.','error');}
+  }
+
+  async function render(){
+    renderPlayerConnections();syncGmTab();
+    if(!canUseGmLobby())return;
+    const root=room();if(!root)return;
+    const tables=managed();const active=tables.filter(t=>t.status!=='archived');const archived=tables.filter(t=>t.status==='archived');
+    const selectedId=String(window.__msMasterRoomTableId||active[0]?.id||archived[0]?.id||'');
+    const selected=tables.find(t=>String(t.id)===selectedId)||active[0]||archived[0]||null;if(selected)window.__msMasterRoomTableId=selected.id;
+    const memberCount=active.reduce((n,t)=>n+Number(t.activeMembers||0),0);
+    const limit=window.MS_SOUL?.tableCapacity?.()??(isAdmin()?Infinity:3);const limitLabel=limit===Infinity?'∞':String(limit);
+    const createButton=canForge()?`<button id="mr-create" class="primary">＋ FORJAR NOVA MESA<small>${active.filter(isOwner).length}/${limitLabel} sob propriedade</small></button>`:'';
+    root.innerHTML=`<div class="anchor-v3 master-anchor-v3"><header class="anchor-v3-hero"><div><span class="mr-kicker">CENTRO DE ANCORAGEM</span><h2>${isAdmin()?'Comando do Arconte':'Sala dos Mestres'}</h2><p>Campanhas, participantes e sessões conectados a uma única fonte de verdade.</p></div><div class="anchor-v3-role">${isAdmin()?'ARCONTE':'DIREÇÃO'}<small>V2.8.0 · RECRUTAMENTO</small></div></header><section class="anchor-v3-command">${createButton}<button id="mr-refresh">↻ SINCRONIZAR<small>Banco + associação</small></button><button id="mr-player-view">👁 VISÃO DO JOGADOR<small>Campanhas conectadas</small></button></section><section class="anchor-v3-metrics"><article><b>${active.length}</b><span>Fendas dirigidas</span></article><article><b>${memberCount}</b><span>Membros ativos</span></article><article><b>${archived.length}</b><span>Arquivadas</span></article><article><b>${joined().length}</b><span>Conexões como jogador</span></article></section><section class="anchor-v3-registry"><header><div><span class="mr-kicker">REGISTRO OPERACIONAL</span><h3>Mesas sob sua direção</h3></div></header><div class="anchor-v3-list">${active.length?active.map(t=>tableCard(t,selected)).join(''):'<div class="anchor-v3-empty"><strong>Nenhuma Fenda dirigida.</strong></div>'}</div>${archived.length?`<details class="anchor-v3-archive"><summary>ARQUIVO MORTO · ${archived.length}</summary><div class="anchor-v3-list">${archived.map(t=>tableCard(t,selected)).join('')}</div></details>`:''}</section></div>`;
+    bind(root);
+    if(selected&&selected.status!=='archived'&&typeof window.renderMasterTools==='function'){
+      const commandRoot=root.querySelector(`[data-command-host="${CSS.escape(String(selected.id))}"]`),toolsRoot=root.querySelector(`[data-tools-host="${CSS.escape(String(selected.id))}"]`);
+      if(toolsRoot)window.renderMasterTools(toolsRoot,selected,{commandRoot});
     }
-    root.querySelectorAll('[data-workspace-tab]').forEach(btn=>btn.addEventListener('click',()=>{
-      const shell=btn.closest('.mr-table-operational'); if(!shell)return;
-      shell.querySelectorAll('[data-workspace-tab]').forEach(x=>x.classList.toggle('active',x===btn));
-      shell.querySelectorAll('[data-workspace-panel]').forEach(x=>x.hidden=x.dataset.workspacePanel!==btn.dataset.workspaceTab);
-    }));
-    root.querySelector('#mr-create').addEventListener('click',window.openCreateTableModal);
-    root.querySelector('#mr-refresh').addEventListener('click',syncRemote);
-    root.querySelector('#mr-player-view').addEventListener('click',()=>window.switchAncoragemTab('player'));
-    root.querySelectorAll('[data-prepare]').forEach(b=>b.addEventListener('click',()=>{window.__msMasterRoomTableId=b.dataset.prepare;render();}));
-    root.querySelectorAll('[data-enter]').forEach(b=>b.addEventListener('click',()=>window.enterVTT(b.dataset.enter,true)));
-    root.querySelectorAll('[data-invite]').forEach(b=>b.addEventListener('click',()=>createInvite(b.dataset.invite)));
-    root.querySelectorAll('[data-copy]').forEach(b=>b.addEventListener('click',()=>window.copyCode(b.dataset.copy)));
-    root.querySelectorAll('[data-delete]').forEach(b=>b.addEventListener('click',()=>{window.deleteTable(b.dataset.delete); setTimeout(render,0);}));
   }
 
-  async function syncRemote(){
-    if(!canGM()||!window.MS_SERVICES?.Games)return render();
-    try{const result=await window.MS_SERVICES.Games.listMine();const rows=result?.data||result||[];if(Array.isArray(rows)){allTablesDB=rows.map(t=>typeof msNormalizeTable==='function'?msNormalizeTable(t):t);msSyncCurrentUserView?.();}window.MS_PLATFORM?.toast('Registros sincronizados com o Supabase online.','success');}
-    catch(e){console.warn('[Mundos Sombrios] sincronização da Sala do Mestre:',e);window.MS_PLATFORM?.toast('Não foi possível atualizar as mesas online.','error');}
-    render();
-  }
-  async function createInvite(tableId){
-    if(!window.MS_SERVICES?.Games?.createInvite)return;
-    try{const result=await window.MS_SERVICES.Games.createInvite(tableId,null,1);const data=result?.data||result||{};const code=data.code||data.invite_code||data; if(code){try{await navigator.clipboard.writeText(String(code))}catch(_){} window.MS_PLATFORM?.toast(`Convite criado e copiado: ${code}`,'success');}}
-    catch(e){window.MS_PLATFORM?.toast(e.message||'Não foi possível criar o convite.','error');}
+  function tableCard(t,selected){
+    const isSelected=selected&&String(selected.id)===String(t.id),archived=t.status==='archived',id=esc(t.id),owner=isOwner(t),delegated=!owner;
+    const authorityLabel=owner?(isAdmin()&&!t.isOwner?'ADMINISTRAÇÃO':'PROPRIETÁRIO'):'CO-MESTRE';
+    let actions='';
+    if(archived){actions=owner?`<button data-restore="${id}">RESTAURAR</button><button class="danger" data-delete="${id}">DESTRUIR</button>`:'<span class="anchor-v3-readonly">ARQUIVADA · SOMENTE PROPRIETÁRIO/ADM</span>';}
+    else {actions=`<button data-prepare="${id}">${isSelected?'OPERAÇÃO ABERTA':'PREPARAR'}</button><button class="primary" data-enter="${id}">ENTRAR AO VIVO</button><button data-recruit="${id}">RECRUTAMENTO</button><button data-invite="${id}">CÓDIGO PRIVADO</button><button data-copy="${esc(t.code)}">COPIAR CÓDIGO</button>${owner?`<button data-archive="${id}">ARQUIVAR</button><button class="danger" data-delete="${id}">EXCLUIR</button>`:''}`;}
+    return `<article class="anchor-v3-card ${isSelected?'selected':''} ${archived?'archived':''}"><div class="anchor-v3-sigil">${archived?'◇':'◈'}</div><div class="anchor-v3-main"><small>${archived?'FENDA ARQUIVADA':(isSelected?'OPERAÇÃO SELECIONADA':'FENDA DISPONÍVEL')} · ${esc(authorityLabel)} · ${esc(modeLabel(t.gameMode||t.game_mode))}</small><h4>${esc(t.name||'Mesa sem nome')}</h4><p>${esc(t.settings?.description||'Sem descrição operacional.')}</p><div class="anchor-v3-meta"><span>CÓDIGO <b>${esc(t.code||'—')}</b></span><span>${Number(t.activeMembers||0)} MEMBROS</span><span>${esc(t.settings?.region||'REGIÃO ABERTA')}</span>${delegated?'<span>GESTÃO DELEGADA</span>':''}</div></div><div class="anchor-v3-actions">${actions}</div>${isSelected&&!archived?`<section class="anchor-v3-operation"><nav><button class="active" data-workspace-tab="command">DIREÇÃO DA CAMPANHA</button><button data-workspace-tab="tools">COFRE DO MESTRE</button></nav><div data-workspace-panel="command"><div data-command-host="${id}"></div></div><div data-workspace-panel="tools" hidden><div data-tools-host="${id}"></div></div></section>`:''}</article>`;
   }
 
-  function tableCard(t){
-    const participants=Array.isArray(t.participants)?t.participants.length:0;
-    const theme=t.theme||'default';
-    const mode=t.gameMode==='exodo'?'ÊXODO':'OCULTATUN';
-    const settings=t.settings||{}; const selected=String(window.__msMasterRoomTableId||'')===String(t.id);
-    const id=esc(t.id);
-    const workspace=selected?`<section class="mr-table-operational" aria-label="Centro operacional de ${esc(t.name||'mesa')}">
-      <nav class="mr-table-workspace-tabs" aria-label="Áreas da mesa"><button type="button" class="active" data-workspace-tab="command">CAMPANHA EM MOVIMENTO</button><button type="button" data-workspace-tab="tools">COFRE DO MESTRE</button></nav>
-      <div class="mr-table-workspace-panel" data-workspace-panel="command"><div class="mr-command-host" data-command-host="${id}"></div></div>
-      <div class="mr-table-workspace-panel" data-workspace-panel="tools" hidden><div class="mr-tools-host" data-tools-host="${id}"></div></div>
-    </section>`:'';
-    return `<article class="mr-table-card ${selected?'selected':''}"><div class="mr-table-mark">◈</div><div class="mr-table-main"><div class="mr-table-meta"><span>${selected?'OPERAÇÃO ABERTA':'FENDA ATIVA'}</span><span>${esc(theme)}</span><span>${mode}</span></div><h4>${esc(t.name||'Mesa sem nome')}</h4><p>Código <strong>${esc(t.code||'—')}</strong> · ${participants} participante(s)</p>${settings.description?`<p>${esc(settings.description)}</p>`:''}<small>${esc(settings.era||'Época aberta')} · ${esc(settings.region||'Região aberta')}${Array.isArray(settings.expansions)&&settings.expansions.length?` · ${esc(settings.expansions.join(', '))}`:''}</small></div><div class="mr-table-actions"><button type="button" data-prepare="${id}">${selected?'ATUALIZAR OPERAÇÃO':'ABRIR OPERAÇÃO'}</button><button type="button" class="mr-enter" data-enter="${id}">ENTRAR</button><button type="button" data-invite="${id}">CRIAR CONVITE</button><button type="button" data-copy="${esc(t.code)}">COPIAR CÓDIGO</button><button type="button" class="danger" data-delete="${id}">EXCLUIR</button></div>${workspace}</article>`;
+  function bind(root){
+    root.querySelector('#mr-create')?.addEventListener('click',()=>window.openCreateTableModal?.());
+    root.querySelector('#mr-refresh')?.addEventListener('click',async()=>{await refreshRemote();await render();});
+    root.querySelector('#mr-player-view')?.addEventListener('click',()=>window.switchAncoragemTab('player'));
+    root.querySelectorAll('[data-prepare]').forEach(b=>b.onclick=async()=>{window.__msMasterRoomTableId=b.dataset.prepare;await render();});
+    root.querySelectorAll('[data-enter]').forEach(b=>b.onclick=()=>window.enterVTT?.(b.dataset.enter,true));
+    root.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>window.copyCode?.(b.dataset.copy));
+    root.querySelectorAll('[data-recruit]').forEach(b=>b.onclick=()=>window.MS_TABLE_DIRECTORY?.openRecruitment?.(b.dataset.recruit));
+    root.querySelectorAll('[data-invite]').forEach(b=>b.onclick=()=>createInvite(b.dataset.invite));
+    root.querySelectorAll('[data-archive]').forEach(b=>b.onclick=()=>archiveTable(b.dataset.archive,true));
+    root.querySelectorAll('[data-restore]').forEach(b=>b.onclick=()=>archiveTable(b.dataset.restore,false));
+    root.querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{const ok=await window.deleteTable?.(b.dataset.delete);if(ok)await render();});
+    root.querySelectorAll('[data-workspace-tab]').forEach(btn=>btn.onclick=()=>{const shell=btn.closest('.anchor-v3-operation');shell?.querySelectorAll('[data-workspace-tab]').forEach(x=>x.classList.toggle('active',x===btn));shell?.querySelectorAll('[data-workspace-panel]').forEach(x=>x.hidden=x.dataset.workspacePanel!==btn.dataset.workspaceTab);});
   }
+  async function archiveTable(id,archived){try{const confirmed=await window.MS_SERVICES.Games.archive(id,archived);if(!confirmed?.id)throw new Error('O servidor não confirmou a alteração da Fenda.');await refreshRemote(true);window.MS_PLATFORM?.toast(archived?'Mesa arquivada.':'Mesa restaurada.','success');await render();}catch(e){window.MS_PLATFORM?.toast(e?.message||'Não foi possível alterar o arquivo da mesa.','error');}}
+  async function createInvite(tableId){try{const data=await window.MS_SERVICES?.Games?.createInvite?.(tableId,null,1);const code=data?.code||data?.invite_code||data;if(code){try{await navigator.clipboard.writeText(String(code))}catch(_){}window.MS_PLATFORM?.toast(`Convite criado e copiado: ${code}`,'success');}}catch(e){window.MS_PLATFORM?.toast(e?.message||'Não foi possível criar o convite.','error');}}
 
-  window.renderPlayerConnections=renderPlayerConnections;
-  window.renderMasterRoom=render;
-  window.renderAncoragem=render;
+  window.renderPlayerConnections=renderPlayerConnections;window.renderMasterRoom=render;window.renderAncoragem=async function(){await render();if(document.getElementById('ancoragem-directory-tab')?.style.display!=='none')window.MS_TABLE_DIRECTORY?.refresh?.(true);};
   window.switchAncoragemTab=function(tab){
-    const player=document.getElementById('ancoragem-player-tab'), gm=document.getElementById('ancoragem-gm-tab');
-    const gmActive=tab==='gm' && canGM();
-    if(player)player.style.display=gmActive?'none':'flex'; if(gm){gm.style.display=gmActive?'flex':'none'; if(!gmActive && !canGM()) gm.innerHTML='';}
-    document.querySelectorAll('#screen-ancoragem .tab-btn').forEach(btn=>btn.classList.toggle('active', (gmActive&&btn.id==='tab-btn-gm')||(!gmActive&&btn.id!=='tab-btn-gm')));
-    if(gmActive)render(); else renderPlayerConnections();
+    const player=document.getElementById('ancoragem-player-tab'),gmRoot=document.getElementById('ancoragem-gm-tab'),directory=document.getElementById('ancoragem-directory-tab');
+    const gmActive=tab==='gm'&&canUseGmLobby(),dirActive=tab==='directory';
+    if(player)player.style.display=(!gmActive&&!dirActive)?'flex':'none';
+    if(gmRoot){gmRoot.style.display=gmActive?'flex':'none';if(!gmActive&&!canUseGmLobby())gmRoot.innerHTML='';}
+    if(directory)directory.style.display=dirActive?'block':'none';
+    document.querySelectorAll('#screen-ancoragem .tab-btn').forEach(btn=>btn.classList.toggle('active',(gmActive&&btn.id==='tab-btn-gm')||(dirActive&&btn.id==='tab-btn-directory')||(!gmActive&&!dirActive&&btn.id==='tab-btn-player')));
+    if(dirActive){window.MS_TABLE_DIRECTORY?.activate?.();return;}
+    window.MS_TABLE_DIRECTORY?.deactivate?.();if(gmActive)render();else renderPlayerConnections();
   };
-  document.addEventListener('DOMContentLoaded',()=>{ if(document.getElementById('screen-ancoragem'))render(); });
+  window.msCanUseGmLobby=canUseGmLobby;
+  document.addEventListener('DOMContentLoaded',()=>{if(document.getElementById('screen-ancoragem'))render();});
 })();

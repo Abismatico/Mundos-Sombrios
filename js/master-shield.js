@@ -3,10 +3,14 @@
   'use strict';
   window.openMasterShield=function(){
     const role=String(window.currentUser?.role||'').toLowerCase();
-    if(role!=='mestre' && role!=='admin'){ alert('Acesso restrito a Mestres e ADM.'); return; }
+    const allowed=typeof window.msCanAccessMasterShield==='function'?window.msCanAccessMasterShield():(role==='mestre'||role==='admin');
+    if(!allowed){ alert('Acesso restrito a Mestres, Co-Mestres autorizados e ADM.'); return; }
+    window.captureMasterShieldReturnContext?.();
+    window.MasterTools?.collapseMemoryPanel?.();
     const badge=document.getElementById('master-shield-role');
     if(badge) badge.textContent=role==='admin'?'ARCONTE · ADM':'MESTRE AUTORIZADO';
     if(typeof window.showScreen==='function') window.showScreen('screen-master-shield');
+    window.syncMasterShieldReturnUI?.();
     setTimeout(()=>window.msShieldInit?.(),50);
   };
   const root=document.getElementById('master-shield-content');

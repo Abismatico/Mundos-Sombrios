@@ -35,15 +35,18 @@ test('login não cria versões artificiais de personagens', () => {
 });
 
 test('VTT diferencia estado estrutural e eventos de jogadores', () => {
-  assert.match(tools, /Jogadores publicam eventos/);
+  const session = read('js/table-session-engine.js');
+  assert.match(tools, /Snapshot é apenas estrutural/);
+  assert.match(session, /fetchTableEventsAfter/);
   assert.match(db, /table_state/);
   assert.match(db, /table_events/);
 });
 
-test('Sala do Mestre consulta mesas online e oferece convites', () => {
-  assert.match(room, /Games\.listMine/);
-  assert.match(room, /Games\.createInvite/);
-  assert.match(room, /Supabase online/);
+test('Ancoragem V3 consulta associação canônica e oferece convites', () => {
+  const scriptSource = read('js/script.js');
+  assert.match(scriptSource, /Games\.summaries/);
+  assert.match(room, /createInvite/);
+  assert.match(room, /Ancoragem V3/);
 });
 
 
@@ -67,5 +70,5 @@ test('VTT propaga movimentos e consolida estado persistente pelo Mestre', () => 
   const tools = read('js/master-tools.js');
   assert.match(source, /'token_move'/);
   assert.match(tools, /event_type==='token_move'/);
-  assert.match(tools, /isVttGM && window\.MasterTools\?\.saveGrid/);
+  assert.match(tools, /isVttGM\(\)\s*&&\s*window\.MasterTools\?\.saveGrid/);
 });

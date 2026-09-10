@@ -81,7 +81,7 @@ async function hydrateAuthState() {
             window.MS_DB.fetchAdminRequests()
         ]);
         usersDB = mergeUsersFromSources(usersDB, remoteUsers);
-        requestsDB = Array.isArray(remoteRequests) && remoteRequests.length ? remoteRequests : requestsDB;
+        requestsDB = Array.isArray(remoteRequests) ? remoteRequests : requestsDB;
         msWriteStorageJSON('mundosSombriosUsers', usersDB);
         msWriteStorageJSON('mundosSombriosRequests', requestsDB);
     } catch (error) {
@@ -165,7 +165,8 @@ let allCharactersDB = msReadStorageJSON('mundosSombriosChars', []);
 let allTablesDB = msReadStorageJSON('mundosSombriosTables', []);
 let allJoinedTablesDB = msReadStorageJSON('mundosSombriosJoined', []);
 
-let characters = []; 
+let characters = [];
+window.msGetCurrentCharacters = () => Array.isArray(characters) ? JSON.parse(JSON.stringify(characters)) : []; 
 let myTables = [];
 let joinedTables = [];
 window.getMasterRoomState = function(){ return { tables: Array.isArray(myTables) ? msClone(myTables) : [], joined: Array.isArray(joinedTables) ? msClone(joinedTables) : [] }; };
@@ -228,9 +229,10 @@ async function msBuildCurrentUser(profileOverride = null) {
 async function msHydrateRemoteGameState() {
     if (!window.MS_SERVICES?.Characters || !currentUser) return;
     try {
-        const [remoteChars, remoteTables] = await Promise.all([
+        const [remoteChars, remoteTables, remoteSummaries] = await Promise.all([
             window.MS_SERVICES.Characters.listMine(),
-            window.MS_SERVICES.Games.listMine()
+            window.MS_SERVICES.Games.listMine(),
+            window.MS_SERVICES.Games.summaries ? window.MS_SERVICES.Games.summaries() : Promise.resolve([])
         ]);
         const charRows = remoteChars?.data || [];
         characters = charRows.map(c => {
@@ -250,12 +252,15 @@ async function msHydrateRemoteGameState() {
         repoStore[currentUser.id] = currentRepo;
         msWriteJSON(MS_REPO_KEY, repoStore);
 
-        const tableRows = remoteTables?.data || [];
+        const summaryRows = remoteSummaries?.data || remoteSummaries || [];
+        const tableRows = Array.isArray(summaryRows) && summaryRows.length ? summaryRows : (remoteTables?.data || remoteTables || []);
         allTablesDB = tableRows.map(t => msNormalizeTable({
             id:t.id,code:t.code,name:t.name,theme:t.theme,gameMode:t.game_mode,ownerId:t.owner_id,
-            participants:Array.isArray(t.participants)?t.participants:[],banned:t.banned||[],settings:t.settings||{},
+            participants:[],banned:t.banned||[],settings:t.settings||{},status:t.status||'active',
+            activeMembers:Number(t.active_members||0),myMemberRole:t.my_member_role||null,myCharacterId:t.my_character_id||null,isOwner:t.is_owner===true||String(t.owner_id)===String(currentUser.id),
             createdAt:t.created_at,updatedAt:t.updated_at
         }));
+        window.__msTableMemberships=Object.fromEntries(allTablesDB.map(t=>[String(t.id),{role:t.myMemberRole,characterId:t.myCharacterId,isOwner:!!t.isOwner,activeMembers:Number(t.activeMembers||0)}]));
         msSyncCurrentUserView();
         window.MS_PLATFORM?.setStatus('persistence','success',null,{updated:true});
         window.MS_PLATFORM?.emit('character:hydrated',{count:characters.length});
@@ -649,45 +654,19 @@ async function reviewAtlasRequest(reqId) {
 
 async function handleReq(reqId, approved) {
     if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
-    const baseReq = (Array.isArray(requestsDB) ? requestsDB : []).find(r => String(r.id) === String(reqId));
-    const req = baseReq || (window.MS_DB && window.MS_DB.ready ? await window.MS_DB.fetchAdminRequests().then(items => (Array.isArray(items) ? items : []).find(r => String(r.id) === String(reqId))) : null);
+    const req = (Array.isArray(requestsDB) ? requestsDB : []).find(r => String(r.id) === String(reqId)) ||
+        (window.MS_DB?.ready ? await window.MS_DB.fetchAdminRequests().then(items => (Array.isArray(items) ? items : []).find(r => String(r.id) === String(reqId))) : null);
     if (!req) return false;
-
-    const normalizedReq = normalizeRequestEntry(req);
-    const requestType = String(normalizedReq?.data?.type || 'master_role').toLowerCase();
-    if (requestType === 'atlas_change' && approved) return reviewAtlasRequest(reqId);
-    const resolvedReq = { ...normalizedReq, status: approved ? 'approved' : 'rejected', updatedAt: new Date().toISOString() };
-
-    if (approved && requestType !== 'atlas_change') {
-        const userCandidate = usersDB.find(u => String(u.id) === String(normalizedReq.userId || normalizedReq.user_id)) ||
-            usersDB.find(u => String(u.username || '').trim().toLowerCase() === String(normalizedReq.username || '').trim().toLowerCase());
-        if (userCandidate) {
-            if(window.MS_DB?.ready){
-                const roleResult=await window.MS_DB.adminSetUserRole(userCandidate.id,'mestre');
-                if(roleResult.error) throw roleResult.error;
-                const banResult=await window.MS_DB.adminSetUserBanned(userCandidate.id,false);
-                if(banResult.error) throw banResult.error;
-                usersDB=await window.MS_DB.fetchUsers();
-            } else { alert('O serviço online administrativo não está disponível.'); return false; }
-        }
-    }
-
-    requestsDB = dedupeRequests((Array.isArray(requestsDB) ? requestsDB : []).filter(r => String(r.id) !== String(reqId)));
-    msWriteStorageJSON('mundosSombriosRequests', requestsDB);
-
-    if (window.MS_DB && window.MS_DB.ready) {
-        if (typeof window.MS_DB.updateAdminRequestStatus === 'function') await window.MS_DB.updateAdminRequestStatus(resolvedReq.id, resolvedReq.status, resolvedReq.data || {});
-        else await window.MS_DB.saveAdminRequest(resolvedReq);
-        const remoteReqs = await window.MS_DB.fetchAdminRequests();
-        requestsDB = dedupeRequests(Array.isArray(remoteReqs) ? remoteReqs : []).filter(r => String(r.status || 'pending').toLowerCase() === 'pending');
-        msWriteStorageJSON('mundosSombriosRequests', requestsDB);
-    }
-
-    const win = document.getElementById(`req-win-${reqId}`);
-    if (win) win.remove();
-
-    renderAdminRequestsWindows();
-    return true;
+    const normalizedReq=normalizeRequestEntry(req);const requestType=String(normalizedReq?.data?.type||'master_role').toLowerCase();
+    if(requestType==='atlas_change'&&approved)return reviewAtlasRequest(reqId);
+    const win=document.getElementById(`req-win-${reqId}`);const buttons=win?.querySelectorAll('button')||[];buttons.forEach(b=>b.disabled=true);
+    try{
+        if(!window.MS_DB?.ready||typeof window.MS_DB.resolveAdminRequestSecure!=='function')throw new Error('A migração V2.8 de solicitações administrativas ainda não está disponível.');
+        const result=await window.MS_DB.resolveAdminRequestSecure(reqId,approved);if(result?.error)throw result.error;if(!result?.data)throw new Error('O servidor não confirmou a decisão.');
+        requestsDB=dedupeRequests((await window.MS_DB.fetchAdminRequests())||[]).filter(r=>String(r.status||'pending').toLowerCase()==='pending');
+        usersDB=await window.MS_DB.fetchUsers();msWriteStorageJSON('mundosSombriosRequests',requestsDB);win?.remove();renderAdminRequestsWindows();renderAdminPanel?.();
+        window.MS_PLATFORM?.toast(approved?'Solicitação aprovada e confirmada pelo servidor.':'Solicitação recusada e confirmada pelo servidor.','success');return true;
+    }catch(error){buttons.forEach(b=>b.disabled=false);console.error('[Mundos Sombrios] decisão administrativa:',error);window.MS_PLATFORM?.toast(error?.message||'Não foi possível concluir a solicitação.','error');return false;}
 }
 
 // ==========================================
@@ -916,6 +895,11 @@ const ruleset = {
     }
 };
 
+window.MS_TABLE_RULE_CATALOG = Object.freeze(Object.fromEntries(Object.entries(ruleset).map(([mode,data])=>[mode,Object.freeze({
+    expansions:Object.freeze(Object.keys(data?.natures||{})),
+    classes:Object.freeze(Object.fromEntries(Object.entries(data?.natures||{}).map(([nature,def])=>[nature,Object.freeze(Object.keys(def?.classes||{}))])))
+})])));
+
 function getNatureCardClass(nature) {
     if(!nature) return "";
     if(nature.includes("Nexo Padrão")) return "card-nexo";
@@ -964,8 +948,158 @@ function showScreen(id) {
     if(id === 'screen-ancoragem' && typeof renderAncoragem === 'function') {
         renderAncoragem();
     }
+    if(id === 'screen-master-shield') setTimeout(()=>window.syncMasterShieldReturnUI?.(),0);
     return true;
 }
+
+
+// Autoridade de direção é contextual à mesa. Um usuário globalmente Mestre não ganha
+// poderes em uma mesa de terceiro se ali estiver apenas como jogador/observador.
+function msCanUseMasterAuthority(table = null) {
+    try {
+        const role = String(currentUser?.role || '').toLowerCase();
+        if (role === 'admin') return true;
+        const target = table || currentTableData || null;
+        if (!target) return role === 'mestre';
+        if (target.isOwner === true || target.is_owner === true || String(target.ownerId || target.owner_id || '') === String(currentUser?.id || '')) return true;
+        const memberRole = String(target.myMemberRole || target.my_member_role || '').toLowerCase();
+        return memberRole === 'mestre' || memberRole === 'co_mestre';
+    } catch (_) { return false; }
+}
+window.msCanUseMasterAuthority = msCanUseMasterAuthority;
+
+// Acesso ao acervo é um privilégio da conta Mestre/ADM e também pode ser
+// delegado contextualmente a um Co-Mestre. Isso é diferente de poder dirigir
+// a mesa atual: um Mestre visitante pode consultar o Escudo sem ganhar controles GM.
+function msCanAccessMasterShield(table = null) {
+    try {
+        const role = String(currentUser?.role || '').toLowerCase();
+        if (role === 'mestre' || role === 'admin') return true;
+        return msCanUseMasterAuthority(table || currentTableData || null);
+    } catch (_) { return false; }
+}
+window.msCanAccessMasterShield = msCanAccessMasterShield;
+
+function msRefreshCurrentTableAuthority(summary = null) {
+    if (currentTableData && summary && typeof summary === 'object') {
+        const role = summary.myMemberRole ?? summary.my_member_role;
+        const charId = summary.myCharacterId ?? summary.my_character_id;
+        const owner = summary.isOwner ?? summary.is_owner;
+        if (role !== undefined) currentTableData.myMemberRole = role;
+        if (charId !== undefined) currentTableData.myCharacterId = charId;
+        if (owner !== undefined) currentTableData.isOwner = !!owner;
+        if (summary.status) currentTableData.status = summary.status;
+    }
+    const previous = !!isVttGM;
+    const next = !!msCanUseMasterAuthority(currentTableData);
+    isVttGM = next;
+    try { window.__msVttIsGM = next; } catch(_) {}
+    document.querySelectorAll('.gm-only-btn').forEach(el => el.style.display = next ? 'flex' : 'none');
+    if (previous !== next) {
+        window.MS_TABLE_SHELL?.mount?.(currentTableData, next);
+        window.MasterTools?.mountShield?.(next);
+        window.MS_PLATFORM?.toast?.(next ? 'Autoridade de direção concedida nesta mesa.' : 'Sua autoridade de direção nesta mesa foi atualizada.', next ? 'success' : 'info');
+    }
+    return next;
+}
+window.msRefreshCurrentTableAuthority = msRefreshCurrentTableAuthority;
+
+// ESCUDO DO MESTRE ↔ MESA AO VIVO
+// Mantém a sessão multiplayer conectada enquanto o Mestre/ADM consulta o Escudo.
+const MS_SHIELD_RETURN_KEY = 'ms:ui:shield-return:v2';
+function msCloneShieldContext(value) {
+    try { return JSON.parse(JSON.stringify(value)); } catch(_) { return value || null; }
+}
+function persistMasterShieldReturnContext(ctx) {
+    window.__msShieldReturnContext = ctx || null;
+    try {
+        if(ctx) sessionStorage.setItem(MS_SHIELD_RETURN_KEY, JSON.stringify(ctx));
+        else sessionStorage.removeItem(MS_SHIELD_RETURN_KEY);
+    } catch(_) {}
+    return ctx;
+}
+function readMasterShieldReturnContext() {
+    if(window.__msShieldReturnContext) return window.__msShieldReturnContext;
+    try {
+        const stored = JSON.parse(sessionStorage.getItem(MS_SHIELD_RETURN_KEY) || 'null');
+        if(stored && typeof stored === 'object') window.__msShieldReturnContext = stored;
+    } catch(_) {}
+    return window.__msShieldReturnContext || null;
+}
+function captureMasterShieldReturnContext() {
+    const active = document.querySelector('.screen.active')?.id || 'screen-mode-select';
+    const existing = readMasterShieldReturnContext();
+    if(active === 'screen-master-shield' && existing) {
+        syncMasterShieldReturnUI();
+        return existing;
+    }
+    const fromTable = active === 'screen-vtt' && (!!currentTableData || !!isDraftMode);
+    const ctx = {
+        screen: fromTable ? 'screen-vtt' : active,
+        fromTable,
+        tableId: currentTableData?.id || (isDraftMode ? 'draft' : null),
+        table: fromTable && currentTableData ? msCloneShieldContext(currentTableData) : null,
+        isDraft: !!isDraftMode,
+        asGM: !!isVttGM,
+        capturedAt: Date.now()
+    };
+    persistMasterShieldReturnContext(ctx);
+    syncMasterShieldReturnUI();
+    return ctx;
+}
+
+function syncMasterShieldReturnUI() {
+    const btn = document.getElementById('master-shield-back');
+    if(!btn) return;
+    const ctx = readMasterShieldReturnContext();
+    const recoverableTable = ctx?.fromTable && (currentTableData || ctx?.table || ctx?.tableId === 'draft' || (ctx?.tableId && msGetTableByCodeOrId(ctx.tableId)));
+    const canReturnToTable = !!recoverableTable;
+    btn.innerHTML = canReturnToTable ? '&#8646; RETORNAR À MESA' : '&#8592; VOLTAR';
+    btn.classList.toggle('master-shield-table-return', canReturnToTable);
+    btn.setAttribute('aria-label', canReturnToTable ? 'Retornar à Mesa ao Vivo' : 'Voltar à tela anterior');
+}
+
+function returnFromMasterShield() {
+    const ctx = readMasterShieldReturnContext();
+    if(ctx?.fromTable) {
+        if(!currentTableData && ctx.tableId && ctx.tableId !== 'draft') {
+            currentTableData = msClone(msGetTableByCodeOrId(ctx.tableId) || ctx.table || null);
+        }
+        if(!currentTableData && ctx.table) currentTableData = msClone(ctx.table);
+        if(ctx.tableId === 'draft' || ctx.isDraft) isDraftMode = true;
+        // Nunca confia em sessionStorage para restaurar privilégios. A autoridade é
+        // recalculada a partir da conta/vínculo atual; o contexto só restaura navegação.
+        const returnRole = String(currentUser?.role || '').toLowerCase();
+        isVttGM = isDraftMode ? (returnRole === 'mestre' || returnRole === 'admin') : msCanUseMasterAuthority(currentTableData);
+        try { window.__msVttIsGM = !!isVttGM; } catch(_) {}
+        document.querySelectorAll('.gm-only-btn').forEach(el => el.style.display = isVttGM ? 'flex' : 'none');
+        if(currentTableData || isDraftMode) {
+            showScreen('screen-vtt');
+            const screen = document.getElementById('screen-vtt');
+            screen?.classList.add('ms-table-v3-active');
+            window.MS_TABLE_SHELL?.mount?.(currentTableData || {name:document.getElementById('vtt-table-name')?.textContent||'Nova Fenda',code:'RASCUNHO'}, isVttGM);
+            window.MasterTools?.mountShield?.(isVttGM, currentTableData);
+            window.MasterTools?.restoreVttState?.();
+            setTimeout(()=>{
+                try{
+                    window.initVttGrid?.();
+                    window.vttCanvas?.calcOffset?.();
+                    window.vttCanvas?.requestRenderAll?.();
+                }catch(_){}
+            },60);
+            persistMasterShieldReturnContext(null);
+            return true;
+        }
+        window.MS_PLATFORM?.toast?.('A Mesa anterior não pôde ser recuperada nesta sessão.','error');
+    }
+    const target = ctx?.screen && ctx.screen !== 'screen-master-shield' && document.getElementById(ctx.screen) ? ctx.screen : 'screen-mode-select';
+    persistMasterShieldReturnContext(null);
+    showScreen(target);
+    return true;
+}
+window.captureMasterShieldReturnContext = captureMasterShieldReturnContext;
+window.syncMasterShieldReturnUI = syncMasterShieldReturnUI;
+window.returnFromMasterShield = returnFromMasterShield;
 
 function selectGameMode(mode) {
     window.MS_PLATFORM?.emit('mode:changing',{mode});
@@ -1938,32 +2072,28 @@ function centerWindow(el) {
 }
 
 function toggleVttWindow(id) {
-    // Fecha todas as outras, mantendo exclusividade visual
-    document.querySelectorAll('.vtt-floating-window').forEach(el => {
-        if(el.id !== id) el.style.display = 'none';
-    });
-
-    const el = document.getElementById(id);
-    if(el.style.display === 'none' || el.style.display === '') {
-        el.style.display = 'flex';
-        el.style.zIndex = 600;
-        centerWindow(el); // Centraliza sempre que abre
-        
-        if(id === 'vtt-grid-window') {
-            setTimeout(initVttGrid, 50);
-        }
-    } else {
-        el.style.display = 'none';
+    const shellMode=document.getElementById('screen-vtt')?.classList.contains('ms-table-v3-active');
+    const pinned=['vtt-cards-window','vtt-grid-window','vtt-dice-box','vtt-chat-box'];
+    if(shellMode && pinned.includes(id)){
+        const el=document.getElementById(id); if(el)el.style.display='flex';
+        if(id==='vtt-grid-window')setTimeout(initVttGrid,50); return;
     }
+    document.querySelectorAll(shellMode?'.ms-table-v3-overlays .vtt-floating-window':'.vtt-floating-window').forEach(el => { if(el.id !== id) el.style.display = 'none'; });
+    const el = document.getElementById(id); if(!el)return;
+    if(el.style.display === 'none' || el.style.display === '') { el.style.display = 'flex'; el.style.zIndex = 600; if(!shellMode)centerWindow(el); if(id === 'vtt-grid-window') setTimeout(initVttGrid, 50); }
+    else el.style.display = 'none';
 }
 
-async function leaveVTT() {
-    if(!confirm("Deseja desconectar sua alma desta fenda?")) return;
-    try {
-        if(!isDraftMode && !isVttGM && currentTableData?.code && window.MS_SERVICES?.Games) await window.MS_SERVICES.Games.leave(currentTableData.code);
-    } catch(error) { window.MS_PLATFORM?.toast(error.message||'Não foi possível encerrar a conexão com a mesa.','error'); return; }
-    isDraftMode=false; showScreen('screen-ancoragem'); tablePlayers=[]; currentTableData=null;
+async function leaveVTT(options = {}) {
+    const force = options === true || options?.force === true;
+    if(!force && !confirm("Sair da sessão ao vivo? Sua vinculação com a campanha será preservada.")) return false;
+    try { await window.MS_TABLE_SESSION?.disconnect?.(); } catch(error) { console.warn('[Mundos Sombrios] encerramento de sessão:',error); }
+    persistMasterShieldReturnContext(null);
+    isDraftMode=false; document.getElementById('screen-vtt')?.classList.remove('ms-table-v3-active'); showScreen('screen-ancoragem'); tablePlayers=[]; currentTableData=null;
     if (window.MasterTools && typeof window.MasterTools.unmountShield === 'function') window.MasterTools.unmountShield();
+    if(typeof window.renderAncoragem==='function') window.renderAncoragem();
+    if(force && options?.reason==='membership_revoked') window.MS_PLATFORM?.toast?.('Seu vínculo com esta Mesa foi encerrado pelo Mestre.','error');
+    return true;
 }
 
 function openManagePlayers() {
@@ -1991,7 +2121,8 @@ async function kickPlayer(index, type) {
     if(!p || p.isNPC || !currentTableData?.id) return;
     if(!confirm(`Deseja ${type === 'perm' ? 'BANIR' : 'EXPULSAR'} ${p.name}?`)) return;
     try {
-        await window.MS_SERVICES?.Games?.setMemberStatus(currentTableData.id, p.participantUserId || p.userId, type === 'perm' ? 'banned' : 'left');
+        const confirmed=await window.MS_SERVICES?.Games?.setMemberStatus(currentTableData.id, p.participantUserId || p.userId, type === 'perm' ? 'banned' : 'left');
+        if(confirmed!==true) throw new Error('O servidor não confirmou a alteração do participante.');
         tablePlayers.splice(index, 1);
         renderVttCards(); openManagePlayers();
         window.MS_PLATFORM?.toast(type === 'perm' ? 'Jogador banido da mesa.' : 'Jogador removido da mesa.','success');
@@ -2078,6 +2209,16 @@ function makeDraggable(el, header, requiresGM) {
 }
 
 // VTT GRID (Fabric.js)
+function msVttObjectOwnedByCurrentUser(obj) {
+    if (isVttGM) return true;
+    const myProfileId = String(currentUser?.id || '');
+    const myAuthId = String(currentUser?.authUserId || '');
+    if(!obj)return false;
+    const tokenAuthId=String(obj.ownerAuthId||'');
+    if(tokenAuthId)return !!myAuthId&&tokenAuthId===myAuthId;
+    return !!myProfileId&&String(obj.ownerId||'')===myProfileId;
+}
+function msVttPlayerInteractionBlocked() { return !isVttGM && !!window.__msTableLivePaused; }
 async function initVttGrid() {
     try { if(!window.fabric) await window.MS_VENDOR?.ensure('fabric'); } catch(error) { window.MS_PLATFORM?.toast(error.message||'Não foi possível carregar o mapa do VTT.','error'); return; }
     if (!msRequireDependency('fabric', 'VTT/Mapa', 'A biblioteca Fabric.js não foi carregada.')) return;
@@ -2096,14 +2237,25 @@ async function initVttGrid() {
         let moveTimer = null;
         vttCanvas.on('object:moving', function(e) {
             const target=e.target;
-            if(!isVttGM && target.owner !== 'me') { target.set({left:e.transform.original.left, top:e.transform.original.top}); vttCanvas.renderAll(); return; }
+            if(msVttPlayerInteractionBlocked() || !msVttObjectOwnedByCurrentUser(target)) { target.set({left:e.transform.original.left, top:e.transform.original.top}); vttCanvas.renderAll(); return; }
             if(window.__msApplyingRemoteToken || !target?.msTokenId || !currentTableData?.id || !window.MS_SERVICES?.VTT) return;
             clearTimeout(moveTimer);
             moveTimer=setTimeout(()=>{
-                window.MS_SERVICES.VTT.event(currentTableData.id,'token_move',{tokenId:String(target.msTokenId),left:Number(target.left)||0,top:Number(target.top)||0,angle:Number(target.angle)||0,scaleX:Number(target.scaleX)||1,scaleY:Number(target.scaleY)||1});
+                window.MS_TABLE_SESSION?.send?.('token_move',{tokenId:String(target.msTokenId),left:Number(target.left)||0,top:Number(target.top)||0,angle:Number(target.angle)||0,scaleX:Number(target.scaleX)||1,scaleY:Number(target.scaleY)||1});
             },60);
         });
-        ['object:modified','object:added','object:removed'].forEach(evt=>vttCanvas.on(evt,()=>{ if(window.MasterTools?.saveGrid && !window.__msRestoringGrid && (isVttGM || evt!=='object:modified')) window.MasterTools.saveGrid(vttCanvas); }));
+        vttCanvas.on('object:added',e=>{
+            const target=e.target;if(window.__msRestoringGrid||window.__msApplyingRemoteToken||!target?.msTokenId)return;
+            const props=['owner','ownerId','ownerAuthId','characterId','msTokenId','borderColor','isGridLine','isRuler'];
+            if(currentTableData?.id) window.MS_TABLE_SESSION?.send?.('token_add',{tokenId:String(target.msTokenId),characterId:target.characterId||null,token:target.toObject(props)}).catch(err=>window.MS_PLATFORM?.toast?.(err?.message||'Totem não foi compartilhado.','error'));
+            if(isVttGM&&window.MasterTools?.saveGrid) window.MasterTools.saveGrid(vttCanvas);
+        });
+        vttCanvas.on('object:removed',e=>{
+            const target=e.target;if(window.__msRestoringGrid||window.__msApplyingRemoteToken||!target?.msTokenId)return;
+            if(currentTableData?.id) window.MS_TABLE_SESSION?.send?.('token_remove',{tokenId:String(target.msTokenId)}).catch(err=>window.MS_PLATFORM?.toast?.(err?.message||'Remoção do totem não foi compartilhada.','error'));
+            if(isVttGM&&window.MasterTools?.saveGrid) window.MasterTools.saveGrid(vttCanvas);
+        });
+        vttCanvas.on('object:modified',()=>{if(isVttGM&&window.MasterTools?.saveGrid&&!window.__msRestoringGrid&&!window.__msApplyingRemoteToken)window.MasterTools.saveGrid(vttCanvas);});
     } else {
         vttCanvas.setWidth(container.clientWidth);
         vttCanvas.setHeight(container.clientHeight);
@@ -2148,19 +2300,20 @@ function canvasSetMode(mode) {
 }
 
 function canvasAddPCToken() {
+    if(msVttPlayerInteractionBlocked()){window.MS_PLATFORM?.toast?.('A sessão está pausada pelo Mestre.','error');return;}
     if(!tablePlayers.length) return;
     const myChar = tablePlayers.find(p => p.isMe) || tablePlayers[0];
     
     fabric.Image.fromURL(myChar.avatar || '', function(img) {
         if(!img) {
             const circle = new fabric.Circle({ radius: 25, fill: '#00ffcc', stroke: '#fff', strokeWidth: 2, shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.8)', blur: 10, offsetX: 5, offsetY: 5 }) });
-            createTokenGroup(circle, myChar.name, 'me', '#00ffcc', null, myChar.sourceCharId||myChar.id||null, currentUser?.id||myChar.ownerId||null);
+            createTokenGroup(circle, myChar.name, 'player', '#00ffcc', null, myChar.sourceCharId||myChar.id||null, myChar.sourceOwnerId||currentUser?.id||myChar.ownerId||null, myChar.participantUserId||currentUser?.authUserId||null);
         } else {
             img.scaleToWidth(50);
             img.scaleToHeight(50);
             img.set({clipPath: new fabric.Circle({radius:25, originX:'center', originY:'center'})});
             const circle = new fabric.Circle({ radius: 26, fill: 'transparent', stroke: '#00ffcc', strokeWidth: 2, shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.8)', blur: 10, offsetX: 5, offsetY: 5 }) });
-            createTokenGroup(img, myChar.name, 'me', '#00ffcc', circle, myChar.sourceCharId||myChar.id||null, currentUser?.id||myChar.ownerId||null);
+            createTokenGroup(img, myChar.name, 'player', '#00ffcc', circle, myChar.sourceCharId||myChar.id||null, myChar.sourceOwnerId||currentUser?.id||myChar.ownerId||null, myChar.participantUserId||currentUser?.authUserId||null);
         }
     });
 }
@@ -2170,13 +2323,13 @@ function canvasAddNPCToken() {
     const color = prompt("Cor do Monstro/NPC (Ex: red, #ff00ff):", "#ff3333");
     const name = prompt("Nome do Monstro:", "Goblin Abissal");
     const circle = new fabric.Circle({ radius: 25, fill: color, stroke: '#000', strokeWidth: 2, shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.8)', blur: 10, offsetX: 5, offsetY: 5 }) });
-    createTokenGroup(circle, name, 'gm', color, null, null, currentUser?.id||null);
+    createTokenGroup(circle, name, 'gm', color, null, null, currentUser?.id||null, currentUser?.authUserId||null);
 }
 
-function createTokenGroup(mainObj, nameText, owner, color, borderObj = null, characterId = null, ownerId = null) {
+function createTokenGroup(mainObj, nameText, owner, color, borderObj = null, characterId = null, ownerId = null, ownerAuthId = null) {
     const text = new fabric.Text(nameText, { fontSize: 12, fill: '#fff', originX: 'center', top: 30, backgroundColor: 'rgba(0,0,0,0.7)' });
     const objs = borderObj ? [mainObj, borderObj, text] : [mainObj, text];
-    const group = new fabric.Group(objs, { left: 100, top: 100, owner, ownerId, characterId, msTokenId: (crypto.randomUUID ? crypto.randomUUID() : 'tok-'+Date.now()+'-'+Math.random().toString(36).slice(2)), borderColor: color, cornerColor: color, transparentCorners: false });
+    const group = new fabric.Group(objs, { left: 100, top: 100, owner, ownerId, ownerAuthId, characterId, msTokenId: (crypto.randomUUID ? crypto.randomUUID() : 'tok-'+Date.now()+'-'+Math.random().toString(36).slice(2)), borderColor: color, cornerColor: color, transparentCorners: false });
     vttCanvas.add(group); vttCanvas.setActiveObject(group); vttCanvas.requestRenderAll();
 }
 
@@ -2213,7 +2366,7 @@ function msClearRulerObjects(){ if(!vttCanvas)return; vttCanvas.getObjects().fil
 function msSetRulerActive(active){
     if(!vttCanvas)return; window.__msRulerActive=!!active; window.__msRulerStart=null;
     vttCanvas.selection=!active; vttCanvas.skipTargetFind=!!active;
-    vttCanvas.getObjects().forEach(o=>o.set('selectable',!active && !o.isGridLine && !o.isRuler && (isVttGM || !o.owner || o.owner==='me' || String(o.ownerId||'')===String(currentUser?.id||''))));
+    vttCanvas.getObjects().forEach(o=>o.set('selectable',!active && !o.isGridLine && !o.isRuler && msVttObjectOwnedByCurrentUser(o)));
     if(!active) msClearRulerObjects();
     msRulerStatus(active?'Clique e arraste sobre o mapa para medir.':'Régua desligada',active);vttCanvas.requestRenderAll();
 }
@@ -2228,7 +2381,8 @@ function canvasToggleRuler() { if(!vttCanvas){window.MS_PLATFORM?.toast('Abra o 
 function canvasDeleteSelected() {
     const active = vttCanvas.getActiveObject();
     if(active) {
-        if(!isVttGM && active.owner !== 'me') { alert("Você não pode apagar isso."); return; }
+        if(msVttPlayerInteractionBlocked()){window.MS_PLATFORM?.toast?.('A sessão está pausada pelo Mestre.','error');return;}
+        if(!msVttObjectOwnedByCurrentUser(active)) { alert("Você não pode apagar isso."); return; }
         vttCanvas.remove(active);
     }
 }
@@ -2240,7 +2394,7 @@ function renderVttCards() {
     if(!container) return;
     
     container.innerHTML = '';
-    qaContainer.innerHTML = '';
+    if(qaContainer) qaContainer.innerHTML = '';
 
     tablePlayers.forEach((char, index) => {
         const wrapper = document.createElement('div');
@@ -2253,24 +2407,37 @@ function renderVttCards() {
             hpVisibility = "display:none;";
         }
         
-        wrapper.innerHTML = `
-            <div class="soul-card ${getNatureCardClass(char.nature)}">
-                <div class="ornament"></div>
-                ${char.avatar ? `<img src="${char.avatar}" class="card-bg-img">` : ''}
-                <div class="soul-card-icon" style="${char.avatar ? 'background-image:url('+char.avatar+')' : ''}"></div>
-                ${char.className === 'Mercador da Morte' ? mercadorRankCardMarkup(char.mercadoDaMorte?.rankId) : ''}
-                <h3 style="font-size:0.8rem">${char.name}</h3>
-                <div class="card-hp-bar-container" style="${hpVisibility}"><div class="card-hp-bar" style="width: 100%;"></div></div>
-                <span style="font-size:10px; color:#fff; z-index:2; position:relative; ${hpVisibility}">PV: ${hpVal}/${hpVal}</span>
-                <button type="button" class="vtt-card-eq-btn" onclick="event.stopPropagation(); openCharacterEquipmentFromVtt(${index})">⚙ Arsenal</button>
-            </div>`;
-            
-        wrapper.onclick = () => {
-            const builder = document.getElementById('screen-builder');
-            builder.classList.add('overlay');
-            const restrict = !isVttGM && !char.isMe; 
-            loadCharacterToBuilder(index, tablePlayers, restrict);
-        };
+        if(char.isRosterOnly){
+            wrapper.classList.add('vtt-roster-only');
+            wrapper.innerHTML = `
+                <div class="soul-card vtt-public-participant">
+                    <div class="ornament"></div>
+                    <div class="soul-card-icon vtt-public-participant-icon">◈</div>
+                    <small>PARTICIPANTE · ${escHtml(String(char.memberRole||'jogador').replace('_',' ')).toUpperCase()}</small>
+                    <h3 style="font-size:0.8rem">${escHtml(char.name||'Alma vinculada')}</h3>
+                    <span class="vtt-public-participant-user">@${escHtml(char.username||'jogador')}</span>
+                    <em>Ficha completa privada</em>
+                </div>`;
+            wrapper.onclick=()=>window.MS_PLATFORM?.toast?.('Você pode ver quem está na mesa, mas a ficha completa pertence ao jogador e à Direção.','info');
+        } else {
+            wrapper.innerHTML = `
+                <div class="soul-card ${getNatureCardClass(char.nature)}">
+                    <div class="ornament"></div>
+                    ${char.avatar ? `<img src="${char.avatar}" class="card-bg-img">` : ''}
+                    <div class="soul-card-icon" style="${char.avatar ? 'background-image:url('+char.avatar+')' : ''}"></div>
+                    ${char.className === 'Mercador da Morte' ? mercadorRankCardMarkup(char.mercadoDaMorte?.rankId) : ''}
+                    <h3 style="font-size:0.8rem">${escHtml(char.name||'Alma')}</h3>
+                    <div class="card-hp-bar-container" style="${hpVisibility}"><div class="card-hp-bar" style="width: 100%;"></div></div>
+                    <span style="font-size:10px; color:#fff; z-index:2; position:relative; ${hpVisibility}">PV: ${hpVal}/${hpVal}</span>
+                    <button type="button" class="vtt-card-eq-btn" onclick="event.stopPropagation(); openCharacterEquipmentFromVtt(${index})">⚙ Arsenal</button>
+                </div>`;
+            wrapper.onclick = () => {
+                const builder = document.getElementById('screen-builder');
+                builder.classList.add('overlay');
+                const restrict = !isVttGM && !char.isMe; 
+                loadCharacterToBuilder(index, tablePlayers, restrict);
+            };
+        }
         container.appendChild(wrapper);
 
         // GM Quick Access Buttons
@@ -2280,7 +2447,7 @@ function renderVttCards() {
             qaBtn.style.backgroundImage = `url(${char.avatar || ''})`;
             qaBtn.title = char.name;
             qaBtn.onclick = () => wrapper.click();
-            qaContainer.appendChild(qaBtn);
+            if(qaContainer) qaContainer.appendChild(qaBtn);
         }
     });
 }
@@ -2329,7 +2496,7 @@ async function roll3DDice(type) {
         }
         addDiceRollToHistory(type, finalResult, sender);
         addChatMessage('Sistema', `(${sender}) Rolou um ${type} e tirou ${finalResult}!`, '#d4af37');
-        if (window.MasterTools && typeof window.MasterTools.onDiceRoll === 'function') window.MasterTools.onDiceRoll(type, finalResult, sender);
+        if (window.MasterTools && typeof window.MasterTools.onDiceRoll === 'function') { try { await window.MasterTools.onDiceRoll(type, finalResult, sender); } catch(_){} }
     } finally {
         buttons.forEach(b => { if (/^d\d+$/i.test(b.textContent.trim())) b.disabled = false; });
         diceRollInProgress = false;
@@ -2367,7 +2534,7 @@ function clearDiceHistory() {
 }
 
 // VTT CHAT
-function sendChatMessage() {
+async function sendChatMessage() {
     if(chatLocked && !isVttGM) {
         alert("O Mestre bloqueou o chat.");
         return;
@@ -2381,14 +2548,17 @@ function sendChatMessage() {
             sender = me ? me.name : "Jogador";
         }
         addChatMessage(sender, msg, isVttGM ? '#ff00ff' : '#00ffcc');
-        if (window.MasterTools && typeof window.MasterTools.onChatMessage === 'function') window.MasterTools.onChatMessage(sender, msg, isVttGM);
+        if (window.MasterTools && typeof window.MasterTools.onChatMessage === 'function') { try { await window.MasterTools.onChatMessage(sender, msg, isVttGM); } catch(_){} }
         input.value = '';
     }
 }
 function addChatMessage(sender, msg, color) {
     const chat = document.getElementById('chat-messages');
-    chat.innerHTML += `<div style="margin-bottom:8px;"><b style="color:${color}">${sender}:</b> <span style="color:#ddd">${msg}</span></div>`;
-    chat.scrollTop = chat.scrollHeight;
+    if(!chat) return;
+    const row=document.createElement('div'); row.style.marginBottom='8px';
+    const who=document.createElement('b'); who.style.color=/^#[0-9a-f]{3,8}$/i.test(String(color||''))?color:'#00ffcc'; who.textContent=String(sender||'Sistema')+':';
+    const text=document.createElement('span'); text.style.color='#ddd'; text.textContent=' '+String(msg||'');
+    row.append(who,text); chat.appendChild(row); chat.scrollTop = chat.scrollHeight;
 }
 function toggleChatLock() {
     if(!isVttGM) return;
@@ -2397,7 +2567,7 @@ function toggleChatLock() {
     if(btn) btn.innerText = chatLocked ? '🔏' : '🔓';
     addChatMessage('Sistema', chatLocked ? 'O chat foi bloqueado pelo Mestre.' : 'O chat foi liberado.', '#ff3333');
     if(window.MasterTools?.saveTableControlState) window.MasterTools.saveTableControlState({chatLocked});
-    if(currentTableData?.id && window.MS_SERVICES?.VTT) window.MS_SERVICES.VTT.event(currentTableData.id,'control',{chatLocked});
+    if(currentTableData?.id) window.MS_TABLE_SESSION?.send?.('control',{chatLocked}).catch(()=>{});
 }
 
 // VTT GALLERY
@@ -3649,8 +3819,13 @@ function msGetAllRepoJoinedTables(store = msEnsureRepoStore()) {
 
 function msNormalizeTable(table) {
     if (!table) return null;
-    if (!Array.isArray(table.participants)) table.participants = [];
+    if (!Array.isArray(table.participants)) table.participants = []; // legado; não é fonte de associação na V2.7
     if (!Array.isArray(table.banned)) table.banned = [];
+    table.status = table.status || 'active';
+    table.activeMembers = Number(table.activeMembers ?? table.active_members ?? 0);
+    table.myMemberRole = table.myMemberRole ?? table.my_member_role ?? null;
+    table.myCharacterId = table.myCharacterId ?? table.my_character_id ?? null;
+    table.isOwner = table.isOwner === true || table.is_owner === true || (currentUser && String(table.ownerId||table.owner_id||'')===String(currentUser.id));
     return table;
 }
 
@@ -3687,20 +3862,9 @@ function msSeedRepoStoreFromLegacyCharacters() {
 function msSeedTablesFromLegacy() {
     if (msReadJSON(MS_TABLE_MIGRATION_KEY, null)) return;
     if (!Array.isArray(allTablesDB)) allTablesDB = [];
-    allTablesDB = allTablesDB.map(t => {
-        const table = msNormalizeTable(msClone(t));
-        if (table && !table.participants.length && table.ownerId) {
-            table.participants.push({
-                userId: table.ownerId,
-                charId: null,
-                charName: 'Mesa de Origem',
-                ownerId: table.ownerId,
-                isOwner: true,
-                linkedAt: Date.now()
-            });
-        }
-        return table;
-    });
+    // V2.7: participants permanece apenas para leitura de backups antigos.
+    // Associação e autoridade são resolvidas exclusivamente por table_members/fetch_my_table_summaries.
+    allTablesDB = allTablesDB.map(t => msNormalizeTable(msClone(t)));
     msWriteJSON('mundosSombriosTables', allTablesDB);
     msWriteJSON(MS_TABLE_MIGRATION_KEY, '1');
 }
@@ -3710,8 +3874,8 @@ function msSyncCurrentUserView() {
     const store = msEnsureRepoStore();
     const repo = msEnsureUserRepo(currentUser.id);
     characters = msClone(repo.characters || []);
-    myTables = (allTablesDB || []).filter(t => String(t.ownerId) === String(currentUser.id)).map(msClone);
-    joinedTables = (allTablesDB || []).filter(t => (t.participants || []).some(p => String(p.userId) === String(currentUser.id)) && String(t.ownerId) !== String(currentUser.id)).map(msClone);
+    myTables = (allTablesDB || []).filter(t => t.status!=='archived' && (t.isOwner || String(t.ownerId) === String(currentUser.id))).map(msClone);
+    joinedTables = (allTablesDB || []).filter(t => t.status!=='archived' && !t.isOwner && String(t.ownerId) !== String(currentUser.id) && !!t.myMemberRole).map(msClone);
     allCharactersDB = msGetAllRepoCharacters(store).map(msClone);
     allJoinedTablesDB = msGetAllRepoJoinedTables(store).map(msClone);
     msWriteJSON('mundosSombriosChars', allCharactersDB);
@@ -3817,18 +3981,50 @@ function openCreateTableModal() {
         return;
     }
     document.getElementById('new-table-name').value = '';
+    const modeInput=document.getElementById('new-table-mode');if(modeInput)modeInput.value='exodo';
+    const expInput=document.getElementById('new-table-expansions'),clsInput=document.getElementById('new-table-classes');if(expInput)expInput.value='';if(clsInput)clsInput.value='';
+    document.querySelectorAll('[data-create-mode]').forEach(btn=>btn.onclick=()=>{if(modeInput){modeInput.value=btn.dataset.createMode;updateCreateTableModeGuide();}});
     const modal=document.getElementById('create-table-modal');
     modal.style.display = 'flex';
     const scroll=modal.querySelector('.create-table-scroll'); if(scroll)scroll.scrollTop=0;
     updateCreateTableModeGuide();
 }
 
+function msCreateRuleValues(id) {
+    return String(document.getElementById(id)?.value || '').split('||').map(x => x.trim()).filter(Boolean);
+}
+function renderCreateTableRecruitmentRules(resetInvalid = false) {
+    const mode = document.getElementById('new-table-mode')?.value || 'exodo';
+    const modes = mode === 'hybrid' ? ['exodo','ocultatun'] : [mode];
+    const expansions = [...new Set(modes.flatMap(m => window.MS_TABLE_RULE_CATALOG?.[m]?.expansions || []))];
+    let selectedExp = new Set(msCreateRuleValues('new-table-expansions'));
+    let selectedCls = new Set(msCreateRuleValues('new-table-classes'));
+    if (resetInvalid) {
+        selectedExp = new Set([...selectedExp].filter(x => expansions.includes(x)));
+        const possible = [...new Set(modes.flatMap(m => Object.values(window.MS_TABLE_RULE_CATALOG?.[m]?.classes || {}).flat()))];
+        selectedCls = new Set([...selectedCls].filter(x => possible.includes(x)));
+    }
+    const expRoot = document.getElementById('new-table-expansion-grid');
+    if (expRoot) expRoot.innerHTML = expansions.map(x => `<button type="button" data-create-exp="${String(x).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" class="${selectedExp.has(x)?'active':''}">${String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</button>`).join('');
+    const classEntries = [];
+    modes.forEach(m => Object.entries(window.MS_TABLE_RULE_CATALOG?.[m]?.classes || {}).forEach(([nature,list]) => { if (!selectedExp.size || selectedExp.has(nature)) list.forEach(c => classEntries.push(c)); }));
+    const classes = [...new Set(classEntries)];
+    selectedCls = new Set([...selectedCls].filter(x => classes.includes(x)));
+    const clsRoot = document.getElementById('new-table-class-grid');
+    if (clsRoot) clsRoot.innerHTML = classes.map(x => `<button type="button" data-create-cls="${String(x).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}" class="${selectedCls.has(x)?'active':''}">${String(x).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</button>`).join('');
+    const expInput=document.getElementById('new-table-expansions'),clsInput=document.getElementById('new-table-classes');
+    if(expInput)expInput.value=[...selectedExp].join('||');if(clsInput)clsInput.value=[...selectedCls].join('||');
+    document.querySelectorAll('[data-create-mode]').forEach(b=>b.classList.toggle('active',b.dataset.createMode===mode));
+    expRoot?.querySelectorAll('[data-create-exp]').forEach(b=>b.onclick=()=>{const set=new Set(msCreateRuleValues('new-table-expansions'));set.has(b.dataset.createExp)?set.delete(b.dataset.createExp):set.add(b.dataset.createExp);if(expInput)expInput.value=[...set].join('||');renderCreateTableRecruitmentRules(false);});
+    clsRoot?.querySelectorAll('[data-create-cls]').forEach(b=>b.onclick=()=>{const set=new Set(msCreateRuleValues('new-table-classes'));set.has(b.dataset.createCls)?set.delete(b.dataset.createCls):set.add(b.dataset.createCls);if(clsInput)clsInput.value=[...set].join('||');renderCreateTableRecruitmentRules(false);});
+}
 function updateCreateTableModeGuide() {
     const mode = document.getElementById('new-table-mode')?.value || 'exodo';
     const ex = document.getElementById('new-table-exodo-profile');
     const oc = document.getElementById('new-table-ocultatun-profile');
-    if (ex) ex.hidden = mode !== 'exodo';
-    if (oc) oc.hidden = mode !== 'ocultatun';
+    if (ex) ex.hidden = mode === 'ocultatun';
+    if (oc) oc.hidden = mode === 'exodo';
+    renderCreateTableRecruitmentRules(true);
 }
 
 function confirmCreateTable() {
@@ -3848,10 +4044,11 @@ function confirmCreateTable() {
     }
 
     currentVttTheme = document.getElementById('new-table-theme').value;
-    currentDraftGameMode = document.getElementById('new-table-mode')?.value === 'ocultatun' ? 'ocultatun' : 'exodo';
+    currentDraftGameMode = ['exodo','ocultatun','hybrid'].includes(document.getElementById('new-table-mode')?.value) ? document.getElementById('new-table-mode').value : 'exodo';
     currentDraftSettings = {
         description: msFieldValue('new-table-description'), era: msFieldValue('new-table-era'), region: msFieldValue('new-table-region'),
-        expansions: msFieldValue('new-table-expansions').split(',').map(x=>x.trim()).filter(Boolean),
+        expansions: msCreateRuleValues('new-table-expansions'),
+        recruitment: { published: !!document.getElementById('new-table-published')?.checked, acceptingRequests: !!document.getElementById('new-table-accepting')?.checked, maxPlayers: Math.max(1, Math.min(20, Number(msFieldValue('new-table-max-players') || 6))), allowedExpansions: msCreateRuleValues('new-table-expansions'), allowedClasses: msCreateRuleValues('new-table-classes') },
         initialConditions: msFieldValue('new-table-initial'), houseRules: msFieldValue('new-table-rules'),
         tone: msFieldValue('new-table-tone'), focus: msFieldValue('new-table-focus'), secrecy: msFieldValue('new-table-secrecy'), threat: msFieldValue('new-table-threat'), historyBaseline: msFieldValue('new-table-history') || 'y80-100',
         tsinPosture: msFieldValue('new-table-tsin'), technologyScale: msFieldValue('new-table-tech'), paranormalExposure: msFieldValue('new-table-exposure'), institution: msFieldValue('new-table-institution')
@@ -3874,6 +4071,7 @@ async function saveDraftTable() {
         msUpsertTable(newTable); myTables=(allTablesDB||[]).filter(t=>String(t.ownerId)===String(currentUser.id)).map(msClone); isDraftMode=false; currentTableData=msClone(newTable);
         document.getElementById('btn-save-table').style.display='none';
         window.MS_PLATFORM?.toast(`Mesa criada. Código: ${newTable.code}`,'success');
+        await msHydrateRemoteGameState();
         renderAncoragem();
         return true;
     }catch(error){window.MS_PLATFORM?.toast(error.message||'Não foi possível criar a mesa online.','error');return false;}
@@ -3883,11 +4081,12 @@ async function deleteTable(id) {
     if(!currentUser || !window.MS_SERVICES?.Games) return false;
     if(!confirm('Tem certeza que deseja apagar essa Fenda para sempre? O mundo será destruído.')) return false;
     try{
-        await window.MS_SERVICES.Games.delete(id);
-        allTablesDB=(allTablesDB||[]).filter(t=>String(t.id)!==String(id));
-        if(String(currentTableData?.id)===String(id)) currentTableData=null;
+        const deleted=await window.MS_SERVICES.Games.delete(id);
+        if((deleted?.data??deleted)!==true) throw new Error('O servidor não confirmou a exclusão da Fenda.');
+        if(String(currentTableData?.id)===String(id)){await window.MS_TABLE_SESSION?.disconnect?.();currentTableData=null;}
+        await msHydrateRemoteGameState();
         renderAncoragem();
-        window.MS_PLATFORM?.toast('Mesa excluída com sucesso.','success');
+        window.MS_PLATFORM?.toast('Mesa excluída e confirmada pelo servidor.','success');
         return true;
     }catch(error){window.MS_PLATFORM?.toast(error.message||'Não foi possível excluir a Fenda.','error');return false;}
 }
@@ -3896,11 +4095,13 @@ async function leaveJoinedTable(code) {
     if (!currentUser || !window.MS_SERVICES?.Games) return false;
     if (!confirm('Deseja cortar sua conexão permanente com esta Fenda?')) return false;
     try {
-        await window.MS_SERVICES.Games.leave(code);
+        const confirmed=await window.MS_SERVICES.Games.leave(code);
+        if(confirmed!==true) throw new Error('O servidor não confirmou a saída da campanha.');
         await msHydrateRemoteGameState();
         renderAncoragem();
+        window.MS_PLATFORM?.toast('Conexão com a campanha encerrada.','success');
         return true;
-    } catch (error) { return false; }
+    } catch (error) { window.MS_PLATFORM?.toast(error?.message||'Não foi possível abandonar a campanha.','error'); return false; }
 }
 
 function openJoinTableModal() {
@@ -3924,7 +4125,7 @@ async function confirmJoinTable() {
     try{
         const selectedChar=msClone(characters[charIndex]);
         const result=await window.MS_SERVICES.Games.join(code,selectedChar.id);
-        const remote=result?.data;
+        const remote=result?.data||result;
         if(!remote?.id) throw new Error('Mesa ou convite inválido.');
         const table=msNormalizeTable({id:remote.id,code:remote.code,name:remote.name,theme:remote.theme,gameMode:remote.game_mode,ownerId:remote.owner_id,participants:remote.participants||[],banned:remote.banned||[],settings:remote.settings||{},createdAt:remote.created_at,updatedAt:remote.updated_at});
         myVttCharIndex=charIndex; msUpsertTable(table); document.getElementById('join-modal').style.display='none';
@@ -3951,21 +4152,38 @@ async function enterVTT(tableIdOrCode, asGM, draftName = null) {
         document.getElementById('vtt-table-name').innerText = currentTableData.name;
         if (currentTableData.theme) { document.getElementById('vtt-theme-select').value = currentTableData.theme; previewVttTheme(); }
 
-        // O banco retorna apenas personagens permitidos pela mesa. Nunca buscamos fichas privadas de terceiros diretamente.
+        // Fichas completas seguem privadas: jogador recebe apenas a própria; direção recebe as autorizadas.
+        // O roster sanitizado complementa a lateral com cartões públicos dos demais participantes.
         try {
             if (window.MS_SERVICES?.Characters && window.MS_SERVICES?.Games && window.currentUser) {
-                const result = await window.MS_SERVICES.Games.characters(currentTableData.id);
-                const remoteCharacters = result?.data || [];
+                const [charResult, rosterResult] = await Promise.allSettled([
+                    window.MS_SERVICES.Games.characters(currentTableData.id),
+                    window.MS_SERVICES.Games.roster(currentTableData.id)
+                ]);
+                const remoteCharacters = charResult.status === 'fulfilled' ? (charResult.value?.data || charResult.value || []) : [];
+                const roster = rosterResult.status === 'fulfilled' ? (rosterResult.value?.data || rosterResult.value || []) : [];
+                if (charResult.status === 'rejected') throw charResult.reason;
                 if (remoteCharacters.length) {
                     tablePlayers = remoteCharacters.map(c => {
                         const payload = c.payload && typeof c.payload === 'object' ? msClone(c.payload) : {};
                         payload.id = c.id; payload.ownerId = c.owner_id; payload.userId = c.user_id;
                         payload.name = payload.name || c.name; payload.mode = payload.mode || c.mode; payload.nature = payload.nature || c.nature; payload.className = payload.className || c.class_name;
                         payload.updatedAt = c.updated_at;
-                        payload.isMe = String(c.user_id) === String(currentUser.id);
+                        payload.isMe = String(c.user_id) === String(currentUser.authUserId||currentUser.id);
                         payload.sourceOwnerId = c.owner_id; payload.sourceCharId = c.id; payload.participantUserId = c.user_id;
                         return payload;
                     });
+                }
+                const knownUsers = new Set(tablePlayers.map(c=>String(c.participantUserId||c.userId||'')));
+                for (const r of roster) {
+                    const uid=String(r.user_id||'');
+                    if(!uid || knownUsers.has(uid) || String(r.status||'active')!=='active') continue;
+                    tablePlayers.push({
+                        id:r.character_id||`roster-${uid}`, sourceCharId:r.character_id||null, participantUserId:uid, userId:uid,
+                        name:r.character_name||r.username||'Participante', username:r.username||'jogador', memberRole:r.member_role||'jogador',
+                        isMe:uid===String(currentUser.authUserId||currentUser.id), isRosterOnly:true, resources:{}, stats:{}
+                    });
+                    knownUsers.add(uid);
                 }
             }
         } catch (error) { window.MS_PLATFORM?.toast('A mesa abriu, mas as fichas participantes não puderam ser sincronizadas.','error'); }
@@ -3978,12 +4196,20 @@ async function enterVTT(tableIdOrCode, asGM, draftName = null) {
         }
     }
 
+    // Separa papel da conta (acesso ao Escudo) da autoridade nesta mesa (Direção).
+    const accountRole = String(currentUser?.role || 'jogador').toLowerCase();
+    const membershipRole = String(currentTableData?.myMemberRole || window.__msTableMemberships?.[String(currentTableData?.id || '')]?.role || '').toLowerCase();
+    isVttGM = !!asGM || accountRole === 'admin' || !!currentTableData?.isOwner || ['mestre','co_mestre'].includes(membershipRole);
+    try { window.__msVttIsGM = !!isVttGM; } catch(_) {}
+    document.querySelectorAll('.gm-only-btn').forEach(el => el.style.display = isVttGM ? 'flex' : 'none');
+
     if (window.MasterTools && typeof window.MasterTools.onVttEnter === 'function') await window.MasterTools.onVttEnter(currentTableData, isVttGM);
     showScreen('screen-vtt');
     if (window.MasterTools && typeof window.MasterTools.mountShield === 'function') window.MasterTools.mountShield(isVttGM, currentTableData);
     document.querySelectorAll('.vtt-floating-window').forEach(el => el.style.display = 'none');
     toggleVttWindow('vtt-chat-box'); renderVttCards();
     if (window.MasterTools && typeof window.MasterTools.restoreVttState === 'function') window.MasterTools.restoreVttState();
+    window.MS_TABLE_SHELL?.mount?.(currentTableData || {name:draftName||'Nova Fenda',code:'RASCUNHO'},isVttGM);
     window.MS_PLATFORM?.emit('vtt:entered',{tableId:currentTableData?.id||null,asGM:isVttGM});
     return true;
 }

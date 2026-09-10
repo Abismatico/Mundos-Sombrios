@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/ms-platform.css">
     <link rel="stylesheet" href="css/ms-online.css">
+    <link rel="stylesheet" href="css/table-shell-v3.css">
     <link rel="stylesheet" href="css/world-codices.css">
     <link rel="stylesheet" href="css/master-room.css">
     <link rel="stylesheet" href="css/master-tools.css">
@@ -164,6 +165,7 @@
             <div class="tabs master-tabs" role="tablist" aria-label="Ancoragem">
                 <button type="button" class="tab-btn active" id="tab-btn-player" role="tab" aria-controls="ancoragem-player-tab" onclick="switchAncoragemTab('player')">👁️ Visão do Jogador</button>
                 <button type="button" class="tab-btn" id="tab-btn-gm" role="tab" aria-controls="ancoragem-gm-tab" onclick="switchAncoragemTab('gm')" style="display:none">♛ Sala dos Mestres</button>
+                <button type="button" class="tab-btn" id="tab-btn-directory" role="tab" aria-controls="ancoragem-directory-tab" onclick="switchAncoragemTab('directory')">⌖ Diretório de Fendas</button>
             </div>
             <div class="ancoragem-container ancoragem-modern">
                 <div id="ancoragem-player-tab" class="ancoragem-content active" role="tabpanel">
@@ -174,13 +176,14 @@
                     <div class="portals-grid" id="player-tables-list"></div>
                 </div>
                 <div id="ancoragem-gm-tab" class="ancoragem-content" style="display:none" role="tabpanel"></div>
+                <div id="ancoragem-directory-tab" class="ancoragem-content" style="display:none" role="tabpanel"><div id="table-directory-root"></div></div>
             </div>
         </section>
 
         <!-- TELA ESCUDO DO MESTRE — integrado ao site original -->
         <section id="screen-master-shield" class="screen master-shield-screen" aria-hidden="true">
             <div class="screen-nav-actions" role="navigation" aria-label="Navegação do Escudo do Mestre">
-                <button class="back-btn" type="button" onclick="showScreen('screen-mode-select')">&#8592; VOLTAR</button>
+                <button class="back-btn" id="master-shield-back" type="button" onclick="returnFromMasterShield()">&#8592; VOLTAR</button>
             </div>
             <div class="master-shield-head">
                 <div><span class="master-shield-kicker">PROTOCOLO RESTRITO</span><h1>Escudo do Mestre</h1><p>Enciclopédia, mapa, economia, regras e arquivos reunidos em uma página privada para Mestres e ADM.</p></div>
@@ -826,16 +829,15 @@
                     <div class="form-group"><label>Época</label><input id="new-table-era" placeholder="Ex.: 2038 / Pós-Colheita"></div>
                     <div class="form-group"><label>Região</label><input id="new-table-region" placeholder="Cidade, país, setor ou plano"></div>
                 </div>
-                <div class="form-group"><label>Expansões permitidas</label><input id="new-table-expansions" placeholder="Ex.: Envolto, Ordem dos Sete"></div>
+                <section class="create-recruitment-block">
+                    <span class="eyebrow">RECRUTAMENTO E PRÉ-REQUISITOS</span>
+                    <div class="form-group"><label>Modo de jogo permitido</label><div class="fenda-mode-buttons create-mode-buttons"><button type="button" data-create-mode="exodo" class="active">ÊXODO</button><button type="button" data-create-mode="ocultatun">OCULTATUN</button><button type="button" data-create-mode="hybrid">HÍBRIDA</button></div><select id="new-table-mode" onchange="updateCreateTableModeGuide()" hidden><option value="exodo">Êxodo</option><option value="ocultatun">Ocultatun</option><option value="hybrid">Híbrida</option></select></div>
+                    <div class="ms-table-meta-grid"><div class="form-group"><label>Máximo de jogadores</label><input id="new-table-max-players" type="number" min="1" max="20" value="6"></div><div class="form-group fenda-create-checks"><label><input id="new-table-published" type="checkbox" checked> Exibir no Diretório</label><label><input id="new-table-accepting" type="checkbox" checked> Aceitar solicitações</label></div></div>
+                    <div class="form-group"><label>Expansões / Naturezas permitidas</label><small>Sem seleção = todas as opções do modo escolhido.</small><div id="new-table-expansion-grid" class="fenda-select-grid"></div><input id="new-table-expansions" type="hidden"></div>
+                    <div class="form-group"><label>Classes permitidas</label><small>Sem seleção = todas as classes das expansões permitidas.</small><div id="new-table-class-grid" class="fenda-select-grid"></div><input id="new-table-classes" type="hidden"></div>
+                </section>
                 <div class="form-group"><label>Condições iniciais</label><textarea id="new-table-initial" placeholder="Estado do mundo, recursos, alertas e condições de abertura"></textarea></div>
                 <div class="form-group"><label>Regras específicas da mesa</label><textarea id="new-table-rules" placeholder="House rules, limites e exceções"></textarea></div>
-                <div class="form-group">
-                    <label>Modo de Jogo:</label>
-                    <select id="new-table-mode" onchange="updateCreateTableModeGuide()">
-                        <option value="exodo">Êxodo · Assimilação</option>
-                        <option value="ocultatun">Ocultatun · Ecos da Decadência</option>
-                    </select>
-                </div>
                 <div id="new-table-exodo-profile" class="master-mode-profile">
                     <span class="eyebrow">ÊXODO · FUNDAÇÃO GEOPOLÍTICA</span>
                     <div class="ms-table-meta-grid"><div class="form-group"><label>Postura diante do T.S.I.N.</label><select id="new-table-tsin"><option>Pró-Nexo</option><option>Ambígua / Cinza</option><option>Ant-Nexo</option></select></div><div class="form-group"><label>Escala tecnológica</label><select id="new-table-tech"><option>Urbana / comum</option><option>Biotecnologia avançada</option><option>Black Ops / Eras Perdidas</option><option>Orbital / Ápice</option></select></div></div>
@@ -980,10 +982,13 @@
     <script src="js/portal/portal-admin.js"></script>
     <script src="js/archetype-art-direction.js"></script>
     <script src="js/vendor-loader.js"></script>
+    <script src="js/ms-config.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/supabase-db.js"></script>
     <script src="js/ms-services.js"></script>
     <script src="js/ms-realtime.js"></script>
+    <script src="js/table-session-engine.js"></script>
+    <script src="js/table-shell-v3.js"></script>
     <script src="js/master-shield-loader.js"></script>
     <script src="js/feature-loader.js"></script>
     <script src="js/script.js"></script>
@@ -991,6 +996,7 @@
     <script src="js/master-history-data.js"></script>
     <script src="js/master-command-center.js"></script>
     <script src="js/master-room.js"></script>
+    <script src="js/table-directory.js"></script>
     <script src="js/master-tools.js"></script>
     <script src="js/ms-online-ui.js"></script>
     <script src="js/soul-economy.js"></script>
