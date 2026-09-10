@@ -152,7 +152,7 @@
   });
 
   window.MS_SERVICES = Object.freeze({
-    version: '2.8.0',
+    version: '2.8.1',
     Auth: AuthService,
     Profile: ProfileService,
     Characters: CharacterService,
@@ -167,5 +167,5 @@
     currentUserId: uid
   });
 
-  platform()?.emit('ms:services:ready', { version: '2.8.0' });
+  platform()?.emit('ms:services:ready', { version: '2.8.1' });
 })();

@@ -126,11 +126,20 @@
             let email = value;
             if (!value.includes('@')) {
                 const { data: resolvedEmail, error: lookupError } = await supabase.rpc('resolve_login_email', { p_identifier: value });
-                if (lookupError) return { data: null, error: lookupError };
-                email = resolvedEmail || '';
+                if (lookupError) {
+                    const error = new Error('Não foi possível resolver o nome de usuário. Tente entrar com o e-mail da conta.');
+                    error.code = 'USERNAME_RESOLVER_UNAVAILABLE';
+                    error.cause = lookupError;
+                    return { data: null, error };
+                }
+                email = String(resolvedEmail || '').trim();
             }
-            if (!email) return { data: null, error: new Error('Usuário não encontrado.') };
-            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (!email) {
+                const error = new Error('Credenciais inválidas.');
+                error.code = 'INVALID_LOGIN_IDENTIFIER';
+                return { data: null, error };
+            }
+            const { data, error } = await supabase.auth.signInWithPassword({ email: email.toLowerCase(), password: String(password || '') });
             return { data, error };
         },
 
@@ -161,21 +170,40 @@
             const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
             if (sessionError || !sessionData?.session?.user) return { data: null, error: sessionError || new Error('Sessão ausente.') };
             const authUser = sessionData.session.user;
-            const { data, error } = await supabase.from(tableNames.profiles).select('*').eq('auth_user_id', authUser.id).maybeSingle();
-            return { data: data || null, error: error || null };
+            const direct = await supabase.from(tableNames.profiles).select('*').eq('auth_user_id', authUser.id).maybeSingle();
+            if (direct.error) return { data: null, error: direct.error };
+            if (direct.data) return { data: direct.data, error: null };
+
+            // V2.8.1: tenta vincular com segurança perfis legados pelo e-mail autenticado,
+            // preservando role/status já existentes. A RPC nunca confia em user_metadata para papel.
+            const linked = await supabase.rpc('ensure_current_profile');
+            if (linked.error) {
+                const error = new Error('A conta autenticou, mas o perfil do site não pôde ser vinculado. Aplique a migração de autenticação V2.8.1.');
+                error.code = 'PROFILE_LINK_REQUIRED';
+                error.cause = linked.error;
+                return { data: null, error };
+            }
+            return { data: linked.data || null, error: null };
         },
 
         async ensureMyProfile(profile = {}) {
             const session = await this.getSession();
             if (!session.user) return null;
+            const linked = await supabase.rpc('ensure_current_profile');
+            if (!linked.error && linked.data) return linked.data;
+            // Compatibilidade para bancos ainda sem a RPC: cria somente um perfil novo de jogador.
+            // Não altera papel de um perfil existente e não reescreve IDs legados.
             const payload = {
                 auth_user_id: session.user.id,
                 id: String(session.user.id),
                 username: String(profile.username || session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'jogador').trim(),
                 email: String(session.user.email || profile.email || '').trim(),
+                role: 'jogador',
+                banned: false,
+                status: 'active',
                 data: profile.data && typeof profile.data === 'object' ? profile.data : {}
             };
-            const { data, error } = await supabase.from(tableNames.profiles).upsert(payload, { onConflict: 'auth_user_id' }).select().maybeSingle();
+            const { data, error } = await supabase.from(tableNames.profiles).insert(payload).select().maybeSingle();
             if (error) console.warn('[Mundos Sombrios] ensureMyProfile falhou:', error);
             return data || null;
         },
@@ -566,18 +594,17 @@
         async saveProfile(profile) {
             const session = await this.getSession();
             if (!session.user) return null;
-            const payload = {
-                auth_user_id: session.user.id,
-                id: String(session.user.id),
+            const patch = {
                 username: String(profile?.username || session.user.user_metadata?.username || session.user.email?.split('@')[0] || '').trim(),
                 email: String(session.user.email || profile?.email || '').trim(),
                 data: profile?.data && typeof profile.data === 'object' ? profile.data : {}
             };
-            const { data, error } = await runQuery(tableNames.profiles, (table) =>
-                supabase.from(table).upsert(payload, { onConflict: 'auth_user_id' }).select()
-            );
+            // Nunca reescreve id/role/status durante sincronização comum de perfil.
+            const { data, error } = await supabase.from(tableNames.profiles)
+                .update(patch).eq('auth_user_id', session.user.id).select().maybeSingle();
             if (error) console.warn('[Mundos Sombrios] saveProfile falhou:', error);
-            return data && data[0] ? data[0] : null;
+            if (data) return data;
+            return this.ensureMyProfile(profile || {});
         },
 
         async fetchUsers() {
@@ -870,12 +897,9 @@
         },
 
         async syncUserState(snapshot) {
-            // Login/hidratação é uma operação de leitura. Não regravamos fichas automaticamente,
-            // pois isso criaria versões artificiais sem que o jogador tivesse alterado o personagem.
-            if (!snapshot) return null;
-            const session = await this.getSession();
-            if (session.user && snapshot.currentUser) return this.saveProfile(snapshot.currentUser);
-            return null;
+            // V2.8.1: login/hidratação é estritamente leitura. Perfil e fichas só são
+            // persistidos quando o usuário executa uma ação explícita de edição.
+            return snapshot ? { synced: false, reason: 'read-only-login' } : null;
         }
     };
 

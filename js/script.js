@@ -141,21 +141,11 @@ let currentUser = null;
 Object.defineProperty(window, 'currentUser', { configurable: true, get: () => currentUser });
 
 async function msSyncOnlineState() {
+    // V2.8.1: autenticar/hidratar não deve escrever de volta no perfil.
+    // Isso evita alterar IDs legados e mantém login como uma operação de leitura.
     if (!window.MS_DB || !window.MS_DB.ready || !currentUser) return;
-    try {
-        await window.MS_DB.saveProfile({
-            id: currentUser.id,
-            username: currentUser.username,
-            email: currentUser.email,
-            role: currentUser.role || 'jogador'
-        });
-        await window.MS_DB.syncUserState({
-            currentUser,
-            characters: characters
-        });
-    } catch (error) {
-        console.warn('[Mundos Sombrios] Falha na sincronização online:', error);
-    }
+    try { await window.MS_DB.syncUserState?.({ currentUser, characters }); }
+    catch (error) { console.warn('[Mundos Sombrios] Sincronização pós-login:', error); }
 }
 
 // ==========================================
@@ -219,9 +209,19 @@ let currentSheetEquipment = [];
 async function msBuildCurrentUser(profileOverride = null) {
     if (!window.MS_DB?.ready) return null;
     const session = await window.MS_DB.getSession();
+    if (session.error) throw session.error;
     if (!session.user) return null;
-    const remote = profileOverride || (await window.MS_DB.fetchMyProfile()).data;
-    const profile = remote || { id: session.user.id, username: session.user.user_metadata?.username || session.user.email?.split('@')[0] || 'jogador', email: session.user.email || '', role: 'jogador', banned: false, status: 'active' };
+    let profile = profileOverride;
+    if (!profile) {
+        const result = await window.MS_DB.fetchMyProfile();
+        if (result?.error) throw result.error;
+        profile = result?.data || null;
+    }
+    if (!profile) {
+        const error = new Error('Perfil autenticado não encontrado.');
+        error.code = 'PROFILE_NOT_FOUND';
+        throw error;
+    }
     if (profile.banned || profile.status === 'banned') { await window.MS_DB.signOut(); alert('Esta conta foi banida pelo Arconte.'); return null; }
     return { id:String(profile.id || session.user.id), authUserId:session.user.id, username:String(profile.username || 'jogador'), email:String(profile.email || session.user.email || ''), role:normalizeUserRole(profile.role || 'jogador'), banned:!!profile.banned, status:profile.status || 'active' };
 }
@@ -274,22 +274,36 @@ async function msHydrateRemoteGameState() {
 
 window.msHydrateRemoteGameState = msHydrateRemoteGameState;
 
+let msAuthHydrationPromise = null;
 async function msApplyAuthenticatedSession(profileOverride = null) {
-    currentUser = await msBuildCurrentUser(profileOverride);
-    if (!currentUser) return false;
-   
-    usersDB = await window.MS_DB.fetchUsers();
-    loadUserData();
-    await msHydrateRemoteGameState();
-    const displayName=document.getElementById('display-username'); if(displayName) displayName.innerText=currentUser.username;
-    const emblem=document.getElementById('master-emblem'); if(emblem) emblem.style.display=(currentUser.role==='mestre'||currentUser.role==='admin')?'block':'none';
-    const adminButton=document.getElementById('btn-admin-panel'); if(adminButton) adminButton.style.display=currentUser.role==='admin'?'block':'none';
-    const gmTab=document.getElementById('tab-btn-gm'); if(gmTab) gmTab.style.display=(currentUser.role==='mestre'||currentUser.role==='admin')?'inline-block':'none';
-    const shieldButton=document.getElementById('btn-master-shield'); if(shieldButton) shieldButton.style.display=(currentUser.role==='mestre'||currentUser.role==='admin')?'inline-block':'none';
-    showScreen('screen-portal');
-    if(typeof window.renderOfficialPortal==='function') window.renderOfficialPortal();
-    setTimeout(()=>window.MS_SOUL?.fetchState?.({quiet:true}),0);
-    return true;
+    if (msAuthHydrationPromise) return msAuthHydrationPromise;
+    msAuthHydrationPromise = (async()=>{
+        const authenticated = await msBuildCurrentUser(profileOverride);
+        if (!authenticated) return false;
+        currentUser = authenticated;
+        loadUserData();
+        const displayName=document.getElementById('display-username'); if(displayName) displayName.innerText=currentUser.username;
+        const emblem=document.getElementById('master-emblem'); if(emblem) emblem.style.display=(currentUser.role==='mestre'||currentUser.role==='admin')?'block':'none';
+        const adminButton=document.getElementById('btn-admin-panel'); if(adminButton) adminButton.style.display=currentUser.role==='admin'?'block':'none';
+        const gmTab=document.getElementById('tab-btn-gm'); if(gmTab) gmTab.style.display=(currentUser.role==='mestre'||currentUser.role==='admin')?'inline-block':'none';
+        const shieldButton=document.getElementById('btn-master-shield'); if(shieldButton) shieldButton.style.display=(currentUser.role==='mestre'||currentUser.role==='admin')?'inline-block':'none';
+
+        // Acesso à conta não fica bloqueado pela hidratação de mesas/fichas.
+        showScreen('screen-portal');
+        if(typeof window.renderOfficialPortal==='function') window.renderOfficialPortal();
+        window.MS_PLATFORM?.emit('auth:profile-ready',{user:currentUser});
+
+        // Dados secundários são carregados fora do caminho crítico do login.
+        setTimeout(async()=>{
+            try { usersDB = await window.MS_DB.fetchUsers(); } catch(error) { console.warn('[Mundos Sombrios] Perfis:',error); }
+            try { await msHydrateRemoteGameState(); } catch(error) { console.warn('[Mundos Sombrios] Hidratação:',error); }
+            try { await msSyncOnlineState(); } catch(error) { console.warn('[Mundos Sombrios] Pós-login:',error); }
+            try { await window.MS_SOUL?.fetchState?.({quiet:true}); } catch(error) { console.warn('[Mundos Sombrios] Soul:',error); }
+        },0);
+        return true;
+    })();
+    try { return await msAuthHydrationPromise; }
+    finally { msAuthHydrationPromise = null; }
 }
 
 async function msBootstrapAuthSession() {
@@ -305,25 +319,56 @@ async function msBootstrapAuthSession() {
     }
 }
 
-window.addEventListener('ms-auth-state', async (event)=>{
+window.addEventListener('ms-auth-state', (event)=>{
+    // IMPORTANTE: este listener é chamado sincronamente a partir de onAuthStateChange.
+    // Não faça chamadas async do Supabase aqui: isso pode bloquear o cliente Auth.
     const type=event.detail?.event;
     if(type==='SIGNED_OUT'){ currentUser=null; return; }
-    if(type==='PASSWORD_RECOVERY'){ try{ const next=window.prompt('Digite a nova senha (mínimo 10 caracteres):'); if(next){ if(String(next).length<10) throw new Error('Senha muito curta.'); const result=await window.MS_DB.updatePassword(next); if(result.error) throw result.error; alert('Senha atualizada com sucesso.'); } }catch(e){ alert(e.message||'Não foi possível atualizar a senha.'); } return; }
-    if(type==='SIGNED_IN' && !currentUser){ try{ await msApplyAuthenticatedSession(); }catch(e){ console.warn('[Mundos Sombrios] Falha ao aplicar sessão:',e); } }
+    if(type==='PASSWORD_RECOVERY'){
+        setTimeout(async()=>{ try{ const next=window.prompt('Digite a nova senha (mínimo 10 caracteres):'); if(next){ if(String(next).length<10) throw new Error('Senha muito curta.'); const result=await window.MS_DB.updatePassword(next); if(result.error) throw result.error; alert('Senha atualizada com sucesso.'); } }catch(e){ alert(e.message||'Não foi possível atualizar a senha.'); } },0);
+    }
+    // SIGNED_IN é finalizado pelo fluxo que iniciou o login; a restauração de sessão
+    // é responsabilidade de msBootstrapAuthSession(). Evita hidratação duplicada.
 });
 
 document.addEventListener('DOMContentLoaded',()=>{
     msBootstrapAuthSession();
     msRefreshInitialSetupButton();
+    const loginPass=document.getElementById('login-pass');
+    const loginUser=document.getElementById('login-user');
+    [loginPass,loginUser].filter(Boolean).forEach(el=>el.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();doLogin();}}));
     window.MS_PLATFORM?.emit('ms:app:ready',{ version: window.MS_PLATFORM?.version || null });
 });
+let msLoginInFlight=false;
+function msAuthErrorMessage(error){
+    const code=String(error?.code||''); const message=String(error?.message||'').toLowerCase();
+    if(code==='USERNAME_RESOLVER_UNAVAILABLE') return 'Login por usuário indisponível neste banco. Tente com o e-mail da conta ou aplique a migração V2.8.1.';
+    if(code==='PROFILE_LINK_REQUIRED'||code==='PROFILE_NOT_FOUND') return 'A autenticação ocorreu, mas o perfil do site não está vinculado. Aplique a migração V2.8.1.';
+    if(code==='email_not_confirmed'||message.includes('email not confirmed')) return 'Confirme seu e-mail antes de entrar.';
+    if(code==='invalid_credentials'||message.includes('invalid login credentials')) return 'E-mail/usuário ou senha incorretos.';
+    if(message.includes('failed to fetch')||message.includes('network')) return 'Não foi possível alcançar o Supabase. Verifique sua conexão.';
+    return error?.message || 'Não foi possível autenticar.';
+}
 async function doLogin() {
+    if(msLoginInFlight) return false;
     const identifier=document.getElementById('login-user').value.trim(); const password=document.getElementById('login-pass').value;
+    const button=document.getElementById('login-submit'); const status=document.getElementById('login-status');
     window.MS_PLATFORM?.setStatus('auth','loading');
-    if(!identifier||!password){window.MS_PLATFORM?.setStatus('auth','error',new Error('Credenciais incompletas')); window.MS_PLATFORM?.toast('Preencha as credenciais.','error'); return false;}
+    if(!identifier||!password){window.MS_PLATFORM?.setStatus('auth','error',new Error('Credenciais incompletas')); window.MS_PLATFORM?.toast('Preencha usuário/e-mail e senha.','error'); return false;}
     if(!window.MS_DB?.ready){window.MS_PLATFORM?.setStatus('auth','error',new Error('Supabase indisponível')); window.MS_PLATFORM?.toast('O serviço online de autenticação não está disponível.','error'); return false;}
-    try{ const {error}=await window.MS_DB.signIn(identifier,password); if(error){window.MS_PLATFORM?.setStatus('auth','error',error); console.warn('[Mundos Sombrios] Login:',error); window.MS_PLATFORM?.toast('Login inválido ou conta ainda não confirmada.','error'); return false;} const ok=await msApplyAuthenticatedSession(); if(!ok){await window.MS_DB.signOut(); window.MS_PLATFORM?.setStatus('auth','error',new Error('Perfil não encontrado ou bloqueado')); window.MS_PLATFORM?.toast('Perfil de usuário não encontrado ou bloqueado.','error'); return false;} await msSyncOnlineState(); window.MS_PLATFORM?.setStatus('auth','success'); window.MS_PLATFORM?.emit('auth:signed-in',{user: currentUser}); return true; }
-    catch(error){window.MS_PLATFORM?.setStatus('auth','error',error); console.error('[Mundos Sombrios] Falha no login online:',error); window.MS_PLATFORM?.toast('Não foi possível autenticar. Verifique o e-mail, senha e conexão.','error'); return false;}
+    msLoginInFlight=true; if(button){button.disabled=true;button.dataset.originalText=button.textContent;button.textContent='ATRAVESSANDO...';} if(status)status.textContent='Autenticando...';
+    try{
+        const result=await window.MS_DB.signIn(identifier,password);
+        if(result?.error) throw result.error;
+        const ok=await msApplyAuthenticatedSession();
+        if(!ok) throw Object.assign(new Error('Perfil não encontrado ou bloqueado.'),{code:'PROFILE_NOT_FOUND'});
+        window.MS_PLATFORM?.setStatus('auth','success'); window.MS_PLATFORM?.emit('auth:signed-in',{user: currentUser}); if(status)status.textContent=''; return true;
+    } catch(error){
+        window.MS_PLATFORM?.setStatus('auth','error',error); console.warn('[Mundos Sombrios] Login:',error);
+        const friendly=msAuthErrorMessage(error); if(status)status.textContent=friendly; window.MS_PLATFORM?.toast(friendly,'error'); return false;
+    } finally {
+        msLoginInFlight=false; if(button){button.disabled=false;button.textContent=button.dataset.originalText||'ATRAVESSAR PORTAL';}
+    }
 }
 
 async function doLogout() {
