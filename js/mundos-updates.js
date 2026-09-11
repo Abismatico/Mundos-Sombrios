@@ -1572,31 +1572,6 @@ if(typeof window.syncEnvoltoTab!=='function'){
 
 /* V0.31/V0.33 legacy Envolto viewport patches removed. Canonical owner: script.js + css/style.css. */
 
-/* =====================================================================
-   V0.45 — CONSOLIDAÇÃO FINAL: IMORTALIZAÇÃO + EDITOR DE CORTE DA GALERIA
-   Uma única implementação pública para salvar fichas e uma única implementação
-   pública para o fluxo de corte. Evita cadeias de wrappers acumulados.
-   ===================================================================== */
-(function installV045CoreFix(){
-  'use strict';
-
-  function clone(value){
-    try { return value === undefined ? undefined : JSON.parse(JSON.stringify(value)); }
-    catch(_) { return value; }
-  }
-
-
-  /* ---------- IMORTALIZAÇÃO: compatibilidade histórica aposentada ---------- */
-  /*
-     V0.45 substituía window.saveCharacter por uma rotina local/memória. Desde a
-     arquitetura online V0.65+, o proprietário canônico é script.js, que valida a
-     ficha, persiste via MS_SERVICES/Supabase, mantém rascunho em falha e só então
-     promove o cache. Não reinstalar uma implementação histórica aqui. Os wrappers
-     especializados V0.16/Esotérico continuam delegando ao salvamento canônico.
-  */
-
-  /* Galeria/editor de corte removidos deste patch histórico.
-     Proprietário canônico: js/gallery-editor.js.
-     O V0.45 continua responsável somente pela imortalização/salvamento da ficha. */
-})();
-/* ===== END V0.45 CORE FIX ===== */
+/* V2.8.3 — resíduo V0.45 removido.
+   O bloco histórico já não instalava salvamento nem editor: salvamento é canônico em
+   script.js/MS_SERVICES e galeria/crop em js/gallery-editor.js. */

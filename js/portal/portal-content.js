@@ -38,6 +38,9 @@
   };
 
   let current = JSON.parse(JSON.stringify(defaults));
+  let hydratePromise = null;
+  let hydratedAt = 0;
+  const HYDRATE_TTL = 30000;
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
@@ -53,33 +56,41 @@
     return out;
   }
 
-  async function hydrateFromSupabase() {
+  async function hydrateFromSupabase(options = {}) {
     if (!window.MS_DB || !window.MS_DB.ready) return current;
-    try {
-      const [remote, posts] = await Promise.all([
-        window.MS_DB.fetchSiteContent(KEY),
-        window.MS_DB.fetchPosts()
-      ]);
-      const base = merge(defaults, remote && typeof remote === 'object' ? remote : {});
-      const editorial = { announcements: [], events: [], classes: [], expansions: [], community: [], stories: [] };
-      const typeToKey = { announcement: 'announcements', event: 'events', class: 'classes', expansion: 'expansions', community: 'community', story: 'stories' };
-      (Array.isArray(posts) ? posts : []).forEach((p) => {
-        const key = typeToKey[String(p?.type || '').toLowerCase()];
-        if (!key || p.published !== true) return;
-        const metadata = p.metadata && typeof p.metadata === 'object' ? p.metadata : {};
-        editorial[key].push({
-          id: p.id, title: p.title, subtitle: p.subtitle || '', summary: p.summary || '',
-          body: p.body || '', description: p.summary || p.body || '', category: p.category || '',
-          world: p.world || '', date: metadata.date || p.created_at || p.updated_at || '', kind: p.category || '',
-          status: p.status || 'published', published: p.published === true,
-          media: metadata.media || null, metadata
+    const force = options === true || options?.force === true;
+    if (!force && hydratedAt && Date.now() - hydratedAt < HYDRATE_TTL) return current;
+    if (hydratePromise) return hydratePromise;
+    hydratePromise = (async () => {
+      try {
+        const [remote, posts] = await Promise.all([
+          window.MS_DB.fetchSiteContent(KEY),
+          window.MS_DB.fetchPosts()
+        ]);
+        const base = merge(defaults, remote && typeof remote === 'object' ? remote : {});
+        const editorial = { announcements: [], events: [], classes: [], expansions: [], community: [], stories: [] };
+        const typeToKey = { announcement: 'announcements', event: 'events', class: 'classes', expansion: 'expansions', community: 'community', story: 'stories' };
+        (Array.isArray(posts) ? posts : []).forEach((p) => {
+          const key = typeToKey[String(p?.type || '').toLowerCase()];
+          if (!key || p.published !== true) return;
+          const metadata = p.metadata && typeof p.metadata === 'object' ? p.metadata : {};
+          editorial[key].push({
+            id: p.id, title: p.title, subtitle: p.subtitle || '', summary: p.summary || '',
+            body: p.body || '', description: p.summary || p.body || '', category: p.category || '',
+            world: p.world || '', date: metadata.date || p.created_at || p.updated_at || '', kind: p.category || '',
+            status: p.status || 'published', published: p.published === true,
+            media: metadata.media || null, metadata
+          });
         });
-      });
-      current = { ...base, ...editorial };
-    } catch (error) {
-      console.warn('[Mundos Sombrios] Falha ao carregar conteúdo público do Supabase:', error);
-    }
-    return current;
+        current = { ...base, ...editorial };
+        hydratedAt = Date.now();
+      } catch (error) {
+        console.warn('[Mundos Sombrios] Falha ao carregar conteúdo público do Supabase:', error);
+      }
+      return current;
+    })();
+    try { return await hydratePromise; }
+    finally { hydratePromise = null; }
   }
 
   function read() { return clone(current); }

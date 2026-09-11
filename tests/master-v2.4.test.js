@@ -16,7 +16,7 @@ test('modal de criação permanece integralmente enquadrado com rolagem interna'
 
 test('Campanha em Movimento é integrada ao card da mesa selecionada',()=>{
   const room=read('js/master-room.js'),tools=read('js/master-tools.js');
-  for(const token of ['mr-table-operational','data-command-host','data-tools-host','data-workspace-tab="command"','CAMPANHA EM MOVIMENTO'])assert.match(room,new RegExp(token));
+  for(const token of ['anchor-v3-operation','data-command-host','data-tools-host','data-workspace-tab="command"','DIREÇÃO DA CAMPANHA'])assert.match(room,new RegExp(token));
   assert.match(tools,/renderMasterTools\(root, table=null, options=\{\}\)/);
   assert.match(tools,/const commandRoot=options\?\.commandRoot\|\|root/);
   assert.match(tools,/MasterCommandCenter\?\.render[^\n]*commandRoot/);

@@ -18,7 +18,8 @@ test('Mestre e ADM recebem acesso visual ao Escudo após autenticação',()=>{
 test('V0.45 não substitui o salvamento canônico moderno',()=>{
   const s=read('js/mundos-updates.js');
   assert.doesNotMatch(s,/window\.saveCharacter\s*=\s*function saveCharacterV045/);
-  assert.match(s,/Não reinstalar uma implementação histórica/);
+  assert.doesNotMatch(s,/installV045CoreFix/);
+  assert.match(s,/resíduo V0\.45 removido/);
 });
 test('Nexo não chama helper removido e fallback visual não monta rota vazia',()=>{
   assert.doesNotMatch(read('js/exodo-nexo.js'),/syncHiddenPower\(/);

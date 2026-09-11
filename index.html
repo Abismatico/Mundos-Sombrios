@@ -4,7 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mundos Sombrios — Portal Oficial</title>
-    <link rel="icon" href="assets/archetypes/natures/exo-nexo.svg" type="image/svg+xml">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+    <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <link rel="icon" href="assets/favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="assets/favicon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Roboto:wght@300;400;700&family=MedievalSharp&family=Orbitron&display=swap" rel="stylesheet">
@@ -12,6 +17,7 @@
     <link rel="stylesheet" href="css/ms-platform.css">
     <link rel="stylesheet" href="css/ms-online.css">
     <link rel="stylesheet" href="css/table-shell-v3.css">
+    <link rel="stylesheet" href="css/table-studio-v2.8.6.css">
     <link rel="stylesheet" href="css/world-codices.css">
     <link rel="stylesheet" href="css/master-room.css">
     <link rel="stylesheet" href="css/master-tools.css">
@@ -48,6 +54,9 @@
 
         <!-- TELA -1: LOGIN -->
         <section id="screen-login" class="screen" data-screen-role="auth-login" aria-hidden="true">
+            <div class="screen-nav-actions auth-login-nav" role="navigation" aria-label="Navegação do acesso">
+                <button class="back-btn" type="button" onclick="returnToOfficialPortal()">&#8592; PÁGINA INICIAL</button>
+            </div>
             <div class="souls-header">
                 <h1>Mundos Sombrios</h1>
                 <p>O Portal Absoluto. Identifique-se para acessar o Vazio.</p>
@@ -59,11 +68,14 @@
                     <input type="text" id="login-user" autocomplete="username" placeholder="Nome de usuário ou e-mail...">
                 </div>
                 <div class="form-group">
-                    <label>Senha:</label>
-                    <input type="password" id="login-pass" autocomplete="current-password" placeholder="Sua chave secreta...">
+                    <label for="login-pass">Senha:</label>
+                    <div class="login-password-field">
+                        <input type="password" id="login-pass" autocomplete="current-password" placeholder="Sua chave secreta..." aria-describedby="login-status">
+                        <button type="button" id="login-pass-toggle" class="login-password-toggle" aria-pressed="false" aria-label="Mostrar senha" onclick="toggleLoginPassword()">MOSTRAR</button>
+                    </div>
                 </div>
                 <button id="login-submit" class="souls-btn" style="width:100%; margin: 20px 0 10px 0;" onclick="doLogin()">ATRAVESSAR PORTAL</button>
-                <div id="login-status" role="status" aria-live="polite" style="min-height:20px;color:#d9b86c;font-size:12px;line-height:1.4;text-align:center;"></div>
+                <div id="login-status" class="login-status" role="status" aria-live="polite" aria-atomic="true"></div>
                 
                 <div style="display:flex; justify-content:space-between; margin-top:15px;">
                     <button class="souls-btn small-btn" style="border:none; color:#00ffcc;" onclick="openRegister()">Despertar Conta</button>
@@ -805,62 +817,52 @@
         </div>
 
         <div id="create-table-modal" class="modal create-table-modal">
-            <div class="modal-content create-table-dialog" role="dialog" aria-modal="true" aria-labelledby="create-table-title">
-                <header class="create-table-head">
-                    <div><span class="mr-kicker">FUNDAÇÃO DE CAMPANHA</span><h3 id="create-table-title">Configurar Nova Fenda</h3><p>Defina o necessário para abrir a campanha. Os detalhes permanecem editáveis depois, dentro da própria mesa.</p></div>
-                    <button type="button" class="win-close-btn" aria-label="Fechar" onclick="document.getElementById('create-table-modal').style.display='none'">×</button>
+            <div class="modal-content create-table-dialog create-table-v286" role="dialog" aria-modal="true" aria-labelledby="create-table-title">
+                <header class="create-table-head-v286">
+                    <div class="create-table-head-copy">
+                        <span class="mr-kicker">FORJA DE FENDAS · CONFIGURAÇÃO DE CAMPANHA</span>
+                        <h3 id="create-table-title">Fundar uma nova mesa</h3>
+                        <p>Construa a campanha por camadas. Identidade, regras, recrutamento e contexto ficam disponíveis para revisão antes de abrir a Fenda.</p>
+                    </div>
+                    <div class="create-table-head-actions-v286"><span class="create-table-draft-status" data-create-draft-status>RASCUNHO LOCAL</span><button type="button" class="win-close-btn" aria-label="Fechar" onclick="document.getElementById('create-table-modal').style.display='none'">×</button></div>
                 </header>
-                <div class="create-table-scroll">
-                <div class="form-group">
-                    <label>Nome da Campanha/Sessão:</label>
-                    <input type="text" id="new-table-name" placeholder="Ex: O Cântico do Vazio">
+                <div class="create-table-workspace-v286">
+                    <aside class="create-table-outline-v286" aria-label="Etapas da criação">
+                        <button type="button" class="active" data-create-jump="identity"><b>01</b><span>Identidade<small>Nome, premissa e estética</small></span></button>
+                        <button type="button" data-create-jump="structure"><b>02</b><span>Estrutura<small>Tom, foco e época</small></span></button>
+                        <button type="button" data-create-jump="recruitment"><b>03</b><span>Recrutamento<small>Modo, vagas e classes</small></span></button>
+                        <button type="button" data-create-jump="world"><b>04</b><span>Mundo<small>Contexto e condições</small></span></button>
+                        <div class="create-table-preview-v286"><span>PRÉVIA</span><strong data-create-preview-name>Fenda sem nome</strong><small data-create-preview-mode>ÊXODO · 6 vagas</small><i data-create-preview-theme>CLÁSSICO / OURO</i></div>
+                    </aside>
+                    <div class="create-table-scroll">
+                        <section class="create-table-section-v286" data-create-section="identity">
+                            <header><span>01</span><div><h4>Identidade da Fenda</h4><p>O que os jogadores verão primeiro.</p></div></header>
+                            <div class="form-group"><label>Nome da campanha / sessão</label><input type="text" id="new-table-name" maxlength="90" placeholder="Ex.: O Cântico do Vazio"></div>
+                            <div class="form-group"><label>Premissa</label><textarea id="new-table-description" placeholder="Resuma o conflito central, o tipo de experiência e o que move a campanha."></textarea></div>
+                            <div class="ms-table-meta-grid"><div class="form-group"><label>Região</label><input id="new-table-region" placeholder="Cidade, país, setor ou plano"></div><div class="form-group"><label>Tema visual</label><select id="new-table-theme"><option value="default">Clássico / Ouro</option><option value="cyber">Cyberpunk / Neon</option><option value="gothic">Gótico / Sangue</option><option value="cosmic">Horror Cósmico / Vazio</option></select></div></div>
+                        </section>
+                        <section class="create-table-section-v286" data-create-section="structure">
+                            <header><span>02</span><div><h4>Estrutura narrativa</h4><p>Defina o ritmo e a pressão inicial da campanha.</p></div></header>
+                            <div class="ms-table-meta-grid master-foundation-grid"><div class="form-group"><label>Tom</label><select id="new-table-tone"><option>Horror e investigação</option><option>Ação tática</option><option>Conspiração</option><option>Sobrevivência</option><option>Política e guerra</option><option>Exploração</option><option>Híbrido</option></select></div><div class="form-group"><label>Foco</label><select id="new-table-focus"><option>Investigação</option><option>Operações</option><option>Guerra</option><option>Sobrevivência</option><option>Intriga</option><option>Exploração</option></select></div><div class="form-group"><label>Sigilo</label><select id="new-table-secrecy"><option>Absoluto</option><option>Alto</option><option>Instável</option><option>Rompido</option></select></div><div class="form-group"><label>Pressão inicial</label><select id="new-table-threat"><option>Baixa</option><option>Média</option><option>Alta</option><option>Crítica</option></select></div></div>
+                            <div class="ms-table-meta-grid"><div class="form-group"><label>Marco histórico</label><select id="new-table-history"><option value="y80-100">Ano 100 · Presente</option><option value="y41-70">Anos 41–70 · Grande Silêncio</option><option value="y16-40">Anos 16–40 · Era Fria</option><option value="y11-16">Anos 11–16 · Tratado das Fronteiras</option><option value="y6-10">Anos 6–10 · Grande Fratura</option><option value="y3-5">Anos 3–5 · Protheus</option><option value="y2">Ano 2 · Cisão das Potências</option><option value="y1b">Ano 1 · Segundo semestre</option><option value="y1a">Ano 1 · Primeiro semestre</option></select></div><div class="form-group"><label>Época</label><input id="new-table-era" placeholder="Ex.: 2038 / Pós-Colheita"></div></div>
+                        </section>
+                        <section class="create-table-section-v286" data-create-section="recruitment">
+                            <header><span>03</span><div><h4>Recrutamento e regras de entrada</h4><p>Escolha quem pode atravessar a Fenda.</p></div></header>
+                            <div class="form-group"><label>Modo permitido</label><div class="fenda-mode-buttons create-mode-buttons"><button type="button" data-create-mode="exodo" class="active">ÊXODO</button><button type="button" data-create-mode="ocultatun">OCULTATUN</button><button type="button" data-create-mode="hybrid">HÍBRIDA</button></div><select id="new-table-mode" onchange="updateCreateTableModeGuide()" hidden><option value="exodo">Êxodo</option><option value="ocultatun">Ocultatun</option><option value="hybrid">Híbrida</option></select></div>
+                            <div class="create-access-grid-v286"><label class="create-capacity-v286">VAGAS<input id="new-table-max-players" type="number" min="1" max="20" value="6"><small>1–20 jogadores</small></label><label class="create-switch-v286"><input id="new-table-published" type="checkbox" checked><span></span><b>Visível no Diretório<small>Permite descoberta pública da mesa.</small></b></label><label class="create-switch-v286"><input id="new-table-accepting" type="checkbox" checked><span></span><b>Aceitar solicitações<small>Jogadores elegíveis podem pedir entrada.</small></b></label></div>
+                            <div class="form-group"><label>Expansões / Naturezas permitidas</label><small>Sem seleção = todas as opções do modo.</small><div id="new-table-expansion-grid" class="fenda-select-grid"></div><input id="new-table-expansions" type="hidden"></div>
+                            <div class="form-group"><label>Classes permitidas</label><small>Sem seleção = todas as classes disponíveis.</small><div id="new-table-class-grid" class="fenda-select-grid"></div><input id="new-table-classes" type="hidden"></div>
+                        </section>
+                        <section class="create-table-section-v286" data-create-section="world">
+                            <header><span>04</span><div><h4>Estado do mundo</h4><p>Contexto que alimenta o Centro de Comando e a sessão inicial.</p></div></header>
+                            <div class="form-group"><label>Condições iniciais</label><textarea id="new-table-initial" placeholder="Estado do mundo, recursos, alertas e condições de abertura"></textarea></div>
+                            <div class="form-group"><label>Regras específicas da mesa</label><textarea id="new-table-rules" placeholder="House rules, limites, segurança e exceções"></textarea></div>
+                            <div id="new-table-exodo-profile" class="master-mode-profile"><span class="eyebrow">ÊXODO · FUNDAÇÃO GEOPOLÍTICA</span><div class="ms-table-meta-grid"><div class="form-group"><label>Postura diante do T.S.I.N.</label><select id="new-table-tsin"><option>Pró-Nexo</option><option>Ambígua / Cinza</option><option>Ant-Nexo</option></select></div><div class="form-group"><label>Escala tecnológica</label><select id="new-table-tech"><option>Urbana / comum</option><option>Biotecnologia avançada</option><option>Black Ops / Eras Perdidas</option><option>Orbital / Ápice</option></select></div></div></div>
+                            <div id="new-table-ocultatun-profile" class="master-mode-profile" hidden><span class="eyebrow">OCULTATUN · PROTOCOLO DE CONTENÇÃO</span><div class="ms-table-meta-grid"><div class="form-group"><label>Exposição pública ao paranormal</label><select id="new-table-exposure"><option>Sigilo absoluto</option><option>Rumores controlados</option><option>Vazamentos recorrentes</option><option>Ruptura iminente</option></select></div><div class="form-group"><label>Vínculo operacional</label><select id="new-table-institution"><option>Sala Branca / Ocultatun</option><option>Célula independente</option><option>Protheus / Nova Ordem</option><option>Ordem dos Sete</option><option>Outro / ambíguo</option></select></div></div></div>
+                        </section>
+                    </div>
                 </div>
-                <div class="form-group">
-                    <label>Descrição da campanha:</label>
-                    <textarea id="new-table-description" placeholder="Premissa, tom e conflito central"></textarea>
-                </div>
-                <div class="ms-table-meta-grid master-foundation-grid">
-                    <div class="form-group"><label>Tom da campanha</label><select id="new-table-tone"><option>Horror e investigação</option><option>Ação tática</option><option>Conspiração</option><option>Sobrevivência</option><option>Política e guerra</option><option>Exploração</option><option>Híbrido</option></select></div>
-                    <div class="form-group"><label>Foco estrutural</label><select id="new-table-focus"><option>Investigação</option><option>Operações</option><option>Guerra</option><option>Sobrevivência</option><option>Intriga</option><option>Exploração</option></select></div>
-                    <div class="form-group"><label>Nível de sigilo</label><select id="new-table-secrecy"><option>Absoluto</option><option>Alto</option><option>Instável</option><option>Rompido</option></select></div>
-                    <div class="form-group"><label>Pressão inicial</label><select id="new-table-threat"><option>Baixa</option><option>Média</option><option>Alta</option><option>Crítica</option></select></div>
-                </div>
-                <div class="form-group"><label>Marco histórico</label><select id="new-table-history"><option value="y80-100">Ano 100 · Presente</option><option value="y41-70">Anos 41–70 · Grande Silêncio</option><option value="y16-40">Anos 16–40 · Era Fria</option><option value="y11-16">Anos 11–16 · Tratado das Fronteiras</option><option value="y6-10">Anos 6–10 · Grande Fratura</option><option value="y3-5">Anos 3–5 · Protheus</option><option value="y2">Ano 2 · Cisão das Potências</option><option value="y1b">Ano 1 · Segundo semestre</option><option value="y1a">Ano 1 · Primeiro semestre</option></select><small>O Centro de Comando usará este período como referência de geopolítica, economia e ganchos.</small></div>
-                <div class="ms-table-meta-grid">
-                    <div class="form-group"><label>Época</label><input id="new-table-era" placeholder="Ex.: 2038 / Pós-Colheita"></div>
-                    <div class="form-group"><label>Região</label><input id="new-table-region" placeholder="Cidade, país, setor ou plano"></div>
-                </div>
-                <section class="create-recruitment-block">
-                    <span class="eyebrow">RECRUTAMENTO E PRÉ-REQUISITOS</span>
-                    <div class="form-group"><label>Modo de jogo permitido</label><div class="fenda-mode-buttons create-mode-buttons"><button type="button" data-create-mode="exodo" class="active">ÊXODO</button><button type="button" data-create-mode="ocultatun">OCULTATUN</button><button type="button" data-create-mode="hybrid">HÍBRIDA</button></div><select id="new-table-mode" onchange="updateCreateTableModeGuide()" hidden><option value="exodo">Êxodo</option><option value="ocultatun">Ocultatun</option><option value="hybrid">Híbrida</option></select></div>
-                    <div class="ms-table-meta-grid"><div class="form-group"><label>Máximo de jogadores</label><input id="new-table-max-players" type="number" min="1" max="20" value="6"></div><div class="form-group fenda-create-checks"><label><input id="new-table-published" type="checkbox" checked> Exibir no Diretório</label><label><input id="new-table-accepting" type="checkbox" checked> Aceitar solicitações</label></div></div>
-                    <div class="form-group"><label>Expansões / Naturezas permitidas</label><small>Sem seleção = todas as opções do modo escolhido.</small><div id="new-table-expansion-grid" class="fenda-select-grid"></div><input id="new-table-expansions" type="hidden"></div>
-                    <div class="form-group"><label>Classes permitidas</label><small>Sem seleção = todas as classes das expansões permitidas.</small><div id="new-table-class-grid" class="fenda-select-grid"></div><input id="new-table-classes" type="hidden"></div>
-                </section>
-                <div class="form-group"><label>Condições iniciais</label><textarea id="new-table-initial" placeholder="Estado do mundo, recursos, alertas e condições de abertura"></textarea></div>
-                <div class="form-group"><label>Regras específicas da mesa</label><textarea id="new-table-rules" placeholder="House rules, limites e exceções"></textarea></div>
-                <div id="new-table-exodo-profile" class="master-mode-profile">
-                    <span class="eyebrow">ÊXODO · FUNDAÇÃO GEOPOLÍTICA</span>
-                    <div class="ms-table-meta-grid"><div class="form-group"><label>Postura diante do T.S.I.N.</label><select id="new-table-tsin"><option>Pró-Nexo</option><option>Ambígua / Cinza</option><option>Ant-Nexo</option></select></div><div class="form-group"><label>Escala tecnológica</label><select id="new-table-tech"><option>Urbana / comum</option><option>Biotecnologia avançada</option><option>Black Ops / Eras Perdidas</option><option>Orbital / Ápice</option></select></div></div>
-                </div>
-                <div id="new-table-ocultatun-profile" class="master-mode-profile" hidden>
-                    <span class="eyebrow">OCULTATUN · PROTOCOLO DE CONTENÇÃO</span>
-                    <div class="ms-table-meta-grid"><div class="form-group"><label>Exposição pública ao paranormal</label><select id="new-table-exposure"><option>Sigilo absoluto</option><option>Rumores controlados</option><option>Vazamentos recorrentes</option><option>Ruptura iminente</option></select></div><div class="form-group"><label>Vínculo operacional</label><select id="new-table-institution"><option>Sala Branca / Ocultatun</option><option>Célula independente</option><option>Protheus / Nova Ordem</option><option>Ordem dos Sete</option><option>Outro / ambíguo</option></select></div></div>
-                </div>
-                <div class="form-group">
-                    <label>Tema Estético Inicial:</label>
-                    <select id="new-table-theme">
-                        <option value="default">Clássico / Ouro</option>
-                        <option value="cyber">Cyberpunk / Neon</option>
-                        <option value="gothic">Gótico / Sangue</option>
-                        <option value="cosmic">Horror Cósmico / Vazio</option>
-                    </select>
-                </div>
-                </div>
-                <footer class="modal-actions create-table-actions">
-                    <button class="souls-btn small-btn" onclick="confirmCreateTable()">FORJAR MESA</button>
-                    <button class="souls-btn small-btn" style="border-color: #ff3333; color: #ff3333;" onclick="document.getElementById('create-table-modal').style.display='none'">CANCELAR</button>
-                </footer>
+                <footer class="create-table-actions-v286"><div><span>Ao forjar, você entra primeiro em um rascunho da mesa.</span><small>A mesa só é persistida quando “Salvar Fenda” for confirmado dentro do VTT.</small></div><button class="souls-btn small-btn" type="button" onclick="document.getElementById('create-table-modal').style.display='none'">CANCELAR</button><button class="souls-btn small-btn primary-create-v286" id="btn-confirm-create-table" type="button" onclick="confirmCreateTable()">ABRIR RASCUNHO</button></footer>
             </div>
         </div>
 
@@ -993,8 +995,6 @@
     <script src="js/master-shield-loader.js"></script>
     <script src="js/feature-loader.js"></script>
     <script src="js/script.js"></script>
-    <script src="js/dice-3d.js"></script>
-    <script src="js/master-history-data.js"></script>
     <script src="js/master-command-center.js"></script>
     <script src="js/master-room.js"></script>
     <script src="js/table-directory.js"></script>

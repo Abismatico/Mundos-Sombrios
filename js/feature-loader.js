@@ -1,7 +1,7 @@
 /* Mundos Sombrios — carregamento sob demanda de áreas pesadas V2.4 */
 (function(){
   'use strict';
-  let builderPromise=null,builderReady=false;
+  let builderPromise=null,builderReady=false,dicePromise=null,historyPromise=null;
   const builderCss=[
     'css/esoterico-surgery.css',
     'css/archetype-art-direction-v0.63.css',
@@ -33,5 +33,16 @@
     })().catch(error=>{builderPromise=null;document.body.classList.remove('ms-feature-loading');window.MS_PLATFORM?.setStatus?.('builder','error',error);throw error});
     return builderPromise;
   }
-  window.MS_FEATURES={ensureBuilder,isBuilderReady:()=>builderReady,builderScripts:[...builderScripts]};
+
+  async function ensureDice(){
+    if(window.MS_DICE_3D)return true;
+    if(!dicePromise)dicePromise=script('js/dice-3d.js').then(()=>true).catch(error=>{dicePromise=null;throw error});
+    return dicePromise;
+  }
+  async function ensureMasterHistory(){
+    if(window.MS_MASTER_HISTORY)return true;
+    if(!historyPromise)historyPromise=script('js/master-history-data.js').then(()=>true).catch(error=>{historyPromise=null;throw error});
+    return historyPromise;
+  }
+  window.MS_FEATURES={ensureBuilder,ensureDice,ensureMasterHistory,isBuilderReady:()=>builderReady,builderScripts:[...builderScripts]};
 })();

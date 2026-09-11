@@ -59,7 +59,7 @@
   }
 
   // Monta um mapa id → URL pública para todo o conteúdo do portal.
-  async function prepareContent(content) {
+  function prepareContent(content) {
     const map = {};
     if (!content || typeof content !== 'object') return map;
     const collect = (item) => {

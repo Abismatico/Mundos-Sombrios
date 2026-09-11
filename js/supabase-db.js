@@ -17,6 +17,8 @@
             async fetchAdminRequests() { return []; },
             async updateAdminRequestStatus() { return null; },
             async resolveAdminRequestSecure() { return { data: null, error: new Error('Banco online indisponível.') }; },
+            async silenceAdminRequestSecure() { return { data: null, error: new Error('Banco online indisponível.') }; },
+            async deleteAdminRequestSecure() { return { data: false, error: new Error('Banco online indisponível.') }; },
             async fetchPublicTableDirectory() { return { data: [], error: new Error('Banco online indisponível.') }; },
             async requestTableJoin() { return { data: null, error: new Error('Banco online indisponível.') }; },
             async cancelTableJoinRequest() { return { data: false, error: new Error('Banco online indisponível.') }; },
@@ -713,8 +715,52 @@
         },
 
         async resolveAdminRequestSecure(requestId, approved) {
-            const { data, error } = await supabase.rpc('resolve_admin_request_secure', { p_request_id: String(requestId), p_approved: !!approved });
+            const id=String(requestId);
+            const primary=await supabase.rpc('resolve_admin_request_secure', { p_request_id: id, p_approved: !!approved });
+            if (!primary.error) return { data: primary.data || null, error: null };
+
+            // Compatibilidade para instalações que ainda não aplicaram a RPC V2.8.2.
+            // Mantém autorização no backend: leitura/UPDATE de admin_requests dependem de RLS
+            // e elevação de papel usa admin_set_user_role (SECURITY DEFINER + ADMIN_REQUIRED).
+            const code=String(primary.error?.code||'');
+            const msg=String(primary.error?.message||'');
+            const fallbackAllowed=code==='PGRST202'||code==='42883'||/resolve_admin_request_secure|schema cache|request_user_not_found/i.test(msg);
+            if(!fallbackAllowed)return { data:null,error:primary.error };
+
+            const reqResult=await supabase.from(tableNames.admin_requests).select('*').eq('id',id).maybeSingle();
+            if(reqResult.error||!reqResult.data)return {data:null,error:reqResult.error||new Error('REQUEST_NOT_FOUND')};
+            const req=reqResult.data;
+            if(String(req.status||'pending').toLowerCase()!=='pending')return {data:req,error:null};
+
+            if(approved){
+                const requestType=String(req.data?.type||'master_role').toLowerCase();
+                if(requestType==='master_role'||requestType==='admin_role'){
+                    const profiles=await this.fetchUsers();
+                    const requestUser=String(req.user_id||'');
+                    const requestName=String(req.username||'').toLowerCase();
+                    const target=(Array.isArray(profiles)?profiles:[]).find(profile=>
+                        String(profile.auth_user_id||'')===requestUser ||
+                        String(profile.id||'')===requestUser ||
+                        String(profile.username||'').toLowerCase()===requestName
+                    );
+                    if(!target)return {data:null,error:new Error('REQUEST_USER_NOT_FOUND')};
+                    const roleResult=await this.adminSetUserRole(target.id,requestType==='admin_role'?'admin':'mestre');
+                    if(roleResult?.error)return {data:null,error:roleResult.error};
+                }
+            }
+            const patch={status:approved?'approved':'rejected',updated_at:new Date().toISOString()};
+            const resolved=await supabase.from(tableNames.admin_requests).update(patch).eq('id',id).select().maybeSingle();
+            return {data:resolved.data||null,error:resolved.error||null};
+        },
+
+        async silenceAdminRequestSecure(requestId) {
+            const { data, error } = await supabase.rpc('silence_admin_request_secure', { p_request_id: String(requestId) });
             return { data: data || null, error: error || null };
+        },
+
+        async deleteAdminRequestSecure(requestId) {
+            const { data, error } = await supabase.rpc('delete_admin_request_secure', { p_request_id: String(requestId) });
+            return { data: data === true, error: error || null };
         },
 
         async saveSiteContent(content, key = 'portal-official') {

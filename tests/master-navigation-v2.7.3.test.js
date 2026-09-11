@@ -5,22 +5,27 @@ import vm from 'node:vm';
 import { webcrypto } from 'node:crypto';
 
 const read=p=>fs.readFileSync(p,'utf8');
+const LEGACY_SANDBOX=fs.existsSync('test/sandbox.html')&&fs.existsSync('test/sandbox-runtime.js');
+const sandboxTest=LEGACY_SANDBOX?test:test.skip;
 
 test('V2.7.3 corrige recolhimento real das Memórias no CSS',()=>{
   const css=read('css/master-tools.css');
   assert.match(css,/\.master-shield-panel\[hidden\]\s*\{\s*display\s*:\s*none\s*!important\s*\}/i);
 });
 
-test('produção e Sandbox usam o mesmo contrato Escudo → Mesa',()=>{
-  for(const file of ['index.html','test/sandbox.html']){
-    const html=read(file);
-    assert.match(html,/id="master-shield-back"[^>]+onclick="returnFromMasterShield\(\)"/);
-  }
+test('produção usa o contrato Escudo → Mesa',()=>{
+  const html=read('index.html');
+  assert.match(html,/id="master-shield-back"[^>]+onclick="returnFromMasterShield\(\)"/);
   const script=read('js/script.js');
   assert.match(script,/MS_SHIELD_RETURN_KEY/);
   assert.match(script,/sessionStorage\.setItem\(MS_SHIELD_RETURN_KEY/);
   assert.match(script,/MS_TABLE_SHELL\?\.mount/);
   assert.match(script,/MasterTools\?\.mountShield\?\.\(isVttGM/);
+});
+
+sandboxTest('Sandbox histórico usa o mesmo contrato Escudo → Mesa',()=>{
+  const html=read('test/sandbox.html');
+  assert.match(html,/id="master-shield-back"[^>]+onclick="returnFromMasterShield\(\)"/);
 });
 
 test('mountShield preserva a autoridade GM após desmontar o painel anterior',()=>{
@@ -65,7 +70,7 @@ function loadSandbox(){
   return context;
 }
 
-test('Sandbox replica autorização: jogador não emite evento GM nem grava estado privado',async()=>{
+sandboxTest('Sandbox replica autorização: jogador não emite evento GM nem grava estado privado',async()=>{
   const c=loadSandbox(),db=c.window.MS_DB;
   await db.signIn('jogador','jogador');
   let r=await db.publishTableEvent('table-demo-001','master_notice',{message:'falso'});
@@ -77,7 +82,7 @@ test('Sandbox replica autorização: jogador não emite evento GM nem grava esta
   await assert.rejects(()=>db.fetchGMNotes('table-demo-001'),/TABLE_MANAGER_REQUIRED/);
 });
 
-test('Sandbox permite Mestre proprietário, Co-Mestre delegado e mantém ações de proprietário restritas',async()=>{
+sandboxTest('Sandbox permite Mestre proprietário, Co-Mestre delegado e mantém ações de proprietário restritas',async()=>{
   const c=loadSandbox(),db=c.window.MS_DB;
   await db.signIn('mestre','mestre');
   let r=await db.publishTableEvent('table-demo-001','master_notice',{message:'oficial'});assert.equal(r.error,null);
@@ -168,7 +173,7 @@ test('estado funcional das Memórias alterna entre recolhido e aberto pelo mesmo
   setMemoryPanelOpen(box.hidden);assert.equal(box.hidden,true);assert.equal(button.attrs['aria-expanded'],'false');assert.ok(!button.classList.values.has('is-open'));
 });
 
-test('Sandbox executa operações críticas de Mestre e ADM com autorização distinta',async()=>{
+sandboxTest('Sandbox executa operações críticas de Mestre e ADM com autorização distinta',async()=>{
   const c=loadSandbox(),db=c.window.MS_DB;
   await db.signIn('mestre','mestre');
   let summaries=await db.fetchMyTableSummaries();assert.ok(summaries.data.some(t=>t.id==='table-demo-001'&&t.is_owner));

@@ -13,7 +13,7 @@
   const mediaBox=(ref,alt='',cls='')=>{const src=fmtMedia(ref);if(!src)return '';const a=e(ref?.alt||alt||'Mídia do Portal');if(ref.kind==='video')return `<div class="portal-media ${cls}"><video controls preload="metadata" playsinline aria-label="${a}" src="${src}"></video></div>`;return `<div class="portal-media ${cls}"><img loading="lazy" src="${src}" alt="${a}"></div>`;};
   function user(){try{return window.currentUser||null}catch(_){return null;}}
   function role(){return user()?.role||'visitante';}
-  function show(id){if(typeof window.showScreen==='function')window.showScreen(id);}
+  function show(id){if(typeof window.showScreen==='function')return window.showScreen(id);const target=document.getElementById(id);if(!target)return false;document.querySelectorAll('.screen').forEach(screen=>{screen.classList.remove('active','overlay');screen.setAttribute('aria-hidden','true');});target.classList.add('active');target.setAttribute('aria-hidden','false');return true;}
   function openLogin(){show('screen-login');}
   function backToPortal(){state.section='home';state.world=null;state.detail=null;render();show('screen-portal');}
   function navButton(section,label){
@@ -42,12 +42,11 @@
     return `<footer class="portal-footer"><div><strong>MUNDOS SOMBRIOS</strong><span>Portal Oficial do cenário e sistema autorais.</span></div><div><button data-section="news">Notícias</button><button data-section="events">Eventos</button><button data-section="stories">Histórias</button><button data-section="classes">Classes</button><button data-section="expansions">Expansões</button><button data-act="codex">Códices</button></div><small>${e(c.portalVersion)} · Arquivo oficial</small></footer>`;
   }
   function portalShell(body,c,isHome=false){return `<div class="portal-shell${isHome?' portal-shell-home':''}">${portalNav()}<main class="${isHome?'portal-home':''}">${body}</main>${portalFooter(c)}</div>`;}
-  async function render(){
+  function render(){
     const r=root();if(!r)return;
     r.setAttribute('aria-busy','true');
-    r.innerHTML='<div class="portal-loading" role="status">Abrindo os arquivos do Portal…</div>';
     const c=PortalContent.read();
-    try{mediaUrls=await PortalMedia.prepareContent(c);}catch(_){mediaUrls={};}
+    try{mediaUrls=PortalMedia.prepareContent(c)||{};}catch(_){mediaUrls={};}
     let body;
     if(state.section==='home'){r.innerHTML=home(c);r.setAttribute('aria-busy','false');document.body.classList.remove('ms-shell-booting');bind(r);return;}
     if(state.section==='world')body=worldPage(c,state.world);
@@ -117,7 +116,6 @@
     if(type==='worlds')return `<article class="portal-world-card ${e(x.accent)}">${mediaStrip(x.media,x.title)}<div class="world-card-seal">${x.key==='exodo'?'◈':'✦'}</div><span>${e(x.eyebrow)}</span><h3>${e(x.title)}</h3><p>${e(x.description)}</p><footer><button data-world="${e(x.key)}">CONHECER MUNDO</button><button data-world-play="${e(x.key)}">ENTRAR NO MUNDO</button></footer></article>`;
     return '';
   }
-  function sectionBlock(title,section,items,cls,render){return `<section class="portal-section"><div class="portal-section-head"><div><span class="portal-label">PORTAL</span><h2>${title}</h2></div><button data-section="${section}" class="portal-inline-link">ABRIR CENTRAL</button></div><div class="${cls}">${items.length?items.map(render).join(''):`<div class="portal-empty">Nenhum registro publicado.</div>`}</div></section>`;}
   function listing(c,key,title,sub,renderer){const items=PortalContent.published(c[key]);return `<div class="portal-subpage"><header class="portal-subpage-head"><button data-act="back">← PORTAL</button><span class="portal-label">${e(title)}</span><h1>${e(sub)}</h1></header><div class="portal-list-grid">${items.length?items.map(renderer).join(''):`<div class="portal-empty">Nenhum conteúdo publicado ainda.</div>`}</div></div>`;}
   function worldsPage(c){return `<div class="portal-subpage"><header class="portal-subpage-head"><button data-act="back">← PORTAL</button><span class="portal-label">DOIS MUNDOS</span><h1>Escolha sua realidade</h1><p>Explore as identidades, registros e caminhos de cada cenário.</p></header><div class="portal-world-grid">${c.worlds.map(x=>cardFor('worlds',x)).join('')}</div></div>`;}
   function worldPage(c,key){const w=c.worlds.find(x=>x.key===key)||c.worlds[0];return `<div class="portal-subpage world-subpage ${e(w.accent)}"><header class="portal-subpage-head">${mediaStrip(w.media,w.title)}<button data-act="back">← PORTAL</button><span class="portal-label">${e(w.eyebrow)}</span><h1>${e(w.title)}</h1><p>${e(w.description)}</p></header><div class="world-subpage-actions"><button class="portal-btn primary" data-world-play="${e(w.key)}">ENTRAR NO MUNDO</button><button class="portal-btn" data-act="codex">CONSULTAR CÓDICE</button></div><div class="world-lore-grid"><article><span>O QUE É</span><h2>Cenário</h2><p>${e(w.description)}</p></article><article><span>CONTEÚDO</span><h2>Classes e expansões</h2><p>Descubra as opções disponíveis no portal e depois entre no Santuário para criar sua ficha.</p></article><article><span>REGISTROS</span><h2>Arquivos do mundo</h2><p>Acesse o Códice oficial para consultar regras, expansões e documentos publicados pelo ADM.</p></article></div></div>`;}
@@ -130,7 +128,16 @@
     r.querySelectorAll('[data-detail]').forEach(b=>b.addEventListener('click',()=>{state.section='detail';state.detail=b.dataset.detail;render();}));
     r.querySelectorAll('[data-act]').forEach(b=>b.addEventListener('click',()=>handleAction(b.dataset.act)));
   }
-  function handleAction(act){if(act==='login'){openLogin();return;}if(act==='logout'){if(typeof window.doLogout==='function')window.doLogout();return;}if(act==='create'){if(user())show('screen-mode-select');else openLogin();return;}if(act==='game'){if(user())show('screen-mode-select');else openLogin();return;}if(act==='codex'){show('screen-codex');if(typeof window.renderWorldCodex==='function')window.renderWorldCodex();return;}if(act==='masters'){if(!user()){openLogin();return;}show('screen-ancoragem');if(typeof window.switchAncoragemTab==='function')window.switchAncoragemTab(role()==='jogador'?'player':'gm');return;}if(act==='master-history'){if(!['mestre','admin'].includes(String(role()).toLowerCase())){openLogin();return;}show('screen-ancoragem');if(typeof window.switchAncoragemTab==='function')window.switchAncoragemTab('gm');setTimeout(()=>{window.MasterCommandCenter?.setPane?.('history');document.querySelector('.master-command-center')?.scrollIntoView({behavior:'smooth',block:'start'});},60);return;}if(act==='shield'){if(!['mestre','admin'].includes(String(role()).toLowerCase())){alert('Acesso restrito a Mestres e ADM.');return;}if(typeof window.openMasterShield==='function')window.openMasterShield();return;}if(act==='admin'){window.openPortalAdmin&&window.openPortalAdmin();return;}if(act==='back'||act==='top'){backToPortal();}}
-  window.renderOfficialPortal=render;window.openOfficialPortal=async()=>{state.section='home';await PortalContent.hydrate();await render();show('screen-portal');};window.returnToOfficialPortal=backToPortal;window.backToOfficialPortal=backToPortal;
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>window.openOfficialPortal());else window.openOfficialPortal();
+  function handleAction(act){if(act==='login'){openLogin();return;}if(act==='logout'){if(typeof window.doLogout==='function')window.doLogout();return;}if(act==='create'){if(user())show('screen-mode-select');else openLogin();return;}if(act==='game'){if(user())show('screen-mode-select');else openLogin();return;}if(act==='codex'){show('screen-codex');if(!document.getElementById('world-codex-root')&&typeof window.renderWorldCodex==='function')window.renderWorldCodex();return;}if(act==='masters'){if(!user()){openLogin();return;}if(typeof window.showScreen==='function')window.showScreen('screen-ancoragem',{skipAncoragemRender:true});if(typeof window.switchAncoragemTab==='function')window.switchAncoragemTab(role()==='jogador'?'player':'gm');return;}if(act==='master-history'){if(!['mestre','admin'].includes(String(role()).toLowerCase())){openLogin();return;}if(typeof window.showScreen==='function')window.showScreen('screen-ancoragem',{skipAncoragemRender:true});if(typeof window.switchAncoragemTab==='function')window.switchAncoragemTab('gm');Promise.resolve(window.MS_FEATURES?.ensureMasterHistory?.()).catch(()=>null).finally(()=>setTimeout(()=>{window.MasterCommandCenter?.setPane?.('history');document.querySelector('.master-command-center')?.scrollIntoView({behavior:'smooth',block:'start'});},0));return;}if(act==='shield'){if(!['mestre','admin'].includes(String(role()).toLowerCase())){alert('Acesso restrito a Mestres e ADM.');return;}if(typeof window.openMasterShield==='function')window.openMasterShield();return;}if(act==='admin'){window.openPortalAdmin&&window.openPortalAdmin();return;}if(act==='back'||act==='top'){backToPortal();}}
+  let portalHydrationPromise=null;
+  function refreshPortalContent(){
+    if(portalHydrationPromise)return portalHydrationPromise;
+    portalHydrationPromise=Promise.resolve(PortalContent.hydrate()).then(()=>{if(document.getElementById('screen-portal')?.classList.contains('active'))render();}).finally(()=>{portalHydrationPromise=null;});
+    return portalHydrationPromise;
+  }
+  window.renderOfficialPortal=render;window.openOfficialPortal=()=>{state.section='home';state.world=null;state.detail=null;show('screen-portal');render();if(window.MS_DB?.ready)setTimeout(refreshPortalContent,0);return true;};window.returnToOfficialPortal=backToPortal;window.backToOfficialPortal=backToPortal;
+  // O Portal público não espera SDK/Auth remoto para existir. Ele é renderizado assim que
+  // seu módulo local está disponível; a hidratação online acontece quando o app termina o boot.
+  window.openOfficialPortal();
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>refreshPortalContent(),{once:true});else refreshPortalContent();
 })();

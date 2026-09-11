@@ -37,6 +37,7 @@
   async function render(){
     renderPlayerConnections();syncGmTab();
     if(!canUseGmLobby())return;
+    try{await window.MS_FEATURES?.ensureMasterHistory?.();}catch(error){window.MS_PLATFORM?.toast?.('Os registros históricos serão exibidos assim que o acervo carregar.','error');}
     const root=room();if(!root)return;
     const tables=managed();const active=tables.filter(t=>t.status!=='archived');const archived=tables.filter(t=>t.status==='archived');
     const selectedId=String(window.__msMasterRoomTableId||active[0]?.id||archived[0]?.id||'');

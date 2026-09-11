@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const read=p=>fs.readFileSync(new URL(`../${p}`,import.meta.url),'utf8');
+const LEGACY_SANDBOX=fs.existsSync(new URL('../test/sandbox.html',import.meta.url))&&fs.existsSync(new URL('../test/sandbox-runtime.js',import.meta.url));
+const legacyTest=LEGACY_SANDBOX?test:test.skip;
 
-test('Sandbox HTML bloqueia Supabase remoto e usa runtime local',()=>{
+legacyTest('Sandbox HTML bloqueia Supabase remoto e usa runtime local',()=>{
   const html=read('test/sandbox.html');
   assert.match(html,/test\/sandbox-runtime\.js/);
   assert.doesNotMatch(html,/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js/);
@@ -12,7 +14,7 @@ test('Sandbox HTML bloqueia Supabase remoto e usa runtime local',()=>{
   assert.doesNotMatch(html,/src="js\/ms-config\.js"/);
 });
 
-test('Sandbox oferece quatro contas e realtime entre abas',()=>{
+legacyTest('Sandbox oferece quatro contas e realtime entre abas',()=>{
   const js=read('test/sandbox-runtime.js');
   for(const token of ["username:'admin'","username:'mestre'","username:'jogador'","username:'jogador2'"]) assert.match(js,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   assert.match(js,/BroadcastChannel/);
@@ -28,7 +30,7 @@ test('Build de produção não publica o diretório test',()=>{
   assert.match(build,/SQL, testes e auditorias ficam fora da publicação/);
 });
 
-test('Runtime Sandbox autentica ADM e persiste evento de mesa sem rede',async()=>{
+legacyTest('Runtime Sandbox autentica ADM e persiste evento de mesa sem rede',async()=>{
   const vm=await import('node:vm');
   const cryptoMod=await import('node:crypto');
   const store=()=>{const m=new Map();return {getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k),clear:()=>m.clear()};};

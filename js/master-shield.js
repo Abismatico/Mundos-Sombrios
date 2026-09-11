@@ -28,10 +28,7 @@
     if(v==='mapa')setTimeout(()=>window.MSAtlas?.refreshLayout?.(),40);
   };
   const tipMove=e=>{if(tt){tt.style.left=(e.clientX+16)+'px';tt.style.top=(e.clientY+12)+'px';}};
-  const tipShow=html=>{if(tt){tt.innerHTML=html;tt.style.display='block';}};
-  const tipHide=()=>{if(tt)tt.style.display='none';};
   root.addEventListener('mousemove',tipMove);
-  const ALN={pro:['#4fd8c7','PRÓ-NEXO'],ant:['#e02832','ANT-NEXO'],neu:['#c9a227','ÁREA CINZENTA']};
 
 /* ══════════ CRONOLOGIA ══════════ */
 (function(){

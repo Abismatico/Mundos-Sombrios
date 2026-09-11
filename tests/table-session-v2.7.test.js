@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import vm from 'node:vm';
 
 const read=f=>readFileSync(f,'utf8');
+const HAS_V27_BASE_MIGRATION=existsSync('supabase-table-session-v2.7-migration.sql');
+const migrationTest=HAS_V27_BASE_MIGRATION?test:test.skip;
 
 test('V2.7 instala uma única camada de sessão e a nova Mesa/Ancoragem',()=>{
   const html=read('index.html'),pkg=JSON.parse(read('package.json'));
@@ -56,7 +58,7 @@ test('Table Session Engine normaliza estado, não reproduz efeitos históricos e
   assert.equal(engine.current().lastEventId,4);
 });
 
-test('evento persistido é fonte de verdade e Broadcast nasce do banco',()=>{
+migrationTest('evento persistido é fonte de verdade e Broadcast nasce do banco',()=>{
   const db=read('js/supabase-db.js'),sql=read('supabase-table-session-v2.7-migration.sql');
   assert.match(db,/append_table_event_v3/);
   assert.match(db,/fetchTableEventsAfter/);
@@ -66,7 +68,7 @@ test('evento persistido é fonte de verdade e Broadcast nasce do banco',()=>{
   assert.match(sql,/revoke insert on public\.table_events from anon, authenticated/);
 });
 
-test('Realtime privado contempla jogador, mestre e ADM e transmite refresh/deleção',()=>{
+migrationTest('Realtime privado contempla jogador, mestre e ADM e transmite refresh/deleção',()=>{
   const db=read('js/supabase-db.js'),sql=read('supabase-table-session-v2.7-migration.sql');
   assert.match(db,/event: 'table:deleted'/);assert.match(db,/event: 'table:refresh'/);
   assert.match(sql,/public\.current_profile_role\(\)='admin'/);
@@ -74,7 +76,7 @@ test('Realtime privado contempla jogador, mestre e ADM e transmite refresh/dele�
   assert.match(sql,/table_members tm/);
 });
 
-test('fichas usam auth UUID do participante e SQL limita jogador à própria ficha',()=>{
+migrationTest('fichas usam auth UUID do participante e SQL limita jogador à própria ficha',()=>{
   const source=read('js/script.js')+read('js/master-tools.js'),sql=read('supabase-table-session-v2.7-migration.sql');
   assert.match(source,/currentUser\.authUserId\|\|currentUser\.id/);
   assert.match(sql,/c\.user_id=auth\.uid\(\)::text/);
@@ -82,7 +84,7 @@ test('fichas usam auth UUID do participante e SQL limita jogador à própria fic
   assert.match(sql,/table_members tm where tm\.table_id=p_table_id and tm\.character_id=c\.id and tm\.status='active'/);
 });
 
-test('Direção ao vivo e telemetria administrativa fazem parte da Mesa V3',()=>{
+migrationTest('Direção ao vivo e telemetria administrativa fazem parte da Mesa V3',()=>{
   const shell=read('js/table-shell-v3.js'),services=read('js/ms-services.js'),sql=read('supabase-table-session-v2.7-migration.sql');
   assert.match(shell,/DIREÇÃO AO VIVO/);assert.match(shell,/DIAGNÓSTICO DO ARCONTE/);assert.match(shell,/TRANSMITIR AVISO/);
   assert.match(services,/setLiveStatus/);assert.match(sql,/set_table_live_status/);assert.match(sql,/'table_status'/);

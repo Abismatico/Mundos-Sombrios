@@ -187,6 +187,8 @@ let activeCarouselIndex = 0;
 let currentPowerDraft = [];
 let currentEvolutionLog = [];
 let currentDraftSettings = {};
+let currentDraftIdentity = null;
+let msDraftSavePromise = null;
 Object.defineProperty(window, 'currentPowerDraft', { configurable: true, get(){ return currentPowerDraft; }, set(v){ currentPowerDraft = Array.isArray(v) ? v : []; } });
 
 // VTT STATE
@@ -229,9 +231,10 @@ async function msBuildCurrentUser(profileOverride = null) {
 async function msHydrateRemoteGameState() {
     if (!window.MS_SERVICES?.Characters || !currentUser) return;
     try {
-        const [remoteChars, remoteTables, remoteSummaries] = await Promise.all([
+        // V2.8.6: evita duas leituras completas de mesas em cada hidratação.
+        // O resumo é a rota primária; listMine só é consultado quando o resumo não existe/retorna vazio.
+        const [remoteChars, remoteSummaries] = await Promise.all([
             window.MS_SERVICES.Characters.listMine(),
-            window.MS_SERVICES.Games.listMine(),
             window.MS_SERVICES.Games.summaries ? window.MS_SERVICES.Games.summaries() : Promise.resolve([])
         ]);
         const charRows = remoteChars?.data || [];
@@ -253,7 +256,13 @@ async function msHydrateRemoteGameState() {
         msWriteJSON(MS_REPO_KEY, repoStore);
 
         const summaryRows = remoteSummaries?.data || remoteSummaries || [];
-        const tableRows = Array.isArray(summaryRows) && summaryRows.length ? summaryRows : (remoteTables?.data || remoteTables || []);
+        let tableRows = Array.isArray(summaryRows) ? summaryRows : [];
+        if (!tableRows.length && window.MS_SERVICES.Games.listMine) {
+            const remoteTables = await window.MS_SERVICES.Games.listMine();
+            tableRows = remoteTables?.data || remoteTables || [];
+        }
+        // Defesa adicional contra respostas duplicadas de views/RPCs legadas.
+        tableRows = [...new Map((Array.isArray(tableRows)?tableRows:[]).filter(Boolean).map(row=>[String(row.id),row])).values()];
         allTablesDB = tableRows.map(t => msNormalizeTable({
             id:t.id,code:t.code,name:t.name,theme:t.theme,gameMode:t.game_mode,ownerId:t.owner_id,
             participants:[],banned:t.banned||[],settings:t.settings||{},status:t.status||'active',
@@ -295,9 +304,11 @@ async function msApplyAuthenticatedSession(profileOverride = null) {
 
         // Dados secundários são carregados fora do caminho crítico do login.
         setTimeout(async()=>{
-            try { usersDB = await window.MS_DB.fetchUsers(); } catch(error) { console.warn('[Mundos Sombrios] Perfis:',error); }
+            if (currentUser?.role === 'admin') {
+                try { usersDB = await window.MS_DB.fetchUsers(); } catch(error) { console.warn('[Mundos Sombrios] Perfis:',error); }
+            }
             try { await msHydrateRemoteGameState(); } catch(error) { console.warn('[Mundos Sombrios] Hidratação:',error); }
-            try { await msSyncOnlineState(); } catch(error) { console.warn('[Mundos Sombrios] Pós-login:',error); }
+            // syncUserState é read-only desde V2.8.1; não é necessário manter uma ida extra no caminho pós-login.
             try { await window.MS_SOUL?.fetchState?.({quiet:true}); } catch(error) { console.warn('[Mundos Sombrios] Soul:',error); }
         },0);
         return true;
@@ -336,16 +347,32 @@ document.addEventListener('DOMContentLoaded',()=>{
     msRefreshInitialSetupButton();
     const loginPass=document.getElementById('login-pass');
     const loginUser=document.getElementById('login-user');
-    [loginPass,loginUser].filter(Boolean).forEach(el=>el.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();doLogin();}}));
+    [loginPass,loginUser].filter(Boolean).forEach(el=>{
+        el.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();doLogin();}});
+        el.addEventListener('input',()=>msSetLoginStatus('', ''));
+    });
     window.MS_PLATFORM?.emit('ms:app:ready',{ version: window.MS_PLATFORM?.version || null });
 });
 let msLoginInFlight=false;
+function msSetLoginStatus(message='', state='') {
+    const status=document.getElementById('login-status');
+    const box=document.querySelector('#screen-login .login-box');
+    if(status){status.textContent=message;status.dataset.state=state||'';status.setAttribute('role',state==='error'?'alert':'status');status.setAttribute('aria-live',state==='error'?'assertive':'polite');}
+    box?.classList.toggle('login-has-error',state==='error');
+}
+function toggleLoginPassword(){
+    const input=document.getElementById('login-pass');const button=document.getElementById('login-pass-toggle');if(!input)return false;
+    const showing=input.type==='text';input.type=showing?'password':'text';
+    if(button){button.textContent=showing?'MOSTRAR':'OCULTAR';button.setAttribute('aria-pressed',String(!showing));button.setAttribute('aria-label',showing?'Mostrar senha':'Ocultar senha');}
+    input.focus({preventScroll:true});return !showing;
+}
+window.toggleLoginPassword=toggleLoginPassword;
 function msAuthErrorMessage(error){
     const code=String(error?.code||''); const message=String(error?.message||'').toLowerCase();
     if(code==='USERNAME_RESOLVER_UNAVAILABLE') return 'Login por usuário indisponível neste banco. Tente com o e-mail da conta ou aplique a migração V2.8.1.';
     if(code==='PROFILE_LINK_REQUIRED'||code==='PROFILE_NOT_FOUND') return 'A autenticação ocorreu, mas o perfil do site não está vinculado. Aplique a migração V2.8.1.';
     if(code==='email_not_confirmed'||message.includes('email not confirmed')) return 'Confirme seu e-mail antes de entrar.';
-    if(code==='invalid_credentials'||message.includes('invalid login credentials')) return 'E-mail/usuário ou senha incorretos.';
+    if(code==='invalid_credentials'||code==='INVALID_LOGIN_IDENTIFIER'||message.includes('invalid login credentials')||message.includes('invalid credentials')) return 'Senha ou usuário/e-mail incorretos. Confira os dados e tente novamente.';
     if(message.includes('failed to fetch')||message.includes('network')) return 'Não foi possível alcançar o Supabase. Verifique sua conexão.';
     return error?.message || 'Não foi possível autenticar.';
 }
@@ -354,18 +381,18 @@ async function doLogin() {
     const identifier=document.getElementById('login-user').value.trim(); const password=document.getElementById('login-pass').value;
     const button=document.getElementById('login-submit'); const status=document.getElementById('login-status');
     window.MS_PLATFORM?.setStatus('auth','loading');
-    if(!identifier||!password){window.MS_PLATFORM?.setStatus('auth','error',new Error('Credenciais incompletas')); window.MS_PLATFORM?.toast('Preencha usuário/e-mail e senha.','error'); return false;}
-    if(!window.MS_DB?.ready){window.MS_PLATFORM?.setStatus('auth','error',new Error('Supabase indisponível')); window.MS_PLATFORM?.toast('O serviço online de autenticação não está disponível.','error'); return false;}
-    msLoginInFlight=true; if(button){button.disabled=true;button.dataset.originalText=button.textContent;button.textContent='ATRAVESSANDO...';} if(status)status.textContent='Autenticando...';
+    if(!identifier||!password){window.MS_PLATFORM?.setStatus('auth','error',new Error('Credenciais incompletas')); msSetLoginStatus('Preencha usuário/e-mail e senha.','error'); window.MS_PLATFORM?.toast('Preencha usuário/e-mail e senha.','error'); return false;}
+    if(!window.MS_DB?.ready){window.MS_PLATFORM?.setStatus('auth','error',new Error('Supabase indisponível')); msSetLoginStatus('O serviço online de autenticação não está disponível.','error'); window.MS_PLATFORM?.toast('O serviço online de autenticação não está disponível.','error'); return false;}
+    msLoginInFlight=true; if(button){button.disabled=true;button.dataset.originalText=button.textContent;button.textContent='ATRAVESSANDO...';} msSetLoginStatus('Autenticando...','loading');
     try{
         const result=await window.MS_DB.signIn(identifier,password);
         if(result?.error) throw result.error;
         const ok=await msApplyAuthenticatedSession();
         if(!ok) throw Object.assign(new Error('Perfil não encontrado ou bloqueado.'),{code:'PROFILE_NOT_FOUND'});
-        window.MS_PLATFORM?.setStatus('auth','success'); window.MS_PLATFORM?.emit('auth:signed-in',{user: currentUser}); if(status)status.textContent=''; return true;
+        window.MS_PLATFORM?.setStatus('auth','success'); window.MS_PLATFORM?.emit('auth:signed-in',{user: currentUser}); msSetLoginStatus('',''); return true;
     } catch(error){
         window.MS_PLATFORM?.setStatus('auth','error',error); console.warn('[Mundos Sombrios] Login:',error);
-        const friendly=msAuthErrorMessage(error); if(status)status.textContent=friendly; window.MS_PLATFORM?.toast(friendly,'error'); return false;
+        const friendly=msAuthErrorMessage(error); msSetLoginStatus(friendly,'error'); window.MS_PLATFORM?.toast(friendly,'error'); return false;
     } finally {
         msLoginInFlight=false; if(button){button.disabled=false;button.textContent=button.dataset.originalText||'ATRAVESSAR PORTAL';}
     }
@@ -515,31 +542,32 @@ function switchAdminPanelTab(tab = 'users') {
 window.switchAdminPanelTab = switchAdminPanelTab;
 
 async function openAdminPanel() {
-    try {
-        await hydrateAuthState();
-        const freshUsers = Array.isArray(window.MS_DB && window.MS_DB.ready ? await window.MS_DB.fetchUsers() : []) ? (window.MS_DB && window.MS_DB.ready ? await window.MS_DB.fetchUsers() : []) : [];
-        if (freshUsers.length) {
-            usersDB = mergeUsersFromSources(usersDB, freshUsers);
-        }
-        if (!isCurrentAdmin()) {
-            const liveCurrent = usersDB.find(u => String(u.id) === String(currentUser?.id || '')) || null;
-            if (liveCurrent) currentUser = { ...liveCurrent };
-        }
-        if (!isCurrentAdmin()) {
-            alert('Acesso restrito ao ADM.');
-            return false;
-        }
-    } catch (error) {
-        console.warn('[Mundos Sombrios] Falha ao abrir painel do Arconte:', error);
-        alert('Não foi possível validar o Arconte no banco remoto.');
+    if (!isCurrentAdmin()) {
+        alert('Acesso restrito ao ADM.');
         return false;
     }
 
+    // Abre imediatamente com o estado já autenticado; a sincronização remota ocorre
+    // em paralelo e atualiza a interface sem bloquear o Arconte.
     renderAdminPanel();
     renderAdminRequestsWindows();
-    window.MS_SOUL?.refreshAdminConsole?.();
     switchAdminPanelTab('users');
-    document.getElementById('admin-panel-modal').style.display = 'flex';
+    const modal=document.getElementById('admin-panel-modal');
+    if(modal)modal.style.display='flex';
+    setTimeout(()=>window.MS_SOUL?.refreshAdminConsole?.(),0);
+
+    Promise.all([
+        window.MS_DB?.ready ? window.MS_DB.fetchUsers() : Promise.resolve([]),
+        window.MS_DB?.ready ? window.MS_DB.fetchAdminRequests() : Promise.resolve([])
+    ]).then(([remoteUsers,remoteRequests])=>{
+        usersDB=mergeUsersFromSources(usersDB,Array.isArray(remoteUsers)?remoteUsers:[]);
+        requestsDB=dedupeRequests(Array.isArray(remoteRequests)?remoteRequests:requestsDB);
+        renderAdminPanel();
+        renderAdminRequestsWindows();
+    }).catch(error=>{
+        console.warn('[Mundos Sombrios] Sincronização do Arconte:',error);
+        window.MS_PLATFORM?.toast('O painel abriu, mas a sincronização remota falhou.','error');
+    });
     return true;
 }
 
@@ -612,8 +640,9 @@ function renderAdminRequestsWindows() {
         const left = 100 + (idx * 30);
         const win = document.createElement('div');
         win.id = `req-win-${req.id}`;
-        win.className = 'vtt-floating-window';
-        win.style.cssText = `position:absolute; top:${top}px !important; left:${left}px !important; transform:none !important; width:${isAtlasRequest ? 360 : 300}px; display:flex; pointer-events:auto; z-index:9500;`;
+        win.className = 'vtt-floating-window admin-request-window';
+        win.style.setProperty('--request-offset', `${Math.min(idx, 8) * 18}px`);
+        win.style.cssText += `position:absolute; top:${top}px !important; left:${left}px !important; transform:none !important; width:${isAtlasRequest ? 360 : 300}px; display:flex; pointer-events:auto; z-index:9500;`;
 
         const header = document.createElement('div');
         header.className = 'vtt-window-header';
@@ -629,7 +658,9 @@ function renderAdminRequestsWindows() {
         closeBtn.type = 'button';
         closeBtn.className = 'win-close-btn';
         closeBtn.textContent = 'X';
-        closeBtn.addEventListener('click', () => document.getElementById(`req-win-${req.id}`)?.remove());
+        closeBtn.title = 'Silenciar solicitação';
+        closeBtn.setAttribute('aria-label', 'Silenciar solicitação');
+        closeBtn.addEventListener('click', () => silenceAdminRequest(req.id));
         header.appendChild(title); header.appendChild(closeBtn);
 
         const body = document.createElement('div');
@@ -660,7 +691,7 @@ function renderAdminRequestsWindows() {
         }
 
         const actions = document.createElement('div');
-        actions.style.display = 'flex'; actions.style.gap = '10px'; actions.style.justifyContent = 'center';
+        actions.style.display = 'flex'; actions.style.gap = '8px'; actions.style.justifyContent = 'center'; actions.style.flexWrap = 'wrap';
         const acceptBtn = document.createElement('button');
         acceptBtn.type = 'button'; acceptBtn.className = 'souls-btn small-btn'; acceptBtn.style.borderColor = '#a8ff00'; acceptBtn.style.color = '#a8ff00';
         acceptBtn.textContent = isAtlasRequest ? 'Revisar no Atlas' : 'Aceitar';
@@ -668,7 +699,13 @@ function renderAdminRequestsWindows() {
         const rejectBtn = document.createElement('button');
         rejectBtn.type = 'button'; rejectBtn.className = 'souls-btn small-btn'; rejectBtn.style.borderColor = '#ff3333'; rejectBtn.style.color = '#ff3333'; rejectBtn.textContent = 'Negar';
         rejectBtn.addEventListener('click', () => handleReq(req.id, false));
-        actions.append(acceptBtn, rejectBtn); body.append(text, actions); win.append(header, body); container.appendChild(win);
+        const silenceBtn = document.createElement('button');
+        silenceBtn.type = 'button'; silenceBtn.className = 'souls-btn small-btn'; silenceBtn.style.borderColor = '#d4af37'; silenceBtn.style.color = '#d4af37'; silenceBtn.textContent = 'Silenciar';
+        silenceBtn.addEventListener('click', () => silenceAdminRequest(req.id));
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button'; deleteBtn.className = 'souls-btn small-btn'; deleteBtn.style.borderColor = '#8f1f1f'; deleteBtn.style.color = '#ff7474'; deleteBtn.textContent = 'Excluir';
+        deleteBtn.addEventListener('click', () => deleteAdminRequest(req.id));
+        actions.append(acceptBtn, rejectBtn, silenceBtn, deleteBtn); body.append(text, actions); win.append(header, body); container.appendChild(win);
         makeDraggable(win, header, false);
     });
     return true;
@@ -697,6 +734,59 @@ async function reviewAtlasRequest(reqId) {
     return true;
 }
 
+async function refreshAdminRequestsAfterAction(reqId) {
+    requestsDB = dedupeRequests((await window.MS_DB.fetchAdminRequests()) || []);
+    usersDB = await window.MS_DB.fetchUsers();
+    msWriteStorageJSON('mundosSombriosRequests', requestsDB);
+    document.getElementById(`req-win-${reqId}`)?.remove();
+    renderAdminRequestsWindows();
+    renderAdminPanel?.();
+    return true;
+}
+
+async function silenceAdminRequest(reqId) {
+    if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
+    const win = document.getElementById(`req-win-${reqId}`);
+    const buttons = win?.querySelectorAll('button') || [];
+    buttons.forEach(b => b.disabled = true);
+    try {
+        if (!window.MS_DB?.ready || typeof window.MS_DB.silenceAdminRequestSecure !== 'function') throw new Error('A operação segura de silenciamento não está disponível no backend.');
+        const result = await window.MS_DB.silenceAdminRequestSecure(reqId);
+        if (result?.error) throw result.error;
+        if (!result?.data) throw new Error('O servidor não confirmou o silenciamento.');
+        await refreshAdminRequestsAfterAction(reqId);
+        window.MS_PLATFORM?.toast('Solicitação silenciada. Ela não aparecerá como pendente.', 'success');
+        return true;
+    } catch (error) {
+        buttons.forEach(b => b.disabled = false);
+        console.error('[Mundos Sombrios] silenciamento administrativo:', error);
+        window.MS_PLATFORM?.toast(error?.message || 'Não foi possível silenciar a solicitação.', 'error');
+        return false;
+    }
+}
+
+async function deleteAdminRequest(reqId) {
+    if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
+    if (!confirm('Excluir definitivamente esta solicitação administrativa?')) return false;
+    const win = document.getElementById(`req-win-${reqId}`);
+    const buttons = win?.querySelectorAll('button') || [];
+    buttons.forEach(b => b.disabled = true);
+    try {
+        if (!window.MS_DB?.ready || typeof window.MS_DB.deleteAdminRequestSecure !== 'function') throw new Error('A operação segura de exclusão não está disponível no backend.');
+        const result = await window.MS_DB.deleteAdminRequestSecure(reqId);
+        if (result?.error) throw result.error;
+        if (result?.data !== true) throw new Error('O servidor não confirmou a exclusão.');
+        await refreshAdminRequestsAfterAction(reqId);
+        window.MS_PLATFORM?.toast('Solicitação excluída definitivamente.', 'success');
+        return true;
+    } catch (error) {
+        buttons.forEach(b => b.disabled = false);
+        console.error('[Mundos Sombrios] exclusão de solicitação administrativa:', error);
+        window.MS_PLATFORM?.toast(error?.message || 'Não foi possível excluir a solicitação.', 'error');
+        return false;
+    }
+}
+
 async function handleReq(reqId, approved) {
     if (!isCurrentAdmin()) { alert('Acesso restrito ao ADM.'); return false; }
     const req = (Array.isArray(requestsDB) ? requestsDB : []).find(r => String(r.id) === String(reqId)) ||
@@ -708,8 +798,7 @@ async function handleReq(reqId, approved) {
     try{
         if(!window.MS_DB?.ready||typeof window.MS_DB.resolveAdminRequestSecure!=='function')throw new Error('A migração V2.8 de solicitações administrativas ainda não está disponível.');
         const result=await window.MS_DB.resolveAdminRequestSecure(reqId,approved);if(result?.error)throw result.error;if(!result?.data)throw new Error('O servidor não confirmou a decisão.');
-        requestsDB=dedupeRequests((await window.MS_DB.fetchAdminRequests())||[]).filter(r=>String(r.status||'pending').toLowerCase()==='pending');
-        usersDB=await window.MS_DB.fetchUsers();msWriteStorageJSON('mundosSombriosRequests',requestsDB);win?.remove();renderAdminRequestsWindows();renderAdminPanel?.();
+        await refreshAdminRequestsAfterAction(reqId);
         window.MS_PLATFORM?.toast(approved?'Solicitação aprovada e confirmada pelo servidor.':'Solicitação recusada e confirmada pelo servidor.','success');return true;
     }catch(error){buttons.forEach(b=>b.disabled=false);console.error('[Mundos Sombrios] decisão administrativa:',error);window.MS_PLATFORM?.toast(error?.message||'Não foi possível concluir a solicitação.','error');return false;}
 }
@@ -973,9 +1062,9 @@ function applyNatureTheme(nature) {
 }
 
 // NAVIGATION
-function showScreen(id) {
+function showScreen(id, options = {}) {
     window.MS_PLATFORM?.emit('screen:changing',{screen:id});
-    if((id==='screen-char-select'||id==='screen-mode-select'||id==='screen-builder') && window.MS_FEATURES && !window.MS_FEATURES.isBuilderReady()) { window.MS_FEATURES.ensureBuilder().catch(error=>window.MS_PLATFORM?.toast(error.message||'Falha ao carregar a Forja.','error')); }
+    if((id==='screen-char-select'||id==='screen-builder') && window.MS_FEATURES && !window.MS_FEATURES.isBuilderReady()) { window.MS_FEATURES.ensureBuilder().catch(error=>window.MS_PLATFORM?.toast(error.message||'Falha ao carregar a Forja.','error')); }
     const target = document.getElementById(id);
     if(!target) {
         console.error('[Mundos Sombrios] Tela não encontrada:', id);
@@ -990,7 +1079,7 @@ function showScreen(id) {
         if(typeof renderCharList === 'function') renderCharList();
         if(currentUser) document.getElementById('sanctuary-limits').innerText = `Almas Vivas: ${characters.length} / ${msCapacityLabel(msCharacterCapacity())}`;
     }
-    if(id === 'screen-ancoragem' && typeof renderAncoragem === 'function') {
+    if(id === 'screen-ancoragem' && !options.skipAncoragemRender && typeof renderAncoragem === 'function') {
         renderAncoragem();
     }
     if(id === 'screen-master-shield') setTimeout(()=>window.syncMasterShieldReturnUI?.(),0);
@@ -2283,6 +2372,7 @@ async function initVttGrid() {
         vttCanvas.on('object:moving', function(e) {
             const target=e.target;
             if(msVttPlayerInteractionBlocked() || !msVttObjectOwnedByCurrentUser(target)) { target.set({left:e.transform.original.left, top:e.transform.original.top}); vttCanvas.renderAll(); return; }
+            if(window.__msGridSnap && target && !target.isGridLine && !target.isRuler){const gs=Math.max(20,Math.min(120,Number(window.__msGridSize)||50));target.set({left:Math.round((Number(target.left)||0)/gs)*gs,top:Math.round((Number(target.top)||0)/gs)*gs});}
             if(window.__msApplyingRemoteToken || !target?.msTokenId || !currentTableData?.id || !window.MS_SERVICES?.VTT) return;
             clearTimeout(moveTimer);
             moveTimer=setTimeout(()=>{
@@ -2322,18 +2412,25 @@ function applyVttSceneContext(){
 window.applyVttSceneContext=applyVttSceneContext;
 
 function drawGridLines() {
+    if(!vttCanvas) return;
     const objects = vttCanvas.getObjects('line');
     objects.forEach(obj => { if(obj.isGridLine) vttCanvas.remove(obj); });
 
-    const gridSize = 50;
+    const gridSize = Math.max(20, Math.min(120, Number(window.__msGridSize)||50));
     for (let i = 0; i < (vttCanvas.width / gridSize); i++) {
         vttCanvas.add(new fabric.Line([ i * gridSize, 0, i * gridSize, vttCanvas.height], { stroke: '#333', selectable: false, isGridLine: true }));
     }
     for (let i = 0; i < (vttCanvas.height / gridSize); i++) {
         vttCanvas.add(new fabric.Line([ 0, i * gridSize, vttCanvas.width, i * gridSize], { stroke: '#333', selectable: false, isGridLine: true }));
     }
+    vttCanvas.getObjects('line').filter(o=>o.isGridLine).forEach(o=>o.set({visible:window.__msGridVisible!==false}));
     vttCanvas.sendToBack(...vttCanvas.getObjects('line'));
+    vttCanvas.requestRenderAll();
 }
+function canvasToggleGridVisibility(){if(!vttCanvas)return false;window.__msGridVisible=window.__msGridVisible===false;vttCanvas.getObjects('line').filter(o=>o.isGridLine).forEach(o=>o.set({visible:window.__msGridVisible}));vttCanvas.requestRenderAll();return window.__msGridVisible;}
+function canvasToggleSnapToGrid(){window.__msGridSnap=!window.__msGridSnap;window.MS_PLATFORM?.toast?.(window.__msGridSnap?'Encaixe na grade ativado.':'Encaixe na grade desativado.','info');return window.__msGridSnap;}
+function canvasClearMeasurements(){if(!vttCanvas)return;vttCanvas.getObjects().filter(o=>o.isRuler||o.msMeasureShape).forEach(o=>vttCanvas.remove(o));if(window.__msRulerActive)msSetRulerActive(false);vttCanvas.requestRenderAll();}
+window.canvasToggleGridVisibility=canvasToggleGridVisibility;window.canvasToggleSnapToGrid=canvasToggleSnapToGrid;window.canvasClearMeasurements=canvasClearMeasurements;
 
 function canvasSetMode(mode) {
     if(!vttCanvas) return;
@@ -2396,11 +2493,11 @@ function canvasSetBackground(e) {
 function canvasAddShape(type) {
     let shape;
     if(type === 'cone') {
-        shape = new fabric.Triangle({ width: 100, height: 100, fill: 'rgba(255,51,51,0.3)', stroke: '#ff3333', left: 150, top: 150, owner: isVttGM?'gm':'me' });
+        shape = new fabric.Triangle({ width: 100, height: 100, fill: 'rgba(255,51,51,0.3)', stroke: '#ff3333', left: 150, top: 150, owner: isVttGM?'gm':'me', msMeasureShape:true });
     } else if (type === 'line') {
-        shape = new fabric.Rect({ width: 200, height: 10, fill: 'rgba(0,255,204,0.5)', stroke: '#00ffcc', left: 150, top: 150, owner: isVttGM?'gm':'me' });
+        shape = new fabric.Rect({ width: 200, height: 10, fill: 'rgba(0,255,204,0.5)', stroke: '#00ffcc', left: 150, top: 150, owner: isVttGM?'gm':'me', msMeasureShape:true });
     } else if (type === 'radius') {
-        shape = new fabric.Circle({ radius: 100, fill: 'rgba(212,175,55,0.3)', stroke: '#d4af37', left: 150, top: 150, owner: isVttGM?'gm':'me' });
+        shape = new fabric.Circle({ radius: 100, fill: 'rgba(212,175,55,0.3)', stroke: '#d4af37', left: 150, top: 150, owner: isVttGM?'gm':'me', msMeasureShape:true });
     }
     vttCanvas.add(shape);
 }
@@ -2506,10 +2603,6 @@ function toggleNPCHealthVisibility() {
 
 // VTT DICE ROLL — V2.4: malhas poliédricas 3D reais por Canvas
 let diceRollInProgress = false;
-function buildCSSDiceFaces(type, result) {
-    // Compatibilidade com chamadas legadas: a representação agora é Canvas 3D.
-    window.MS_DICE_3D?.setStatic?.(type, result);
-}
 function secureDieResult(max) {
     if (window.crypto?.getRandomValues) {
         const a = new Uint32Array(1); window.crypto.getRandomValues(a);
@@ -2530,6 +2623,7 @@ async function roll3DDice(type) {
     resultText.textContent = `Rolando ${type.toUpperCase()}...`;
     resultText.classList.add('rolling');
     try {
+        try{await window.MS_FEATURES?.ensureDice?.();}catch(_){}
         if(window.MS_DICE_3D?.play) await window.MS_DICE_3D.play(type, finalResult, {duration:1050});
         else await new Promise(resolve=>setTimeout(resolve,220));
         resultText.classList.remove('rolling');
@@ -4026,6 +4120,9 @@ function openCreateTableModal() {
         return;
     }
     document.getElementById('new-table-name').value = '';
+    currentDraftIdentity = null;
+    msDraftSavePromise = null;
+    const saveButton=document.getElementById('btn-save-table');if(saveButton){saveButton.disabled=false;saveButton.removeAttribute('aria-busy');saveButton.textContent='SALVAR FENDA';}
     const modeInput=document.getElementById('new-table-mode');if(modeInput)modeInput.value='exodo';
     const expInput=document.getElementById('new-table-expansions'),clsInput=document.getElementById('new-table-classes');if(expInput)expInput.value='';if(clsInput)clsInput.value='';
     document.querySelectorAll('[data-create-mode]').forEach(btn=>btn.onclick=()=>{if(modeInput){modeInput.value=btn.dataset.createMode;updateCreateTableModeGuide();}});
@@ -4033,6 +4130,24 @@ function openCreateTableModal() {
     modal.style.display = 'flex';
     const scroll=modal.querySelector('.create-table-scroll'); if(scroll)scroll.scrollTop=0;
     updateCreateTableModeGuide();
+    msBindCreateTableComposer();
+    msUpdateCreateTablePreview();
+}
+
+function msUpdateCreateTablePreview(){
+    const name=(document.getElementById('new-table-name')?.value||'').trim()||'Fenda sem nome';
+    const mode=document.getElementById('new-table-mode')?.value||'exodo';
+    const max=Math.max(1,Math.min(20,Number(document.getElementById('new-table-max-players')?.value||6)));
+    const theme=document.getElementById('new-table-theme');
+    const label=mode==='hybrid'?'HÍBRIDA':mode.toUpperCase();
+    const n=document.querySelector('[data-create-preview-name]'),m=document.querySelector('[data-create-preview-mode]'),t=document.querySelector('[data-create-preview-theme]');
+    if(n)n.textContent=name;if(m)m.textContent=`${label} · ${max} vaga${max===1?'':'s'}`;if(t)t.textContent=(theme?.selectedOptions?.[0]?.textContent||'Clássico / Ouro').toUpperCase();
+}
+function msBindCreateTableComposer(){
+    const modal=document.getElementById('create-table-modal');if(!modal||modal.dataset.v286Bound==='1')return;modal.dataset.v286Bound='1';
+    modal.querySelectorAll('[data-create-jump]').forEach(b=>b.addEventListener('click',()=>{modal.querySelectorAll('[data-create-jump]').forEach(x=>x.classList.toggle('active',x===b));modal.querySelector(`[data-create-section="${b.dataset.createJump}"]`)?.scrollIntoView({behavior:'smooth',block:'start'});}));
+    ['new-table-name','new-table-max-players','new-table-theme','new-table-mode'].forEach(id=>document.getElementById(id)?.addEventListener('input',msUpdateCreateTablePreview));
+    document.getElementById('new-table-theme')?.addEventListener('change',msUpdateCreateTablePreview);
 }
 
 function msCreateRuleValues(id) {
@@ -4070,6 +4185,7 @@ function updateCreateTableModeGuide() {
     if (ex) ex.hidden = mode === 'ocultatun';
     if (oc) oc.hidden = mode === 'exodo';
     renderCreateTableRecruitmentRules(true);
+    msUpdateCreateTablePreview();
 }
 
 function confirmCreateTable() {
@@ -4100,26 +4216,38 @@ function confirmCreateTable() {
     };
     document.getElementById('create-table-modal').style.display = 'none';
 
+    // A identidade do rascunho nasce uma única vez e é reutilizada em qualquer repetição de salvamento.
+    currentDraftIdentity = { id: crypto.randomUUID ? crypto.randomUUID() : `draft-${Date.now()}`, code: generateRoomCode(), createdAt: Date.now() };
     isDraftMode = true;
     enterVTT('draft', true, name);
 }
 
 async function saveDraftTable() {
     if(!currentUser || !window.MS_SERVICES?.Games) return false;
+    if(!isDraftMode && currentTableData?.id) return true;
+    if(msDraftSavePromise) return msDraftSavePromise;
     const name = document.getElementById('vtt-table-name')?.innerText?.trim() || 'Nova Fenda';
-    const draft={id:crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(),name,code:generateRoomCode(),theme:currentVttTheme,gameMode:currentDraftGameMode,ownerId:currentUser.id,banned:[],participants:[],settings:msClone(currentDraftSettings||{})};
-    try{
+    currentDraftIdentity = currentDraftIdentity || { id: crypto.randomUUID ? crypto.randomUUID() : `draft-${Date.now()}`, code: generateRoomCode(), createdAt: Date.now() };
+    const draft={id:currentDraftIdentity.id,name,code:currentDraftIdentity.code,theme:currentVttTheme,gameMode:currentDraftGameMode,ownerId:currentUser.id,banned:[],participants:[],settings:msClone(currentDraftSettings||{})};
+    const saveButton=document.getElementById('btn-save-table');
+    if(saveButton){saveButton.disabled=true;saveButton.setAttribute('aria-busy','true');saveButton.dataset.originalText=saveButton.textContent;saveButton.textContent='SALVANDO…';}
+    msDraftSavePromise=(async()=>{try{
         const result=await window.MS_SERVICES.Games.create(draft);
         const remote=result?.data||result;
         if(!remote || remote.id===undefined) throw new Error('O Supabase não devolveu a mesa criada.');
         const newTable=msNormalizeTable({id:remote.id,code:remote.code,name:remote.name,theme:remote.theme,gameMode:remote.game_mode,ownerId:remote.owner_id,participants:remote.participants||[],banned:remote.banned||[],settings:remote.settings||{},createdAt:remote.created_at,updatedAt:remote.updated_at});
         msUpsertTable(newTable); myTables=(allTablesDB||[]).filter(t=>String(t.ownerId)===String(currentUser.id)).map(msClone); isDraftMode=false; currentTableData=msClone(newTable);
-        document.getElementById('btn-save-table').style.display='none';
+        if(saveButton){saveButton.style.display='none';saveButton.removeAttribute('aria-busy');saveButton.textContent='SALVAR FENDA';}
+        currentDraftIdentity={id:newTable.id,code:newTable.code,createdAt:currentDraftIdentity.createdAt,saved:true};
         window.MS_PLATFORM?.toast(`Mesa criada. Código: ${newTable.code}`,'success');
         await msHydrateRemoteGameState();
         renderAncoragem();
         return true;
-    }catch(error){window.MS_PLATFORM?.toast(error.message||'Não foi possível criar a mesa online.','error');return false;}
+    }catch(error){
+        if(saveButton){saveButton.disabled=false;saveButton.removeAttribute('aria-busy');saveButton.textContent=saveButton.dataset.originalText||'SALVAR FENDA';}
+        window.MS_PLATFORM?.toast(error.message||'Não foi possível criar a mesa online.','error');return false;
+    }finally{msDraftSavePromise=null;}})();
+    return msDraftSavePromise;
 }
 
 async function deleteTable(id) {
@@ -4478,7 +4606,7 @@ function loadCharacterToBuilder(index, sourceArray = characters, restrictToIdent
     }
 
     currentGallery = Array.isArray(char.gallery) ? msClone(char.gallery) : [];
-    renderGallery();
+    window.renderGallery?.();
 
     if (char.stats) {
         document.getElementById('attr-for').value = char.stats.for;
@@ -4562,117 +4690,10 @@ function loadCharacterToBuilder(index, sourceArray = characters, restrictToIdent
     }
 }
 
-function renderGallery() {
-    const container = document.getElementById('gallery-container');
-    if (!container) return;
-    container.innerHTML = '';
-    (currentGallery || []).forEach((img, idx) => {
-        container.innerHTML += `
-            <div class="gallery-thumb">
-                <img src="${img}" onclick="viewFullscreen('${img}')">
-                ${isEditMode ? `<button type="button" class="delete-btn" onclick="removeGalleryImage(${idx}, event)">X</button>` : ''}
-            </div>
-        `;
-    });
-}
-
-function beginNewCharacter() {
-    try {
-        if (!currentUser) { alert('A sessão do Santuário expirou. Entre novamente no Vazio.'); showScreen('screen-login'); return false; }
-        let mode = selectedGameMode;
-        if (mode !== 'exodo' && mode !== 'ocultatun') mode = document.getElementById('char-mode')?.value || currentMode || '';
-        if (mode !== 'exodo' && mode !== 'ocultatun') { alert('Escolha primeiro o modo de jogo: Êxodo ou Ocultatun.'); showScreen('screen-mode-select'); return false; }
-        selectedGameMode = mode;
-        try { msSeedRepoStoreFromLegacyCharacters(); msSeedTablesFromLegacy(); msSyncCurrentUserView(); }
-        catch (e) { console.warn('[Mundos Sombrios] Falha não-bloqueante no repositório:', e); if (!Array.isArray(characters)) characters=[]; }
-        const limit = msCharacterCapacity();
-        if (!msCanCreateCharacter()) { alert(window.MS_SOUL?.slotMessage?.('character') || `O limite de ${msCapacityLabel(limit)} almas forjadas foi atingido.`); window.MS_SOUL?.openVault?.('store','character_slot'); return false; }
-        const required=['char-form','char-name','nature-grid','class-container','specific-content-container'];
-        const missing=required.filter(id=>!document.getElementById(id));
-        if(missing.length){ console.error('[Mundos Sombrios] Construtor incompleto:',missing); alert('A janela de criação não foi carregada corretamente. Recarregue o site.'); return false; }
-        const opened=initBuilderForSelectedMode();
-        if(opened !== false) return true;
-        currentMode=mode; editingIndex=null; editingArchetypeSnapshot={mode:null,nature:null,className:null}; isHydratingCharacter=false; currentAvatarBase64=''; currentGallery=[]; currentPowerDraft=[]; currentEvolutionLog=[]; currentSheetEquipment=[]; currentNature=''; currentClass=''; isEditMode=true;
-        document.getElementById('char-form').reset(); document.getElementById('char-mode').value=mode; populateSelects(mode); startBuilder(mode); toggleEditUI(); return true;
-    } catch(err) { console.error('[Mundos Sombrios] DESPERTAR NOVA ALMA falhou:',err); alert('Não foi possível abrir a criação da ficha. O erro foi registrado no console.'); return false; }
-}
-
-function initBuilderForSelectedMode() {
-    if (!currentUser) {
-        alert('A sessão do Santuário expirou. Entre novamente no Vazio.');
-        showScreen('screen-login');
-        return false;
-    }
-
-    const mode = (selectedGameMode === 'exodo' || selectedGameMode === 'ocultatun')
-        ? selectedGameMode
-        : (document.getElementById('char-mode')?.value || '');
-
-    if (!mode || !ruleset[mode]) {
-        alert('Escolha primeiro o modo de jogo: Êxodo ou Ocultatun.');
-        showScreen('screen-mode-select');
-        return false;
-    }
-
-    msSeedRepoStoreFromLegacyCharacters();
-    msSeedTablesFromLegacy();
-    msSyncCurrentUserView();
-
-    const LIMIT = msCharacterCapacity();
-    if (!Array.isArray(characters)) characters = [];
-    if (!msCanCreateCharacter()) {
-        alert(window.MS_SOUL?.slotMessage?.('character') || `O limite de ${msCapacityLabel(LIMIT)} almas forjadas foi atingido.`);
-        window.MS_SOUL?.openVault?.('store','character_slot');
-        return false;
-    }
-
-    const requiredIds = ['char-form', 'char-name', 'nature-grid', 'class-container', 'specific-content-container'];
-    const missing = requiredIds.filter(id => !document.getElementById(id));
-    if (missing.length) {
-        console.error('[Mundos Sombrios] Elementos ausentes no construtor:', missing);
-        alert('Não foi possível abrir a criação de ficha porque a janela está incompleta. Recarregue o site.');
-        return false;
-    }
-
-    editingIndex = null;
-    window.__msBuilderCharacterId = crypto.randomUUID ? crypto.randomUUID() : ('c-' + Date.now() + '-' + Math.random().toString(36).slice(2));
-    currentAvatarBase64 = '';
-    currentGallery = [];
-    currentPowerDraft = [];
-    currentEvolutionLog = [];
-    currentSheetEquipment = [];
-    if (typeof renderEvolutionEntries === 'function') renderEvolutionEntries();
-    isEditMode = true;
-
-    document.getElementById('char-form').reset();
-    document.getElementById('char-name').value = '';
-    document.querySelectorAll('.attr-input').forEach(el => el.value = '0');
-    document.getElementById('pts-count').value = '0';
-    document.querySelectorAll('.res-val-input').forEach(el => el.value = '');
-    document.getElementById('avatar-preview-container').innerHTML = '<span style="color:#666; font-size:0.8rem;">Nenhum retrato</span>';
-    document.getElementById('gallery-container').innerHTML = '';
-    document.getElementById('skills-list').innerHTML = '';
-    document.getElementById('powers-list').innerHTML = '';
-    renderEquipmentSheet();
-    document.getElementById('specific-content-container').innerHTML = '';
-    currentUnlockedNodes = [];
-    if (document.getElementById('tree-unlocked-data')) document.getElementById('tree-unlocked-data').value = '';
-
-    selectedGameMode = mode;
-    populateSelects(mode);
-    if (!startBuilder(mode)) return false;
-    toggleEditUI();
-    return true;
-}
+/* V2.8.3 — galeria canônica pertence a js/gallery-editor.js. */
 
 
-/* =====================================================================
-   FINAL PATCH — DESPERTAR NOVA ALMA / ABERTURA ROBUSTA DO CONSTRUTOR
-   Este bloco fica no fim do arquivo para ser a implementação efetivamente
-   exposta pelo botão, evitando conflitos de versões anteriores da função.
-   ===================================================================== */
-(function installCharacterCreationGuard(){
-    window.beginNewCharacter = function beginNewCharacterFinal(){
+function beginNewCharacter(){
         try {
             if (!currentUser) {
                 alert('A sessão do Santuário expirou. Entre novamente no Vazio.');
@@ -4795,9 +4816,79 @@ function initBuilderForSelectedMode() {
                 return false;
             }
         }
-    };
-})();
+    
+}
 
+function initBuilderForSelectedMode() {
+    if (!currentUser) {
+        alert('A sessão do Santuário expirou. Entre novamente no Vazio.');
+        showScreen('screen-login');
+        return false;
+    }
+
+    const mode = (selectedGameMode === 'exodo' || selectedGameMode === 'ocultatun')
+        ? selectedGameMode
+        : (document.getElementById('char-mode')?.value || '');
+
+    if (!mode || !ruleset[mode]) {
+        alert('Escolha primeiro o modo de jogo: Êxodo ou Ocultatun.');
+        showScreen('screen-mode-select');
+        return false;
+    }
+
+    msSeedRepoStoreFromLegacyCharacters();
+    msSeedTablesFromLegacy();
+    msSyncCurrentUserView();
+
+    const LIMIT = msCharacterCapacity();
+    if (!Array.isArray(characters)) characters = [];
+    if (!msCanCreateCharacter()) {
+        alert(window.MS_SOUL?.slotMessage?.('character') || `O limite de ${msCapacityLabel(LIMIT)} almas forjadas foi atingido.`);
+        window.MS_SOUL?.openVault?.('store','character_slot');
+        return false;
+    }
+
+    const requiredIds = ['char-form', 'char-name', 'nature-grid', 'class-container', 'specific-content-container'];
+    const missing = requiredIds.filter(id => !document.getElementById(id));
+    if (missing.length) {
+        console.error('[Mundos Sombrios] Elementos ausentes no construtor:', missing);
+        alert('Não foi possível abrir a criação de ficha porque a janela está incompleta. Recarregue o site.');
+        return false;
+    }
+
+    editingIndex = null;
+    window.__msBuilderCharacterId = crypto.randomUUID ? crypto.randomUUID() : ('c-' + Date.now() + '-' + Math.random().toString(36).slice(2));
+    currentAvatarBase64 = '';
+    currentGallery = [];
+    currentPowerDraft = [];
+    currentEvolutionLog = [];
+    currentSheetEquipment = [];
+    if (typeof renderEvolutionEntries === 'function') renderEvolutionEntries();
+    isEditMode = true;
+
+    document.getElementById('char-form').reset();
+    document.getElementById('char-name').value = '';
+    document.querySelectorAll('.attr-input').forEach(el => el.value = '0');
+    document.getElementById('pts-count').value = '0';
+    document.querySelectorAll('.res-val-input').forEach(el => el.value = '');
+    document.getElementById('avatar-preview-container').innerHTML = '<span style="color:#666; font-size:0.8rem;">Nenhum retrato</span>';
+    document.getElementById('gallery-container').innerHTML = '';
+    document.getElementById('skills-list').innerHTML = '';
+    document.getElementById('powers-list').innerHTML = '';
+    renderEquipmentSheet();
+    document.getElementById('specific-content-container').innerHTML = '';
+    currentUnlockedNodes = [];
+    if (document.getElementById('tree-unlocked-data')) document.getElementById('tree-unlocked-data').value = '';
+
+    selectedGameMode = mode;
+    populateSelects(mode);
+    if (!startBuilder(mode)) return false;
+    toggleEditUI();
+    return true;
+}
+
+
+/* V2.8.3 — criação de ficha consolidada em beginNewCharacter(); o patch final duplicado foi removido. */
 
 // =====================================================================
 // V0.9 — RITUAIS HERMÉTICOS + FORJA MULTISSISTEMA
@@ -6520,7 +6611,7 @@ function initBuilderForSelectedMode() {
 
     window.saveNewAlchemyPathNode=function(){
       if(state.selectedIngredients.length!==3)return alert('Uma nova etapa de Caminho precisa de três ingredientes selecionados na câmara.');
-      const path=(document.getElementById('alchemy-new-path-name')?.value||'Caminho Novo').trim(); const philosopher=(document.getElementById('alchemy-new-path-philosophy')?.value||'').trim(); const seq=Number(document.getElementById('alchemy-new-path-seq')?.value||1); const cap=Number(document.getElementById('alchemy-new-path-cap')?.value||1); const cd=Number(document.getElementById('alchemy-new-path-cd')?.value||10+cap); const name=(document.getElementById('alchemy-new-path-ability')?.value||`Etapa ${seq}`).trim(); const effect=(document.getElementById('alchemy-new-path-effect')?.value||'').trim();
+      const path=(document.getElementById('alchemy-new-path-name')?.value||'Caminho Novo').trim(); const philosophy=(document.getElementById('alchemy-new-path-philosophy')?.value||'').trim(); const seq=Number(document.getElementById('alchemy-new-path-seq')?.value||1); const cap=Number(document.getElementById('alchemy-new-path-cap')?.value||1); const cd=Number(document.getElementById('alchemy-new-path-cd')?.value||10+cap); const name=(document.getElementById('alchemy-new-path-ability')?.value||`Etapa ${seq}`).trim(); const effect=(document.getElementById('alchemy-new-path-effect')?.value||'').trim();
       let item=state.customPaths.find(x=>x.path===path); if(!item){item={path,philosophy,nodes:[],source:'custom'};state.customPaths.push(item);} item.nodes.push({id:`custom-path-${Date.now()}`,source:'custom',path,seq,name,cap,cd,effect,ingredients:selectedNames()}); item.nodes.sort((a,b)=>a.seq-b.seq); state.unlocked.push(item.nodes[item.nodes.length-1].id); renderCustomPathBuilder(); renderAlchemyFormulaLibrary(); alert(`Etapa ${seq} gravada em ${path}.`);
     };
     window.renderCustomPathBuilder=function(){

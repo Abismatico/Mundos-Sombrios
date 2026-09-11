@@ -5,13 +5,14 @@ import {join} from 'node:path';
 const root=new URL('..',import.meta.url).pathname;
 const read=f=>readFileSync(join(root,f),'utf8');
 
-test('V2.3 carrega Centro de Comando e Registros Históricos antes da Sala do Mestre',()=>{
-  const html=read('index.html');
+test('Centro de Comando permanece no boot e Registros Históricos carregam sob demanda',()=>{
+  const html=read('index.html'),loader=read('js/feature-loader.js'),room=read('js/master-room.js');
   assert.match(html,/css\/master-command-center\.css/);
-  const hi=html.indexOf('js/master-history-data.js');
-  const ci=html.indexOf('js/master-command-center.js');
-  const ri=html.indexOf('js/master-room.js');
-  assert.ok(hi>0&&ci>hi&&ri>ci);
+  assert.doesNotMatch(html,/<script src="js\/master-history-data\.js"/);
+  assert.match(loader,/ensureMasterHistory/);
+  assert.match(loader,/js\/master-history-data\.js/);
+  assert.match(room,/MS_FEATURES\?\.ensureMasterHistory/);
+  assert.ok(html.indexOf('js/master-command-center.js')>0&&html.indexOf('js/master-room.js')>html.indexOf('js/master-command-center.js'));
   assert.ok(existsSync(join(root,'codex-files/registros-historicos-mundos-sombrios.pdf')));
 });
 

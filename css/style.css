@@ -266,6 +266,15 @@ h1, h2, h3, .souls-btn { font-family: var(--vtt-font-family, "Cinzel", serif); f
 /* LOGIN & ADMIN MODALS */
 .login-box input { width: 100%; background: #111; border: 1px solid #444; color: #fff; padding: 12px; font-family: "Roboto", sans-serif; font-size: 1rem; outline: none; transition: border 0.3s; margin-bottom:15px;}
 .login-box input:focus { border-color: var(--theme-color, #d4af37); box-shadow: 0 0 5px rgba(255,255,255,0.1);}
+#screen-login .auth-login-nav{position:absolute;top:18px;left:18px;z-index:20;margin:0}
+.login-password-field{position:relative}
+.login-password-field #login-pass{padding-right:92px;margin-bottom:15px}
+.login-password-toggle{position:absolute;right:8px;top:7px;min-width:72px;height:34px;border:1px solid rgba(212,175,55,.45);background:#090909;color:#d9b86c;font:700 .66rem/1 "Roboto",sans-serif;letter-spacing:.08em;cursor:pointer;border-radius:4px}
+.login-password-toggle:hover,.login-password-toggle:focus-visible{border-color:var(--theme-color,#d4af37);color:#fff;outline:none}
+.login-status{min-height:34px;padding:8px 10px;color:#d9b86c;font-size:12px;line-height:1.4;text-align:center;border:1px solid transparent;border-radius:4px}
+.login-status[data-state="error"]{color:#ff9d9d;background:rgba(145,20,20,.16);border-color:rgba(255,70,70,.35)}
+.login-status[data-state="loading"]{color:#d9b86c;background:rgba(212,175,55,.07);border-color:rgba(212,175,55,.18)}
+.login-box.login-has-error #login-pass,.login-box.login-has-error #login-user{border-color:#c84b4b}
 .admin-table th, .admin-table td { padding:10px; border-bottom:1px solid #444; text-align:center;}
 .admin-table input, .admin-table select { background: #111; border: 1px solid #444; color: #fff; padding: 5px; width: 100%; text-align:center;}
 .admin-table button { padding: 5px 10px; }
