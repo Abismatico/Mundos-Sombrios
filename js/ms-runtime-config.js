@@ -16,8 +16,8 @@
     sandboxMode: false,
     storageNamespace: 'ms-local-v2100',
     supabase: {
-      url: '', // ex.: https://SEU-PROJETO.supabase.co
-      publishableKey: '', // chave publishable/anon pública
+      url: 'https://xhcunksjrksdzdtabfxt.supabase.co',
+      publishableKey: 'sb_publishable_Yq3SDfQEaX_vxdZKvADyMQ_evvVDqdi',
       environment: 'production'
     }
   };

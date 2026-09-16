@@ -16,7 +16,6 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/ms-platform.css">
     <link rel="stylesheet" href="css/ms-online.css">
-    <link rel="stylesheet" href="css/offline-sandbox.css">
     <link rel="stylesheet" href="css/table-shell-v3.css">
     <link rel="stylesheet" href="css/table-studio-v2.8.6.css">
     <link rel="stylesheet" href="css/world-codices.css">
@@ -85,7 +84,6 @@
                 </div>
             <div style="margin-top:14px; text-align:center;">
                     <button id="btn-initial-setup" class="souls-btn small-btn" style="display:none; border-color:#ff7700; color:#ff9a44;" onclick="openInitialSetup()">CONFIGURAR ADM INICIAL</button>
-                    <div id="offline-login-hint" class="offline-login-hint" hidden></div>
                     <div id="online-login-hint" style="font-size:.72rem; color:#777; margin-top:8px;">Instalação online: nenhuma senha fica no código. O ADM inicial é criado pelo Supabase Auth + RPC seguro.</div>
                 </div>
             </div>
@@ -982,6 +980,7 @@
         <img id="fs-img" src="" alt="Fullscreen">
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="js/ms-platform.js"></script>
     <script src="js/codex-catalog.js"></script>
     <script src="js/world-codices.js"></script>
@@ -993,7 +992,6 @@
     <script src="js/vendor-loader.js"></script>
     <script src="js/ms-runtime-config.js"></script>
     <script src="js/ms-config.js"></script>
-    <script src="js/offline-db-loader.js"></script>
     <script src="js/supabase-db.js"></script>
     <script src="js/ms-services.js"></script>
     <script src="js/ms-realtime.js"></script>
@@ -1008,7 +1006,6 @@
     <script src="js/master-tools.js"></script>
     <script src="js/ms-online-ui.js"></script>
     <script src="js/soul-economy.js"></script>
-    <script src="js/offline-sandbox-ui-loader.js"></script>
 
 
     <!-- MODAL GLOBAL: configuração inicial do ADM; mantido fora de qualquer .screen para evitar sobreposição/stacking context -->
