@@ -9,7 +9,7 @@ const migrationTest=HAS_V27_BASE_MIGRATION?test:test.skip;
 
 test('V2.7 instala uma única camada de sessão e a nova Mesa/Ancoragem',()=>{
   const html=read('index.html'),pkg=JSON.parse(read('package.json'));
-  assert.match(pkg.version,/^2\.(?:7|8)\./);
+  assert.match(pkg.version,/^2\.(?:7|8|9|10)\./);
   for(const token of ['js/ms-config.js','js/table-session-engine.js','js/table-shell-v3.js','css/table-shell-v3.css']) assert.match(html,new RegExp(token.replaceAll('.','\\.')));
   assert.match(read('js/master-room.js'),/Ancoragem V3/);
   assert.match(read('js/table-shell-v3.js'),/Mesa ao Vivo V3/);

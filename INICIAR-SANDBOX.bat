@@ -1,0 +1,16 @@
+@echo off
+cd /d "%~dp0"
+where py >nul 2>nul
+if %errorlevel%==0 (
+  start "" http://localhost:8080/sandbox-offline/
+  py -m http.server 8080
+  exit /b
+)
+where python >nul 2>nul
+if %errorlevel%==0 (
+  start "" http://localhost:8080/sandbox-offline/
+  python -m http.server 8080
+  exit /b
+)
+echo Python nao encontrado. Instale Python 3 ou use outro servidor HTTP local.
+pause

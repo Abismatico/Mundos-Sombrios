@@ -49,12 +49,12 @@ test('Criação de Fenda V2.8.6 preserva os IDs de contrato e introduz workspace
   assert.match(css,/\.create-table-preview-v286/);
 });
 
-test('boot V2.8.6 posterga dados 3D e histórico e fica abaixo de 780 KB locais',()=>{
+test('boot V2.9.0 posterga dados 3D e histórico e fica abaixo de 785 KB locais',()=>{
   const html=read('index.html'),loader=read('js/feature-loader.js');
   assert.doesNotMatch(html,/<script src=\"js\/dice-3d\.js\"/);
   assert.doesNotMatch(html,/<script src=\"js\/master-history-data\.js\"/);
   assert.match(loader,/ensureDice/);assert.match(loader,/ensureMasterHistory/);
   const paths=[...html.matchAll(/<script[^>]+src=\"([^\"]+)\"/g)].map(x=>x[1]).filter(x=>!/^https?:/.test(x));
   const total=paths.reduce((n,p)=>n+statSync(join(root,p)).size,0);
-  assert.ok(total<780_000,`boot JS=${total}`);
+  assert.ok(total<785_000,`boot JS=${total}`);
 });

@@ -1,4 +1,4 @@
-# Mundos Sombrios — Arquitetura Atual (2.8.6)
+# Mundos Sombrios — Arquitetura Atual (2.8.9)
 
 ## Fonte de verdade
 Supabase Auth + PostgreSQL + RLS + RPC + Realtime.
@@ -116,3 +116,21 @@ A migração `supabase-master-v2.3-migration.sql` adiciona papéis operacionais 
 - `js/feature-loader.js` posterga `dice-3d.js` e `master-history-data.js` até o primeiro uso.
 - A hidratação usa `Games.summaries()` como fonte primária e só chama `Games.listMine()` como fallback. A lista global de usuários é carregada automaticamente apenas para ADM.
 - O estilo-base de `.portal-gateway` pertence ao CSS do Portal e não depende mais da Forja.
+
+
+## Forja transversal e auditoria V2.8.8
+- A categoria passa a ser uma camada anterior à expansão/classe, representada por ícones 3D compactos.
+- A seleção aplica automaticamente atributos, perícias e bônus de PE da categoria à ficha e persiste `categoryPreset`.
+- Os bônus de categoria de Êxodo são a referência canônica; em Ocultatun a camada de categoria é uma regra transversal do site solicitada pelo projeto, com perícias equivalentes do vocabulário do modo.
+- A camada visual/mecânica da Forja é carregada sob demanda por `feature-loader.js`, preservando o boot leve.
+- Campanha em Movimento permanece integrada à Mesa do Mestre.
+
+
+## Autoridade de ficha e Evolução Gradual V2.8.9
+
+- Visualização de ficha usa viewer somente leitura antes do editor.
+- Mudanças mecânicas pós-criação são autorizadas por Mesa via PEG e ledger.
+- Mestre e ADM compartilham autoridade de gestão; ADM também ajusta reservas pelo Arconte.
+- Recursos sensíveis não aceitam edição livre pelo jogador.
+- Requisitos de admissão e visibilidade de ficha pertencem à configuração da Mesa.
+- Progressão é carregada sob demanda para preservar o boot principal.
