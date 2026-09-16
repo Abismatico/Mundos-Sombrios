@@ -4291,13 +4291,14 @@ async function deleteTable(id) {
     if(!confirm('Tem certeza que deseja apagar essa Fenda para sempre? O mundo será destruído.')) return false;
     try{
         const deleted=await window.MS_SERVICES.Games.delete(id);
-        if((deleted?.data??deleted)!==true) throw new Error('O servidor não confirmou a exclusão da Fenda.');
+        const confirmed = deleted && typeof deleted === 'object' && 'data' in deleted ? deleted.data : deleted;
+        if (confirmed !== true && confirmed !== 'true') throw new Error('O servidor não confirmou a exclusão da Fenda.');
         if(String(currentTableData?.id)===String(id)){await window.MS_TABLE_SESSION?.disconnect?.();currentTableData=null;}
         await msHydrateRemoteGameState();
         renderAncoragem();
         window.MS_PLATFORM?.toast('Mesa excluída e confirmada pelo servidor.','success');
         return true;
-    }catch(error){window.MS_PLATFORM?.toast(error.message||'Não foi possível excluir a Fenda.','error');return false;}
+    }catch(error){window.MS_PLATFORM?.toast(error?.message||'Não foi possível excluir a Fenda.','error');return false;}
 }
 
 async function leaveJoinedTable(code) {

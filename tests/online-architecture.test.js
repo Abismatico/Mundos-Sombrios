@@ -30,6 +30,13 @@ test('mesa e personagem usam operações seguras', () => {
   assert.doesNotMatch(script, /client\.from\(['"]tables['"]\)\.delete\(\)/);
 });
 
+test('exclusão de mesa do ADM usa guarda explícita e aceita resposta booleana', () => {
+  assert.match(production, /create or replace function public\.can_delete_table/);
+  assert.match(production, /public\.can_delete_table\(p_table_id\)/);
+  assert.match(script, /const confirmed = deleted && typeof deleted === 'object' && 'data' in deleted \? deleted\.data : deleted/);
+  assert.match(script, /confirmed !== true && confirmed !== 'true'/);
+});
+
 test('login não cria versões artificiais de personagens', () => {
   assert.doesNotMatch(db, /snapshot\.characters\)\s*\{[\s\S]*saveCharacter\(character\)/);
 });
