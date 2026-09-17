@@ -14,3 +14,14 @@
 /* Conquista Ceifador — cosmético concedido server-side */
 .ms-account-strip.has-fenda-frame{position:relative;box-shadow:0 0 0 1px rgba(157,111,245,.55),0 0 28px rgba(79,216,199,.13),inset 0 0 22px rgba(157,111,245,.08)}
 .ms-account-strip.has-fenda-frame::after{content:'MOLDURA DA FENDA';position:absolute;right:10px;top:-9px;padding:3px 7px;border:1px solid rgba(157,111,245,.55);background:#0a0b0d;color:#b99cff;font:700 8px/1 'Share Tech Mono',monospace;letter-spacing:1.2px}
+
+/* ==========================================================================
+   V2.10.2 — CORRECAO DE ESTOURO DO ORBE SOULDRΔKMA
+   Dono: css/soul-economy.css (arquivo que define .ms-soul-orb).
+   Causa medida: .ms-soul-orb tinha width:210px fixo e a coluna interna
+   (grid-template-columns:1fr) encolhia small/strong/em, todos com
+   white-space:nowrap. Ex.: '9.999.999' precisava 96px e recebia 72px.
+   Correcao: o orbe passa a dimensionar-se pelo conteudo que ele mesmo exibe.
+   ========================================================================== */
+.ms-soul-orb{width:max-content;min-width:210px;}
+@media(max-width:760px){.ms-soul-orb{width:max-content;min-width:180px;}}

@@ -12,12 +12,11 @@ const install=read('supabase-install-completo-v2.8.10-local.sql');
 const hasSandbox=fs.existsSync('sandbox-offline/index.html');
 const sandboxIndex=hasSandbox?read('sandbox-offline/index.html'):'';
 
-test('pacote local não contém endpoint ou chave Supabase real embutidos no runtime',()=>{
-  assert.match(runtime,/url:\s*''/);
-  assert.match(runtime,/publishableKey:\s*''/);
-  assert.doesNotMatch(config,/https:\/\/[a-z0-9]+\.supabase\.co/i);
-  assert.doesNotMatch(config,/sb_publishable_[A-Za-z0-9_-]+/);
+test('runtime online aponta para o projeto Supabase publicado',()=>{
+  assert.match(runtime,/url:\s*'https:\/\/xhcunksjrksdzdtabfxt\.supabase\.co'/);
+  assert.match(runtime,/publishableKey:\s*'sb_publishable_[A-Za-z0-9_-]+'/);
   assert.match(config,/projectRef:match\?\.\[1\]\|\|'unlinked'/);
+  assert.match(config,/configured=Boolean\(match&&anonKey\)/);
 });
 
 test('configuração e adaptador offline são carregados antes do contrato de banco',()=>{

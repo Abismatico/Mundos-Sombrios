@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync, statSync} from 'node:fs';
 import {join} from 'node:path';
-const root=new URL('..',import.meta.url).pathname;
+import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('../',import.meta.url));
 const read=f=>readFileSync(join(root,f),'utf8');
 
 test('V2.8.6 trava salvamento repetido no cliente e reutiliza identidade do rascunho',()=>{

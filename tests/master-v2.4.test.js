@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync,statSync} from 'node:fs';
 import {join} from 'node:path';
 import vm from 'node:vm';
-const root=new URL('..',import.meta.url).pathname;
+import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('../',import.meta.url));
 const read=f=>readFileSync(join(root,f),'utf8');
 
 test('modal de criação permanece integralmente enquadrado com rolagem interna',()=>{

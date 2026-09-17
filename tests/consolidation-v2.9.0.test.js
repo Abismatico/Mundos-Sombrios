@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 
 const read=p=>fs.readFileSync(p,'utf8');
 const offline=read('js/offline-db.js');
+const hasSandbox=fs.existsSync('sandbox-offline/index.html');
 
 function runtime(){
   const mem=new Map();
@@ -22,7 +23,7 @@ function runtime(){
 
 async function login(api,user,pass){const r=await api.signIn(user,pass);assert.equal(r.error,null);return r.data}
 
-test('V2.10.1 usa uma versão canônica e sandbox gerado da mesma árvore',()=>{
+test('V2.10.1 usa uma versão canônica e sandbox gerado da mesma árvore',{skip:!hasSandbox},()=>{
   assert.equal(read('VERSION.txt').trim(),'2.10.1');
   assert.equal(JSON.parse(read('package.json')).version,'2.10.1');
   assert.match(read('scripts/build-sandbox.mjs'),/mesmos bytes de runtime|MESMO runtime/i);

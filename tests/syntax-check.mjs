@@ -1,8 +1,9 @@
 import { readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import process from 'node:process';
-const root=new URL('..',import.meta.url).pathname;
+const root=fileURLToPath(new URL('../',import.meta.url));
 function walk(dir){return readdirSync(dir).flatMap(name=>{const p=join(dir,name);return statSync(p).isDirectory()?walk(p):[p]});}
 const files=walk(join(root,'js')).filter(f=>f.endsWith('.js'));
 let failed=0;

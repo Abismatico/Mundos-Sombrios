@@ -1,16 +1,22 @@
 (function () {
     const config = window.MS_CONFIG?.supabase || window.MS_DB_CONFIG || {};
     const hasRemoteConfig = Boolean(config.url && config.anonKey && config.configured !== false);
+    if (!hasRemoteConfig) console.warn('[Mundos Sombrios] Pacote local/desvinculado: persistência Supabase online permanece desativada até configuração manual.');
 
     if (!hasRemoteConfig) {
-        console.warn('[Mundos Sombrios] Supabase não configurado: o app está em modo offline desativado e exige configuração online.');
-        window.MS_DB = { ready:false, enabled:false, offline:false, configured:false, error:'Supabase não configurado.' };
+        if (window.MS_OFFLINE_DB?.create) {
+            window.MS_DB = window.MS_OFFLINE_DB.create();
+            console.info('[Mundos Sombrios] Modo offline local ativado:', window.MS_DB.namespace || 'offline');
+        } else {
+            console.warn('[Mundos Sombrios] Adaptador offline indisponível.');
+            window.MS_DB = { ready:false, enabled:false, offline:true };
+        }
         return;
     }
 
     if (!window.supabase || typeof window.supabase.createClient !== 'function') {
         console.warn('[Mundos Sombrios] Supabase configurado, mas o SDK está indisponível.');
-        window.MS_DB = { ready:false, enabled:false, offline:false, configured:true, error:'Supabase SDK indisponível.' };
+        window.MS_DB = { ready:false, enabled:false, offline:false };
         return;
     }
 
