@@ -48,7 +48,7 @@ test('site principal carrega adaptador offline antes do contrato MS_DB',()=>{
   const posDb=index.indexOf('js/supabase-db.js');
   assert.ok(posOffline>0&&posDb>posOffline);
   assert.match(index,/offline-login-hint/);
-  assert.doesNotMatch(index,/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js/);
+  assert.match(index,/cdn\.jsdelivr\.net\/npm\/@supabase\/supabase-js/);
 });
 
 test('sandbox é réplica integral do runtime e usa banco isolado',{skip:!hasSandbox},()=>{
