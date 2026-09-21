@@ -1,4 +1,4 @@
-# Mundos Sombrios V2.10.1 — GitHub + qualquer Supabase
+# Mundos Sombrios V2.10.2 — GitHub + qualquer Supabase
 
 Este pacote é genérico: não está vinculado a repositório GitHub nem projeto Supabase específico.
 

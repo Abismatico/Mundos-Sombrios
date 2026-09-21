@@ -45,7 +45,8 @@ with sync_playwright() as p:
     # Mestre + TRIPULAÇÃO drawer inferior.
     role(page,'mestre');page.evaluate("window.enterVTT('table-sandbox-001',true)");page.wait_for_timeout(700)
     vtt=dims(page);check('VTT 390×844 sem overflow global',vtt['scrollWidth']<=vtt['clientWidth']+2,vtt)
-    manage=page.locator('#ms-table-v3 .gm-only-v3[data-action="manage"]');mbox=manage.bounding_box();check('botão TRIPULAÇÃO integralmente dentro da tela',bool(mbox and mbox['x']>=-1 and mbox['x']+mbox['width']<=391),mbox or {})
+    page.locator('.ms-room-tool-menu summary').click()
+    manage=page.locator('#ms-table-room [data-room-action="manage"]');mbox=manage.bounding_box();check('botão TRIPULAÇÃO integralmente dentro da tela',bool(mbox and mbox['x']>=-1 and mbox['x']+mbox['width']<=391),mbox or {})
     manage.click();page.wait_for_timeout(500)
     shell=dims(page,'#ms-crew-center .ms-op-shell');check('Central Operacional vira drawer mobile sem overflow',shell['scrollWidth']<=shell['clientWidth']+2 and shell['left']>=-1 and shell['right']<=391,shell)
     # Proximidade do fundo confirma drawer inferior, não janela flutuante fora da tela.

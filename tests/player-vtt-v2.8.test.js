@@ -19,18 +19,12 @@ function sandbox(){
   return context;
 }
 
-test('Mesa V3 mantém fichas, grid, chat e dados visíveis para Jogador',()=>{
-  const html=read('index.html');
-  const shell=read('js/table-shell-v3.js');
-  const css=read('css/table-shell-v3.css');
-  for(const id of ['vtt-active-cards-container','vtt-grid-window','vtt-chat-box','vtt-dice-box']) assert.match(html,new RegExp(`id="${id}"`));
-  assert.match(shell,/document\.getElementById\('vtt-cards-window'\),document\.getElementById\('vtt-grid-window'\),document\.getElementById\('vtt-chat-box'\),document\.getElementById\('vtt-dice-box'\)/);
-  assert.match(shell,/if\(n\)n\.style\.display='flex'/);
-  assert.match(shell,/setTimeout\(\(\)=>\{try\{window\.initVttGrid\?\.\(\)/);
-  assert.match(css,/#vtt-grid-window\{width:100%!important;height:100%!important;display:flex!important/);
-  assert.match(css,/#vtt-chat-box\{width:100%!important;height:100%!important;display:flex!important/);
-  assert.match(css,/#vtt-dice-box\{width:100%!important;height:100%!important;display:flex!important/);
-  assert.match(css,/#vtt-cards-window\{width:100%!important;height:100%!important;display:flex!important/);
+test('Mesa mantém três janelas próprias e comunicação independente para Jogador',()=>{
+ const html=read('index.html'),shell=read('js/table-room.js'),css=read('css/table-room.css');
+ for(const id of ['ms-lobby-cards','vtt-grid-window','ms-room-peg','vtt-chat-box','vtt-dice-box'])assert.match(html,new RegExp(`id="${id}"`));
+ assert.equal((html.match(/data-room-window=/g)||[]).length,3);
+ assert.match(shell,/el.hidden=el.dataset.roomWindow!==next/);
+ assert.match(css,/\.ms-room-float\{[^}]*position:fixed/);
 });
 
 sandboxTest('Jogador recebe roster público da própria mesa sem receber fichas completas alheias',async()=>{
@@ -75,25 +69,22 @@ sandboxTest('Jogador consegue publicar chat e rolagem e ler o estado/grid da pr�
   assert.equal(events.data[1].event_type,'dice');
 });
 
-test('Jogador não recebe controles de Direção/Escudo na Mesa V3',()=>{
-  const shell=read('js/table-shell-v3.js');
-  assert.match(shell,/shell\.querySelectorAll\('\.gm-only-v3'\)\.forEach\(x=>x\.hidden=!asGM\)/);
-  assert.match(shell,/DIREÇÃO/);
-  assert.match(shell,/TRIPULAÇÃO/);
-  assert.match(shell,/ESCUDO DO MESTRE/);
+test('Jogador não recebe controles de Direção/Escudo na Mesa',()=>{
+ const shell=read('js/table-room.js'),html=read('index.html');
+ assert.match(shell,/querySelectorAll\('\[data-gm-only\]'\).forEach\(x=>x.hidden=!asGM\)/);
+ for(const action of ['director','manage','shield'])assert.match(html,new RegExp('data-gm-only data-room-action="'+action+'"'));
 });
 
 sandboxTest('Sandbox não ecoa evento da própria aba e Mesa hidrata saúde atual ao montar',()=>{
   const runtime=read('test/sandbox-runtime.js');
-  const shell=read('js/table-shell-v3.js');
+  const shell=read('js/table-room.js');
   assert.match(runtime,/if\(m\.tabId===tabId\)return;/);
   assert.match(shell,/const currentHealth=window\.MS_TABLE_SESSION\?\.current\?\.\(\);/);
   assert.match(shell,/lastHealth=currentHealth/);
   assert.match(shell,/syncLabel\.textContent=status\.toUpperCase\(\)/);
 });
 
-test('Reentrada na Mesa não depende do contêiner legado de acesso rápido',()=>{
-  const script=read('js/script.js');
-  assert.match(script,/if\(qaContainer\) qaContainer\.innerHTML = '';/);
-  assert.match(script,/if\(qaContainer\) qaContainer\.appendChild\(qaBtn\);/);
+test('Reentrada na Mesa usa o renderer canônico sem acesso rápido legado',()=>{
+ const script=read('js/script.js');assert.match(script,/function renderVttCards\(\) \{\s*window.MS_TABLE_SHEETS\?\.sync\(\)/);
+ assert.doesNotMatch(script,/vtt-quick-access|qaContainer|qaBtn/);
 });

@@ -8,7 +8,7 @@ const read=p=>fs.readFileSync(p,'utf8');
 const index=read('index.html');
 const op=read('js/operational-control-v2.10.1.js');
 const css=read('css/operational-control-v2.10.1.css');
-const shell=read('js/table-shell-v3.js');
+const shell=read('js/table-room.js');
 const loader=read('js/feature-loader.js');
 const offline=read('js/offline-db.js');
 const progression=read('js/progression-v2.8.9.js');
@@ -37,7 +37,7 @@ test('Jogador possui FICHAS global com Fichas Rápidas e viewer somente leitura 
 });
 
 test('Central Operacional TRIPULAÇÃO contém Participantes Solicitações Evolução e ações de ficha/admissão/PEG',()=>{
-  for(const token of ['PARTICIPANTES','SOLICITAÇÕES','EVOLUÇÃO','VER FICHA','ACEITAR','RECUSAR','CONCEDER PEG','COMPRAR PEG']) assert.match(op,new RegExp(token));
+  for(const token of ['PARTICIPANTES','SOLICITAÇÕES','EVOLUÇÃO','VER FICHA','ACEITAR','RECUSAR','CONCEDER PONTOS','ABASTECER RESERVA','DEVOLVER À RESERVA']) assert.match(op,new RegExp(token));
   assert.match(op,/data-crew-count/);
   assert.match(shell,/msOpenCrewCenter|ensureOperational/);
   assert.match(op,/msRefreshCurrentVttRoster/);
@@ -89,7 +89,8 @@ test('390x844: Fichas Rápidas e Central usam drawer sem overflow e ficam acima 
   assert.match(css,/#ms-crew-center\{z-index:15050\}/);
   assert.match(css,/align-items:flex-end/);
   assert.match(css,/\.ms-op-tabs\{overflow-x:auto/);
-  assert.match(css,/#ms-table-v3 \.ms-table-v3-nav/);
+  assert.doesNotMatch(css,/ms-table-v3/);
+  assert.match(read('css/table-room.css'),/\.ms-room-navigation/);
 });
 
 

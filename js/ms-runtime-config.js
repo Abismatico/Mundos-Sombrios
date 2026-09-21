@@ -1,4 +1,4 @@
-/* Mundos Sombrios — Runtime Configuration v2.10.1
+/* Mundos Sombrios — Runtime Configuration v2.10.2
  * CONFIGURAÇÃO GENÉRICA PARA GITHUB PAGES + QUALQUER SUPABASE.
  *
  * Para conectar:
@@ -16,8 +16,8 @@
     sandboxMode: false,
     storageNamespace: 'ms-local-v2100',
     supabase: {
-      url: 'https://xhcunksjrksdzdtabfxt.supabase.co',
-      publishableKey: 'sb_publishable_Yq3SDfQEaX_vxdZKvADyMQ_evvVDqdi',
+      url: '', // ex.: https://SEU-PROJETO.supabase.co
+      publishableKey: '', // chave publishable/anon pública
       environment: 'production'
     }
   };

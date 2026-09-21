@@ -38,7 +38,7 @@ test('V2.10.1 carrega motor de evolução somente sob demanda e mantém o boot p
 });
 
 test('Ficha Rápida oferece FICHA EVOLUÇÃO HISTÓRICO e cobre todas as famílias mecânicas',()=>{
-  for(const token of ['FICHA','EVOLUÇÃO','HISTÓRICO','attribute','skill','advantage','talent','power','ritual','class','REGISTRAR PRÁTICA','TREINAR','SOLICITAR EVOLUÇÃO','DESENVOLVER'])assert.ok(ui.includes(token),token);
+  for(const token of ['FICHA','EVOLUÇÃO','HISTÓRICO','attribute','skill','advantage','talent','power','ritual','class','SOLICITAR SUCESSOS','TREINAR','EVOLUIR AGORA','DESENVOLVER'])assert.ok(ui.includes(token),token);
   assert.match(ui,/Sucessos habilitam a evolução\. PEG efetiva/);
   assert.match(ui,/Somente este módulo será enviado ao Mestre\. A ficha inteira não será substituída/);
 });
@@ -115,13 +115,13 @@ test('Arconte consulta Ledger operacional por Mesa além de ajustar a reserva',a
 });
 
 test('Central Operacional concentra Personagens Solicitações Treinamentos Ledger e Arconte recebe métricas',()=>{
-  for(const token of ['PERSONAGENS','SOLICITAÇÕES','TREINAMENTOS','LEDGER','GERENCIAR EVOLUÇÃO','resolveEvidence','resolveUpgrade','resolveTraining','resolveDevelopment'])assert.ok(operational.includes(token),token);
+  for(const token of ['PERSONAGENS','SOLICITAÇÕES','TREINAMENTOS','HISTÓRICO','GERENCIAR EVOLUÇÃO','resolveEvidence','resolveUpgrade','resolveTraining','resolveDevelopment'])assert.ok(operational.includes(token),token);
   const legacy=read('js/progression-v2.8.9.js');assert.match(legacy,/pronta\(s\) para evoluir/);assert.match(legacy,/pending_evolution_count/);assert.match(legacy,/data-admin-ledger/);assert.match(legacy,/MEMÓRIA DE EVOLUÇÃO/);
 });
 
 test('migração V2.10.1 permite solicitação sem saldo e oferece aprovação/concessão com complemento atômico',()=>{
   for(const fn of ['progression_request_semantic_upgrade','progression_resolve_semantic_upgrade_v2','progression_grant_semantic_upgrade','evolution_fund_character_missing'])assert.ok(migration.includes(fn),fn);
-  assert.doesNotMatch(migration,/progression_request_semantic_upgrade[\s\S]{0,1800}a\.balance<cost/);
+  assert.match(migration,/SELF_EVOLVE:/);assert.match(migration,/private\.evolution_apply_upgrade/);
   assert.match(migration,/p_auto_fund_missing/);assert.match(migration,/INSUFFICIENT_TABLE_PROGRESSION/);assert.match(migration,/notify pgrst, 'reload schema'/);
 });
 
@@ -131,4 +131,26 @@ test('mobile 390×844 mantém abas e cartões sem largura fixa horizontal',()=>{
   assert.match(css,/grid-template-columns:minmax\(0,1fr\)/);
   assert.match(css,/width:min\(620px,calc\(100vw - 28px\)\)/);
   assert.match(css,/@media\(max-width:600px\).*width:100vw/s);
+});
+
+
+test('jogador evolui com PEG e sucessos aprovados, sem segunda aprovação ou débito duplicado',async()=>{
+ const {api,evo}=runtime(),table='table-sandbox-001',char='char-player-exodo';await login(api,'mestre','mestre1234');
+ const initial=await evo.state(table,char),t=track(initial,'skill','Luta');await api.grantCharacterProgression(table,char,60,'Sessão');
+ await switchTo(api,'jogador','jogador123');const proof=await evo.submitEvidence(table,char,'skill',t.capability_key,10,'Sessão','Prática');
+ await assert.rejects(()=>evo.evolveNow(table,char,'skill',t.capability_key),/EVOLUTION_NOT_READY/);
+ await assert.rejects(()=>evo.resolveEvidence(proof.id,true),/GM_REQUIRED/);
+ await switchTo(api,'mestre','mestre1234');await evo.resolveEvidence(proof.id,true);await evo.recordSuccess(table,char,'skill',t.capability_key,20,'Sessão','Reconhecido');
+ await switchTo(api,'jogador','jogador123');const before=await evo.state(table,char);const outcomes=await Promise.allSettled([evo.evolveNow(table,char,'skill',t.capability_key),evo.evolveNow(table,char,'skill',t.capability_key)]);assert.equal(outcomes.filter(x=>x.status==='fulfilled').length,1);
+ const after=await evo.state(table,char);assert.equal(after.account.balance,before.account.balance-30);assert.equal(track(after,'skill','Luta').current_rank,t.current_rank+1);assert.equal(track(after,'skill','Luta').successes,0);assert.equal(after.upgradeRequests.filter(x=>x.status==='pending').length,0);
+ await assert.rejects(()=>evo.evolveNow(table,'char-player-ocultatun','skill',t.capability_key),/CHARACTER_MEMBERSHIP_REQUIRED/);
+});
+
+test('pedido antigo é concluído pelo jogador após receber PEG; insuficiência não cria novo pedido',async()=>{
+ const {api,evo}=runtime(),table='table-sandbox-001',char='char-player-exodo';await login(api,'mestre','mestre1234');let state=await evo.state(table,char);const t=track(state,'skill','Luta');
+ await evo.recordSuccess(table,char,'skill',t.capability_key,20,'Sessão','Reconhecido');await evo.recordSuccess(table,char,'skill',t.capability_key,10,'Sessão','Reconhecido');
+ await switchTo(api,'jogador','jogador123');await assert.rejects(()=>evo.evolveNow(table,char,'skill',t.capability_key),/INSUFFICIENT_CHARACTER_PROGRESSION/);state=await evo.state(table,char);assert.equal(state.upgradeRequests.length,0);
+ const pending=await evo.requestUpgrade(table,char,'skill',t.capability_key,'Pedido anterior');assert.equal(pending.status,'pending');
+ await switchTo(api,'mestre','mestre1234');await api.grantCharacterProgression(table,char,60,'Concessão');await switchTo(api,'jogador','jogador123');const done=await evo.evolveNow(table,char,'skill',t.capability_key);assert.equal(done.id,pending.id);assert.equal(done.status,'approved');
+ state=await evo.state(table,char);assert.equal(state.upgradeRequests.length,1);
 });

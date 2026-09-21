@@ -3,9 +3,8 @@ import assert from 'node:assert/strict';
 import {readFileSync, existsSync, statSync} from 'node:fs';
 import {join} from 'node:path';
 import vm from 'node:vm';
-import {fileURLToPath} from 'node:url';
 
-const root=fileURLToPath(new URL('../',import.meta.url));
+const root=new URL('..',import.meta.url).pathname;
 const read=f=>readFileSync(join(root,f),'utf8');
 function atlasData(){
   const context={window:{}};

@@ -2,8 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync, statSync} from 'node:fs';
 import {join} from 'node:path';
-import {fileURLToPath} from 'node:url';
-const root=fileURLToPath(new URL('../',import.meta.url));
+const root=new URL('..',import.meta.url).pathname;
 const read=f=>readFileSync(join(root,f),'utf8');
 
 test('V2.8.6 trava salvamento repetido no cliente e reutiliza identidade do rascunho',()=>{
@@ -35,11 +34,11 @@ test('Portal possui estilo-base próprio e não depende da Forja para renderizar
 });
 
 test('Mesa redesenhada oferece ferramentas essenciais de grid e iniciativa',()=>{
-  const shell=read('js/table-shell-v3.js'),script=read('js/script.js'),css=read('css/table-studio-v2.8.6.css');
-  for(const token of ['CURSOR','MEU TOTEM','NPC','MAPA','GRADE','ENCAIXE','RÉGUA','CONE','LINHA','RAIO','LIMPAR MEDIDAS','INICIATIVA','TRIPULAÇÃO']) assert.match(shell,new RegExp(token));
+  const shell=read('js/table-room.js'),script=read('js/script.js'),css=read('css/table-room.css');
+  for(const token of ['canvasSetMode','canvasAddPCToken','canvasAddNPCToken','canvasToggleGridVisibility','canvasToggleSnapToGrid','canvasToggleRuler','canvasAddShape','canvasClearMeasurements']) assert.match(read('index.html'),new RegExp(token));
   for(const fn of ['canvasToggleGridVisibility','canvasToggleSnapToGrid','canvasClearMeasurements']) assert.match(script,new RegExp(`function ${fn}`));
-  assert.match(css,/\.ms-table-v3-gridtools/);
-  assert.match(css,/\.ms-table-v3-initiative/);
+  assert.match(css,/\.ms-grid-tools/);
+  assert.match(css,/\.ms-room-initiative/);
 });
 
 test('Criação de Fenda V2.8.6 preserva os IDs de contrato e introduz workspace próprio',()=>{

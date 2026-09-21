@@ -8,7 +8,7 @@ test('Memórias do Mundo ficam recolhidas no ícone e podem alternar abertura',(
   const js=read('js/master-tools.js');
   assert.match(js,/Memórias do Mundo/);
   assert.match(js,/aria-expanded','false/);
-  assert.match(js,/button\.addEventListener\('click',\(\)=>setMemoryPanelOpen\(box\.hidden\)\)/);
+  assert.match(js,/makeShieldIconDraggable\(button,\(\)=>setMemoryPanelOpen\(box\.hidden\)\)/);
   assert.match(js,/collapseMemoryPanel/);
 });
 

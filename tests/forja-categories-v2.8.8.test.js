@@ -27,15 +27,18 @@ test('camada da Forja V2.8.10 carrega sob demanda e não infla o boot principal'
 });
 
 test('campanha em movimento continua integrada à Mesa do Mestre',()=>{
-  assert.match(js,/vtt-campaign-window/);
-  assert.match(js,/MasterCommandCenter/);
-  assert.match(js,/CAMPANHA/);
+  const shell=read('js/table-room.js');
+  assert.match(shell,/vtt-campaign-window/);
+  assert.match(shell,/MasterCommandCenter/);
+  assert.match(read('index.html'),/>Campanha</);
+  assert.doesNotMatch(js,/function ensureCampaignInTable|function renderCampaignWindow/);
 });
 
 test('responsivo redefine Mesa e Forja em tablet/mobile',()=>{
   assert.match(css,/@media\(max-width:960px\)/);
   assert.match(css,/@media\(max-width:640px\)/);
-  assert.match(css,/\.ms-table-v3-body\{display:flex;flex-direction:column/);
+  assert.doesNotMatch(css,/ms-table-v3|screen-vtt/);
+  assert.match(read('css/table-room.css'),/@media\(max-width:700px\)/);
 });
 
 

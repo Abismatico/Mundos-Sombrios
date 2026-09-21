@@ -1073,25 +1073,41 @@ end; $$;
 revoke all on function public.progression_resolve_training(uuid,boolean,text) from public,anon;
 grant execute on function public.progression_resolve_training(uuid,boolean,text) to authenticated;
 
-create or replace function public.progression_request_semantic_upgrade(p_table_id text,p_character_id text,p_capability_type text,p_capability_key text,p_note text default '')
-returns public.evolution_upgrade_requests language plpgsql security definer set search_path=public,private as $$
-declare t public.character_evolution_tracks; c public.characters; a public.character_progression_accounts; r public.evolution_upgrade_requests; target integer; cost integer;
+create or replace function public.progression_request_semantic_upgrade(
+ p_table_id text,p_character_id text,p_capability_type text,p_capability_key text,p_note text default ''
+) returns public.evolution_upgrade_requests
+language plpgsql security definer set search_path=public,private as $$
+declare t public.character_evolution_tracks; c public.characters; a public.character_progression_accounts;
+ r public.evolution_upgrade_requests; target integer; cost integer;
 begin
- if not private.character_in_table(p_table_id,p_character_id,auth.uid()) then raise exception 'CHARACTER_MEMBERSHIP_REQUIRED'; end if;
+ if auth.uid() is null or not private.character_in_table(p_table_id,p_character_id,auth.uid()) then raise exception 'CHARACTER_MEMBERSHIP_REQUIRED'; end if;
+ if not exists(select 1 from public.characters where id=p_character_id and user_id::text=auth.uid()::text) then raise exception 'CHARACTER_MEMBERSHIP_REQUIRED'; end if;
  perform private.ensure_character_evolution_tracks(p_table_id,p_character_id);
- select * into t from public.character_evolution_tracks where table_id=p_table_id and character_id=p_character_id and capability_type=private.evolution_kind(p_capability_type) and capability_key=private.evolution_slug(p_capability_key) for update;
+ select * into t from public.character_evolution_tracks where table_id=p_table_id and character_id=p_character_id
+ and capability_type=private.evolution_kind(p_capability_type) and capability_key=private.evolution_slug(p_capability_key) for update;
  if t.id is null then raise exception 'TRACK_NOT_FOUND'; end if;
  t:=private.evolution_refresh_track(t.id);
  if t.status<>'ready' then raise exception 'EVOLUTION_NOT_READY'; end if;
- select * into c from public.characters where id=p_character_id;
- select * into a from public.character_progression_accounts where table_id=p_table_id and character_id=p_character_id;
- target:=t.current_rank+1; cost:=private.evolution_cost(c.mode,t.capability_type,target);
- if a.balance<cost then raise exception 'INSUFFICIENT_CHARACTER_PROGRESSION'; end if;
- if exists(select 1 from public.evolution_upgrade_requests x where x.track_id=t.id and x.status='pending') then raise exception 'UPGRADE_ALREADY_PENDING'; end if;
- insert into public.evolution_upgrade_requests(table_id,character_id,user_id,track_id,from_rank,to_rank,recommended_cost,note)
- values(p_table_id,p_character_id,auth.uid(),t.id,t.current_rank,target,cost,left(coalesce(p_note,''),800)) returning * into r;
+ select * into c from public.characters where id=p_character_id for update;
+ select * into a from public.character_progression_accounts where table_id=p_table_id and character_id=p_character_id for update;
+ if a.character_id is null then raise exception 'PROGRESSION_ACCOUNT_NOT_FOUND'; end if;
+ target:=t.current_rank+1;cost:=private.evolution_cost(c.mode,t.capability_type,target);
+ select * into r from public.evolution_upgrade_requests where track_id=t.id and status='pending' order by created_at limit 1 for update;
+ if left(coalesce(p_note,''),12)='SELF_EVOLVE:' and a.balance<cost then raise exception 'INSUFFICIENT_CHARACTER_PROGRESSION'; end if;
+ if r.id is not null and left(coalesce(p_note,''),12)<>'SELF_EVOLVE:' then raise exception 'UPGRADE_ALREADY_PENDING'; end if;
+ if r.id is null then
+  insert into public.evolution_upgrade_requests(table_id,character_id,user_id,track_id,from_rank,to_rank,recommended_cost,note)
+  values(p_table_id,p_character_id,auth.uid(),t.id,t.current_rank,target,cost,left(coalesce(p_note,''),800)) returning * into r;
+ end if;
+ if left(coalesce(p_note,''),12)='SELF_EVOLVE:' then
+  perform private.evolution_apply_upgrade(t.id,cost,false,false,'Evolução confirmada pelo jogador',r.id::text);
+  update public.evolution_upgrade_requests set status='approved',from_rank=target-1,to_rank=target,final_cost=cost,
+  decided_by=auth.uid(),decided_at=now(),decision_reason='Autonomia: sucessos aprovados e PEG suficiente'
+  where id=r.id returning * into r;
+ end if;
  return r;
 end; $$;
+
 revoke all on function public.progression_request_semantic_upgrade(text,text,text,text,text) from public,anon;
 grant execute on function public.progression_request_semantic_upgrade(text,text,text,text,text) to authenticated;
 
@@ -1423,46 +1439,40 @@ revoke all on function private.evolution_fund_character_missing(text,text,intege
 
 -- O Jogador pode solicitar assim que a trilha estiver pronta. PEG é verificado na aprovação.
 create or replace function public.progression_request_semantic_upgrade(
-  p_table_id text,
-  p_character_id text,
-  p_capability_type text,
-  p_capability_key text,
-  p_note text default ''
+ p_table_id text,p_character_id text,p_capability_type text,p_capability_key text,p_note text default ''
 ) returns public.evolution_upgrade_requests
-language plpgsql
-security definer
-set search_path=public,private
-as $$
-declare
-  t public.character_evolution_tracks;
-  c public.characters;
-  r public.evolution_upgrade_requests;
-  target integer;
-  cost integer;
+language plpgsql security definer set search_path=public,private as $$
+declare t public.character_evolution_tracks; c public.characters; a public.character_progression_accounts;
+ r public.evolution_upgrade_requests; target integer; cost integer;
 begin
-  if not private.character_in_table(p_table_id,p_character_id,auth.uid()) then raise exception 'CHARACTER_MEMBERSHIP_REQUIRED'; end if;
-  perform private.ensure_character_evolution_tracks(p_table_id,p_character_id);
-  select * into t
-    from public.character_evolution_tracks
-   where table_id=p_table_id
-     and character_id=p_character_id
-     and capability_type=private.evolution_kind(p_capability_type)
-     and capability_key=private.evolution_slug(p_capability_key)
-   for update;
-  if t.id is null then raise exception 'TRACK_NOT_FOUND'; end if;
-  t:=private.evolution_refresh_track(t.id);
-  if t.status<>'ready' then raise exception 'EVOLUTION_NOT_READY'; end if;
-  if exists(select 1 from public.evolution_upgrade_requests x where x.track_id=t.id and x.status='pending') then raise exception 'UPGRADE_ALREADY_PENDING'; end if;
-
-  select * into c from public.characters where id=p_character_id;
-  target:=t.current_rank+1;
-  cost:=private.evolution_cost(c.mode,t.capability_type,target);
+ if auth.uid() is null or not private.character_in_table(p_table_id,p_character_id,auth.uid()) then raise exception 'CHARACTER_MEMBERSHIP_REQUIRED'; end if;
+ if not exists(select 1 from public.characters where id=p_character_id and user_id::text=auth.uid()::text) then raise exception 'CHARACTER_MEMBERSHIP_REQUIRED'; end if;
+ perform private.ensure_character_evolution_tracks(p_table_id,p_character_id);
+ select * into t from public.character_evolution_tracks where table_id=p_table_id and character_id=p_character_id
+ and capability_type=private.evolution_kind(p_capability_type) and capability_key=private.evolution_slug(p_capability_key) for update;
+ if t.id is null then raise exception 'TRACK_NOT_FOUND'; end if;
+ t:=private.evolution_refresh_track(t.id);
+ if t.status<>'ready' then raise exception 'EVOLUTION_NOT_READY'; end if;
+ select * into c from public.characters where id=p_character_id for update;
+ select * into a from public.character_progression_accounts where table_id=p_table_id and character_id=p_character_id for update;
+ if a.character_id is null then raise exception 'PROGRESSION_ACCOUNT_NOT_FOUND'; end if;
+ target:=t.current_rank+1;cost:=private.evolution_cost(c.mode,t.capability_type,target);
+ select * into r from public.evolution_upgrade_requests where track_id=t.id and status='pending' order by created_at limit 1 for update;
+ if left(coalesce(p_note,''),12)='SELF_EVOLVE:' and a.balance<cost then raise exception 'INSUFFICIENT_CHARACTER_PROGRESSION'; end if;
+ if r.id is not null and left(coalesce(p_note,''),12)<>'SELF_EVOLVE:' then raise exception 'UPGRADE_ALREADY_PENDING'; end if;
+ if r.id is null then
   insert into public.evolution_upgrade_requests(table_id,character_id,user_id,track_id,from_rank,to_rank,recommended_cost,note)
-  values(p_table_id,p_character_id,auth.uid(),t.id,t.current_rank,target,cost,left(coalesce(p_note,''),800))
-  returning * into r;
-  return r;
-end;
-$$;
+  values(p_table_id,p_character_id,auth.uid(),t.id,t.current_rank,target,cost,left(coalesce(p_note,''),800)) returning * into r;
+ end if;
+ if left(coalesce(p_note,''),12)='SELF_EVOLVE:' then
+  perform private.evolution_apply_upgrade(t.id,cost,false,false,'Evolução confirmada pelo jogador',r.id::text);
+  update public.evolution_upgrade_requests set status='approved',from_rank=target-1,to_rank=target,final_cost=cost,
+  decided_by=auth.uid(),decided_at=now(),decision_reason='Autonomia: sucessos aprovados e PEG suficiente'
+  where id=r.id returning * into r;
+ end if;
+ return r;
+end; $$;
+
 revoke all on function public.progression_request_semantic_upgrade(text,text,text,text,text) from public,anon;
 grant execute on function public.progression_request_semantic_upgrade(text,text,text,text,text) to authenticated;
 

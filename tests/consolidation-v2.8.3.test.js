@@ -15,13 +15,13 @@ test('V2.8.3 remove helpers e blocos sem consumidor comprovado',()=>{
 });
 
 test('V2.8.3 remove listeners vazios e mantém o listener canônico de saúde da sessão',()=>{
-  const shell=read('js/table-shell-v3.js');
+  const shell=read('js/table-room.js');
   assert.doesNotMatch(shell,/addEventListener\(['"]table:session-health['"],\s*\(\)\s*=>\s*\{\s*\}\s*\)/);
-  assert.match(shell,/MS_PLATFORM\?\.on\?\.\('table:session-health'/);
+  assert.match(shell,/bus\?\.on\?\.\('table:session-health'/);
 });
 
 test('V2.8.3 unifica o contrato philosophy do Caminho alquímico customizado',()=>{
-  const script=read('js/script.js');
+  const script=read('js/alquerino-lab.js');
   assert.match(script,/const philosophy=\(document\.getElementById\('alchemy-new-path-philosophy'\)/);
   assert.match(script,/item=\{path,philosophy,nodes:\[\],source:'custom'\}/);
   assert.doesNotMatch(script,/const philosopher=\(document\.getElementById\('alchemy-new-path-philosophy'\)/);
@@ -51,7 +51,8 @@ test('CSS legado removido não mantém famílias sem emissor',()=>{
     for(const token of ['portal-section','portal-section-head','portal-news-grid','portal-event-grid','portal-class-grid','portal-expansion-grid','portal-story-grid','portal-expansions']){
       assert.doesNotMatch(portal,new RegExp(`\\.${token}(?:\\b|[: .#\\[])`),`${file}: ${token}`);
     }
-    assert.match(portal,/\.portal-world-grid/);
+    assert.match(read('css/portal/portal-editorial-v2.2.css'),/\.portal-world-grid/);
+    assert.doesNotMatch(portal,/\.portal-world-grid/);
     assert.match(portal,/\.portal-list-grid/);
   }
 });

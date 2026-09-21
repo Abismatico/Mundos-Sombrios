@@ -871,36 +871,13 @@ $$;
 revoke all on function public.link_table_character(text,text) from public;
 grant execute on function public.link_table_character(text,text) to authenticated;
 
-create or replace function public.can_delete_table(p_table_id text)
-returns boolean
-language sql
-stable
-security definer
-set search_path=public
-as $$
-  select auth.uid() is not null and (
-    public.current_profile_role()='admin'
-    or exists(
-      select 1 from public.tables tb
-      where tb.id=p_table_id
-        and (
-          tb.owner_id=auth.uid()::text
-          or tb.owner_id=(select p.id from public.profiles p where p.auth_user_id=auth.uid() limit 1)
-        )
-    )
-  );
-$$;
-revoke all on function public.can_delete_table(text) from public;
-grant execute on function public.can_delete_table(text) to authenticated;
-
 create or replace function public.delete_table_secure(p_table_id text)
 returns boolean language plpgsql security definer set search_path=public
 as $$
 begin
-  if auth.uid() is null then raise exception 'AUTH_REQUIRED'; end if;
-  if not public.can_delete_table(p_table_id) then raise exception 'OWNER_REQUIRED'; end if;
+  if not exists(select 1 from public.tables where id=p_table_id and (owner_id=auth.uid()::text or public.current_profile_role()='admin')) then raise exception 'GM_REQUIRED'; end if;
   delete from public.tables where id=p_table_id;
-  return found;
+  return true;
 end;
 $$;
 revoke all on function public.delete_table_secure(text) from public;

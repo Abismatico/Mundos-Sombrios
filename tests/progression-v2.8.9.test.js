@@ -76,12 +76,9 @@ test('requisitos de admissão e visibilidade de ficha são persistidos na Mesa',
   assert.match(migration,/CHARACTER_LEVEL_MISMATCH/);
 });
 
-test('Núcleo de Evolução 3D é exclusivo de Mestre ADM e produz animação de concessão',()=>{
-  assert.match(js,/ms-evolution-orb/);
-  assert.match(js,/animateGrant/);
-  assert.match(js,/canManage\(\)/);
-  assert.match(css,/\.ms-evolution-orb/);
-  assert.match(css,/@keyframes/);
+test('Concessão usa a janela de PEG e mantém feedback sem o painel flutuante antigo',()=>{
+ assert.doesNotMatch(js,/ms-evolution-orb|ms-progression-panel/);assert.match(js,/animateGrant/);assert.match(js,/canManage\(\)/);
+ assert.match(read('js/operational-control-v2.10.1.js'),/mountEvolutionWorkspace/);assert.match(js,/data-lobby-character/);
 });
 
 test('Ocultatun mantém Sucessos de Carreira separados do PEG',()=>{

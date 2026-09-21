@@ -4,11 +4,11 @@ import fs from 'node:fs';
 const read=p=>fs.readFileSync(new URL(`../${p}`,import.meta.url),'utf8');
 
 test('Mesa V3 mantém ações de sair/salvar acessíveis abaixo de 1050px',()=>{
-  const css=read('css/table-shell-v3.css');
-  const media=css.slice(css.indexOf('@media(max-width:1050px)'),css.indexOf('@media(max-width:760px)'));
-  assert.match(media,/\.ms-table-v3-head-actions\{[^}]*display:flex/);
-  assert.doesNotMatch(media,/\.ms-table-v3-head-actions\{[^}]*display:none/);
-  assert.match(media,/grid-template-rows:auto/);
+  const css=read('css/table-room.css');
+  assert.match(css,/\.ms-room-head-actions\{[^}]*display:flex/);
+  assert.doesNotMatch(css,/\.ms-room-head-actions\{[^}]*display:none/);
+  assert.match(css,/\.ms-room-head-actions\{[^}]*overflow-x:auto/);
+  assert.match(css,/grid-template-rows:auto auto minmax\(0,1fr\)/);
 });
 
 test('Cliente expõe resolução, silenciamento e exclusão administrativa seguras',()=>{

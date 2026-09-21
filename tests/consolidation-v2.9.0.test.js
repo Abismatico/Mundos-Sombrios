@@ -6,7 +6,6 @@ import crypto from 'node:crypto';
 
 const read=p=>fs.readFileSync(p,'utf8');
 const offline=read('js/offline-db.js');
-const hasSandbox=fs.existsSync('sandbox-offline/index.html');
 
 function runtime(){
   const mem=new Map();
@@ -23,9 +22,9 @@ function runtime(){
 
 async function login(api,user,pass){const r=await api.signIn(user,pass);assert.equal(r.error,null);return r.data}
 
-test('V2.10.1 usa uma versão canônica e sandbox gerado da mesma árvore',{skip:!hasSandbox},()=>{
-  assert.equal(read('VERSION.txt').trim(),'2.10.1');
-  assert.equal(JSON.parse(read('package.json')).version,'2.10.1');
+test('V2.10.2 usa uma versão canônica e sandbox gerado da mesma árvore',()=>{
+  assert.equal(read('VERSION.txt').trim(),JSON.parse(read('package.json')).version);
+  assert.equal(JSON.parse(read('package.json')).version,'2.10.2');
   assert.match(read('scripts/build-sandbox.mjs'),/mesmos bytes de runtime|MESMO runtime/i);
   for(const p of ['index.html','js/script.js','js/ms-services.js','js/progression-v2.8.9.js','js/forja-overhaul-v2.8.10.js','css/style.css']){
     assert.equal(fs.readFileSync(`sandbox-offline/${p}`).compare(fs.readFileSync(p)),0,`${p} divergiu do runtime principal`);
@@ -133,6 +132,6 @@ test('SQL V2.9.0 reassegura travas, admissão e custos dos dois cenários',()=>{
 });
 
 test('Mesa V2.9.0 integra Campanha e status ao vivo sem depender do carregamento da Forja',()=>{
-  const shell=read('js/table-shell-v3.js');
+  const shell=read('js/table-room.js');
   for(const token of ['vtt-campaign-window','Campanha em Movimento','ensureCampaignWindow','setLiveStatus']) assert.match(shell,new RegExp(token));
 });
