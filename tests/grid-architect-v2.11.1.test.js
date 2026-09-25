@@ -23,7 +23,7 @@ test('Mesa usa camada Fabric Lite local com suporte a câmera do Architect',()=>
   const vendor=read('js/vendor-loader.js');
   const op=read('js/operational-control-v2.10.1.js');
   const script=read('js/script.js');
-  assert.match(vendor,/offlineRuntime\(\)\|\|window\.MS_GRID_ARCHITECT/);
+  assert.match(vendor,/window\.MS_GRID_ARCHITECT/);
   assert.match(vendor,/fabric-lite-local/);
   assert.match(op,/setViewportTransform\(v\)/);
   assert.ok(script.indexOf('MS_GRID_ARCHITECT?.boot?.()') < script.indexOf("MS_VENDOR?.ensure('fabric')"));
@@ -62,6 +62,6 @@ test('Grid Architect é o renderer canônico da matriz quando integrado',()=>{
 });
 
 
-test('pipeline publica catálogos do Architect em produção, Offline e SANDBOX',()=>{
-  for(const file of ['scripts/build-site.mjs','scripts/build-offline.mjs','scripts/build-sandbox.mjs'])assert.match(read(file),/'data'/);
+test('pipeline publica catálogos do Architect em produção',()=>{
+  assert.match(read('scripts/build-site.mjs'),/'data'/);
 });

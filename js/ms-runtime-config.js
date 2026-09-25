@@ -6,15 +6,12 @@
  * 2) substitua SUPABASE_PUBLISHABLE_KEY pela chave publishable/anon pública;
  * 3) NUNCA coloque service_role aqui.
  *
- * O modo local/offline distribuído usa a pasta offline-local/.
  * Se esta configuração for removida manualmente, o fallback local também permanece suportado.
  */
 (function(){
   'use strict';
   window.MS_RUNTIME_CONFIG = window.MS_RUNTIME_CONFIG || {
     environment: 'production',
-    offlineMode: false,
-    sandboxMode: false,
     storageNamespace: 'ms-local-v2100',
     supabase: {
       url: 'https://xhcunksjrksdzdtabfxt.supabase.co',

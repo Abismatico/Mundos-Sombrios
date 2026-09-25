@@ -6,13 +6,12 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 function context(extra={}){
  const c={console,setTimeout:()=>0,clearTimeout(){},document:{body:{classList:{toggle(){}}},readyState:'loading',getElementById:()=>null,querySelectorAll:()=>[],addEventListener(){}},addEventListener(){},...extra};c.window=c;vm.createContext(c);return c;
 }
-test('aviso de ambiente é único e diferencia demonstração, indisponibilidade e online',()=>{
+test('aviso de ambiente é único e diferencia indisponibilidade e online',()=>{
  const nodes=new Map();let inserts=0;const c=context();c.document.body={dataset:{},prepend(n){inserts++;nodes.set(n.id,n);}};
  c.document.createElement=()=>({setAttribute(){}});c.document.getElementById=id=>nodes.get(id)||null;
- vm.runInContext(read('js/ms-online-ui.js'),c);c.MS_DB={offline:true,ready:true};
+ vm.runInContext(read('js/ms-online-ui.js'),c);c.MS_DB={ready:false};
  c.MS_ONLINE_UI.renderEnvironment();c.MS_ONLINE_UI.renderEnvironment();assert.equal(inserts,1);
- const notice=nodes.get('ms-environment-notice');assert.equal(notice.hidden,false);assert.match(notice.textContent,/DEMONSTRAÇÃO LOCAL/);
- c.MS_DB={offline:false,ready:false};c.MS_ONLINE_UI.renderEnvironment();assert.equal(c.document.body.dataset.msEnvironment,'unavailable');assert.match(notice.textContent,/INDISPONÍVEL/);
+ const notice=nodes.get('ms-environment-notice');assert.equal(notice.hidden,false);assert.match(notice.textContent,/INDISPON/);
  c.MS_DB.ready=true;c.MS_ONLINE_UI.renderEnvironment();assert.equal(notice.hidden,true);assert.equal(c.document.body.dataset.msEnvironment,'online');
 });
 function portal(){const c=context();vm.runInContext(read('js/codex-catalog.js'),c);vm.runInContext(read('js/portal/portal-content.js'),c);return c;}

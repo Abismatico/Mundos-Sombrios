@@ -8,7 +8,6 @@
   };
   async function loadScript(src,key){await window.MS_ASSETS.script(src,{dataset:{msVendor:key}});return window[sources[key].global];}
   function ensureCss(href,key){return href?window.MS_ASSETS.style(href,{dataset:{msVendorCss:key}}):Promise.resolve();}
-  function offlineRuntime(){const c=window.MS_RUNTIME_CONFIG||{};return c.offlineMode===true||c.sandboxMode===true||String(c.environment||'').toLowerCase()==='sandbox';}
   async function fabricLite(){
     if(window.fabric)return window.fabric;
     await window.MS_FEATURES?.ensureOperational?.();
@@ -19,7 +18,7 @@
   async function ensure(key){
     const spec=sources[key];if(!spec)throw new Error(`Dependência desconhecida: ${key}`);window.MS_PLATFORM?.setStatus?.('dependency','loading',null,{key});
     try{
-      if(key==='fabric'&&(offlineRuntime()||window.MS_GRID_ARCHITECT)){const value=await fabricLite();window.MS_PLATFORM?.setStatus?.('dependency','success',null,{key,adapter:'fabric-lite-local'});return value;}
+      if(key==='fabric'&&window.MS_GRID_ARCHITECT){const value=await fabricLite();window.MS_PLATFORM?.setStatus?.('dependency','success',null,{key,adapter:'fabric-lite-local'});return value;}
       await ensureCss(spec.css,key);let value=window[spec.global];if(!value){try{value=await loadScript(spec.src,key);}catch(error){if(key==='fabric')value=await fabricLite();else throw error;}}
       window.MS_PLATFORM?.setStatus?.('dependency','success',null,{key,adapter:value?.__msLite?'fabric-lite':'full'});return value;
     }catch(error){window.MS_PLATFORM?.setStatus?.('dependency','error',error,{key});throw error;}

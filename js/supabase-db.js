@@ -4,15 +4,7 @@ window.MS_DB_READY = (async function () {
     if (!hasRemoteConfig) console.warn('[Mundos Sombrios] Pacote local/desvinculado: persistência Supabase online permanece desativada até configuração manual.');
 
     if (!hasRemoteConfig) {
-        try { if (window.MS_OFFLINE_DB_READY) await window.MS_OFFLINE_DB_READY; }
-        catch (error) { console.warn('[Mundos Sombrios] Falha ao preparar o adaptador offline:', error); }
-        if (window.MS_OFFLINE_DB?.create) {
-            window.MS_DB = window.MS_OFFLINE_DB.create();
-            console.info('[Mundos Sombrios] Modo offline local ativado:', window.MS_DB.namespace || 'offline');
-        } else {
-            console.warn('[Mundos Sombrios] Adaptador offline indisponível.');
-            window.MS_DB = { ready:false, enabled:false, offline:true };
-        }
+        window.MS_DB = { ready:false, enabled:false };
         return;
     }
 

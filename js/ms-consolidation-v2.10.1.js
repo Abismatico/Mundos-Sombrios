@@ -19,7 +19,7 @@
     if(!db?.ready)missing.push('MS_DB.ready');
     for(const key of requiredDb)if(typeof db?.[key]!=='function')missing.push(`MS_DB.${key}`);
     for(const key of features)if(typeof window.MS_FEATURES?.[key]!=='function')missing.push(`MS_FEATURES.${key}`);
-    const result={version:window.MS_VERSION||'2.10.2',ok:missing.length===0,missing,offline:db?.offline===true,sandbox:window.MS_RUNTIME_CONFIG?.sandboxMode===true};
+    const result={version:window.MS_VERSION||'2.10.2',ok:missing.length===0,missing};
     window.dispatchEvent(new CustomEvent('ms:release-check',{detail:result}));
     if(!result.ok){console.error('[Mundos Sombrios V2.10.1] Contratos ausentes:',missing);window.MS_PLATFORM?.setStatus?.('release','error',new Error(missing.join(', ')));}
     else window.MS_PLATFORM?.setStatus?.('release','success');

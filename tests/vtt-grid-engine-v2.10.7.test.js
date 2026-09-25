@@ -71,15 +71,12 @@ test('preview compartilhado é efêmero e não usa o ledger persistente de event
   const engine=read('js/vtt-grid-engine.js');
   const session=read('js/table-session-engine.js');
   const tools=read('js/master-tools.js');
-  const offline=read('js/offline-db.js');
   assert.match(engine,/Compartilhar este preview ao vivo/);
   assert.match(engine,/broadcastTransient\?\.\('grid_preview'/);
   assert.match(session,/broadcastTransient/);
   assert.match(session,/broadcastTableEvent/);
   assert.match(tools,/event\.event_type==='grid_preview'/);
   assert.match(tools,/applySharedPreview/);
-  assert.match(offline,/async broadcastTableEvent/);
-  assert.match(offline,/grid_preview/);
 });
 
 test('tamanho de totem também fica em rascunho até Aplicar à Cena',()=>{
@@ -107,12 +104,10 @@ test('QA V2.10.9 impede colapso do canvas e mantém dock do Grid utilizável',()
 test('editor da Matriz fica acima das fichas flutuantes e tem rodapé móvel acessível',()=>{
   const grid=read('css/vtt-grid-engine.css');
   const sheets=read('css/table-sheets.css');
-  const sandbox=read('css/offline-sandbox.css');
   const panelZ=Number(grid.match(/\.ms-grid-config-panel\{[^}]*z-index:(\d+)/)?.[1]||0);
   const sheetsZ=Number(sheets.match(/#ms-sheet-floats\{[^}]*z-index:(\d+)/)?.[1]||0);
   assert.ok(panelZ>sheetsZ,`painel ${panelZ} precisa ficar acima das fichas ${sheetsZ}`);
   assert.match(grid,/@media\(max-width:760px\)[\s\S]*grid-template-columns:1fr 1fr/);
-  assert.match(sandbox,/body\.ms-grid-config-open #ms-offline-qa\{opacity:0;visibility:hidden;pointer-events:none\}/);
 });
 
 

@@ -6,11 +6,10 @@ const {version}=JSON.parse(readFileSync(join(root,'package.json'),'utf8'));
 const out = join(root, 'dist');
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
-for (const entry of ['index.html', '.nojekyll', 'VERSION.txt', 'assets', 'css', 'js', 'data', 'codex-files', 'offline-local']) {
+for (const entry of ['index.html', '.nojekyll', 'VERSION.txt', 'assets', 'css', 'js', 'data', 'codex-files']) {
   const src=join(root,entry); if(existsSync(src)) cpSync(src, join(out, entry), { recursive: true });
 }
 if (existsSync(join(root, 'CNAME'))) cpSync(join(root, 'CNAME'), join(out, 'CNAME'));
-if (existsSync(join(root, 'PUBLISH-SANDBOX')) && existsSync(join(root, 'sandbox-offline'))) cpSync(join(root, 'sandbox-offline'), join(out, 'sandbox-offline'), { recursive: true });
 
 // Minificação conservadora de CSS somente no artefato publicado. A árvore-fonte permanece legível.
 function walk(dir, visit){
@@ -34,5 +33,5 @@ const html=readFileSync(join(out,'index.html'),'utf8');
 const localCss=[...html.matchAll(/<link rel="stylesheet" href="([^"]+)"/g)].map(m=>m[1]).filter(x=>!/^https?:/.test(x));
 const localJs=[...html.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m=>m[1]).filter(x=>!/^https?:/.test(x));
 const bytes=list=>list.reduce((sum,rel)=>{try{return sum+statSync(join(out,rel)).size}catch{return sum}},0);
-console.log(`Site V${version} preparado em dist/; SQL, testes e auditorias ficam fora da publicação; SANDBOX depende do marcador PUBLISH-SANDBOX.`);
+console.log(`Site V${version} preparado em dist/; SQL, testes e auditorias ficam fora da publicação.`);
 console.log(`Boot local: ${localCss.length} CSS (${Math.round(bytes(localCss)/1024)} KiB) + ${localJs.length} JS (${Math.round(bytes(localJs)/1024)} KiB), além de vendors remotos.`);

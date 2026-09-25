@@ -29,16 +29,10 @@ function msRequireDependency(globalName, label, action) {
 }
 
 function msReadStorageJSON(key, fallback) {
-    if (window.MS_DB?.offline) {
-        try { const raw=localStorage.getItem(`${window.MS_DB.namespace||'ms-offline'}:legacy:${key}`); return raw ? JSON.parse(raw) : fallback; } catch (_) { return fallback; }
-    }
     return fallback;
 }
 
 function msWriteStorageJSON(key, value) {
-    if (window.MS_DB?.offline) {
-        try { localStorage.setItem(`${window.MS_DB.namespace||'ms-offline'}:legacy:${key}`, JSON.stringify(value)); return true; } catch (_) { return false; }
-    }
     return false;
 }
 
@@ -409,19 +403,6 @@ async function doLogin() {
         msLoginInFlight=false; if(button){button.disabled=false;button.textContent=button.dataset.originalText||'ATRAVESSAR PORTAL';}
     }
 }
-
-window.msSwitchOfflineRole = async function(role) {
-    if (!window.MS_DB?.offline || !window.MS_OFFLINE_DB) throw new Error('Modo offline não está ativo.');
-    const credential=window.MS_OFFLINE_DB.credentials.find(item=>item.role===String(role));
-    if(!credential) throw new Error('Perfil de teste inexistente.');
-    try { await window.MS_DB.signOut(); } catch (_) {}
-    const result=await window.MS_DB.signIn(credential.username,credential.password);
-    if(result?.error) throw result.error;
-    const ok=await msApplyAuthenticatedSession();
-    if(!ok) throw new Error('Não foi possível assumir o perfil offline.');
-    window.MS_SOUL?.fetchState?.({quiet:true});
-    return window.currentUser;
-};
 
 async function doLogout() {
     if(!confirm('Deseja desconectar do Vazio?')) return;
@@ -3851,15 +3832,11 @@ function msClone(value) {
 
 function msReadJSON(key, fallback) {
     if (Object.prototype.hasOwnProperty.call(msInMemoryStore, key)) return msClone(msInMemoryStore[key]);
-    if (window.MS_DB?.offline) {
-        try { const raw=localStorage.getItem(`${window.MS_DB.namespace||'ms-offline'}:cache:${key}`); if(raw!==null){const parsed=JSON.parse(raw);msInMemoryStore[key]=parsed;return msClone(parsed);} } catch (_) {}
-    }
     return msClone(fallback);
 }
 
 function msWriteJSON(key, value) {
     msInMemoryStore[key] = msClone(value);
-    if (window.MS_DB?.offline) { try { localStorage.setItem(`${window.MS_DB.namespace||'ms-offline'}:cache:${key}`, JSON.stringify(value)); } catch (_) {} }
     return true;
 }
 

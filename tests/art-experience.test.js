@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import crypto from 'node:crypto';
 const read=p=>fs.readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const flush=()=>new Promise(r=>setImmediate(r));
 function runtime(){const c={console,document:{readyState:'loading',addEventListener(){},body:{dataset:{},classList:{contains:()=>false,toggle(){}}}},addEventListener(){},innerWidth:390,innerHeight:844};c.window=c;vm.createContext(c);return c;}
@@ -54,19 +53,6 @@ test('cancelar ou trocar de mesa não movimenta pontos',async()=>{
 });
 test('erro do backend mantém formulário aberto e não inventa sucesso',async()=>{
  const r=formRuntime({grant:async()=>{throw new Error('GM_REQUIRED');}});const result=r.c.MS_POINTS.open('grant',{tableId:'t1',characterId:'c1'});await flush();await r.form.onsubmit({preventDefault(){}});assert.equal(r.nodes.length,1);assert.match(r.controls.error.textContent,/Somente/);assert.equal(r.controls.submit.disabled,false);r.controls.cancel.onclick();await result;
-});
-function offline(){const mem=new Map(),c={console,Date,Math,JSON,URLSearchParams,location:{search:''},crypto:{randomUUID:crypto.randomUUID},setTimeout,clearTimeout,localStorage:{getItem:k=>mem.get(k)||null,setItem:(k,v)=>mem.set(k,String(v)),removeItem:k=>mem.delete(k)},CustomEvent:class{constructor(type,opts){this.type=type;this.detail=opts?.detail;}},BroadcastChannel:class{addEventListener(){}postMessage(){}close(){}},dispatchEvent(){},addEventListener(){},MS_RUNTIME_CONFIG:{offlineMode:true,storageNamespace:'test-art',supabase:{url:'',publishableKey:''}}};c.window=c;vm.createContext(c);vm.runInContext(read('js/offline-db.js'),c);return c.MS_OFFLINE_DB.create();}
-test('banco local: comprar, conceder e retirar preserva saldos e bloqueia segunda reversão',async()=>{
- const api=offline();await api.signIn('mestre','mestre1234');const tid='table-sandbox-001';
- const before=(await api.fetchProgressionTableState(tid)).data;const bought=await api.buyTableProgressionPoints(tid,5);assert.equal(bought.error,null);
- const grant=await api.grantCharacterProgression(tid,'char-player-exodo',3,'Sessão');assert.equal(grant.error,null);
- const after=(await api.fetchProgressionTableState(tid)).data,tx=after.recentTransactions.find(t=>t.tx_type==='CHARACTER_GRANT');
- assert.equal(after.wallet.balance,before.wallet.balance+2);
- const reverse=await api.reverseProgressionGrant(tx.id,'Correção');assert.equal(reverse.error,null);
- const once=(await api.fetchProgressionTableState(tid)).data;assert.equal(once.wallet.balance,before.wallet.balance+5);assert.equal(once.wallet.lifetime_distributed,before.wallet.lifetime_distributed);
- const twice=await api.reverseProgressionGrant(tx.id,'De novo');assert.equal(twice.error.message,'ALREADY_REVERSED');
- const final=(await api.fetchProgressionTableState(tid)).data;assert.equal(final.wallet.balance,once.wallet.balance);
- await api.signOut();await api.signIn('jogador','jogador123');assert.equal((await api.grantCharacterProgression(tid,'char-player-exodo',1,'Inválido')).error.message,'GM_REQUIRED');
 });
 test('Portal usa arte inédita e os dois fluxos de pontos delegam ao mesmo formulário',()=>{
  const content=read('js/portal/portal-content.js');assert.doesNotMatch(content,/assets\/archetypes/);

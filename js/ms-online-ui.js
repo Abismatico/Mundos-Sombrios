@@ -6,15 +6,14 @@
   const $=id=>document.getElementById(id);
   let timer=null,lastBuilderActive=false;
   function renderEnvironment(){
-    const local=window.MS_DB?.offline===true;
-    const unavailable=!local&&window.MS_DB?.ready===false;
-    document.body.dataset.msEnvironment=local?'local':unavailable?'unavailable':'online';
+    const unavailable=window.MS_DB?.ready===false;
+    document.body.dataset.msEnvironment=unavailable?'unavailable':'online';
     let notice=$('ms-environment-notice');
     if(!notice){notice=document.createElement('div');notice.id='ms-environment-notice';notice.className='ms-environment-notice';notice.setAttribute('role','status');document.body.prepend(notice);}
-    notice.hidden=!local&&!unavailable;
-    const message=local?'DEMONSTRAÇÃO LOCAL · Dados só neste navegador':unavailable?'SERVIÇO ONLINE INDISPONÍVEL · Seus dados não serão salvos localmente':'';
+    notice.hidden=!unavailable;
+    const message=unavailable?'SERVIÇO ONLINE INDISPONÍVEL · Seus dados não serão salvos':'';
     if(notice.textContent!==message)notice.textContent=message;
-    notice.title=local?'Contas de teste. Fichas e mesas desta demonstração não são compartilhadas entre dispositivos ou jogadores.':message;
+    notice.title=message;
   }
   function active(){return !!$('screen-builder')?.classList.contains('active') || !!$('screen-builder')?.classList.contains('overlay');}
   function draftOwner(){try{return String(currentUser?.id||'guest')}catch(_){return 'guest'}}

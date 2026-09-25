@@ -151,7 +151,6 @@
   };
   async function rpc(name,args={}){
     const C=ctx();
-    if(C){try{const fn=localHandlers[name];if(!fn)throw new Error(`OFFLINE_RPC_NOT_IMPLEMENTED:${name}`);return clone(await fn(C,args||{}))}catch(error){throw error}}
     const result=await db()?.rpc?.(name,args||{});if(result?.error)throw result.error;return result?.data!==undefined?result.data:result;
   }
   function extendOfflineState(tableId,base){
