@@ -70,7 +70,7 @@ test('banco local: comprar, conceder e retirar preserva saldos e bloqueia segund
 });
 test('Portal usa arte inédita e os dois fluxos de pontos delegam ao mesmo formulário',()=>{
  const content=read('js/portal/portal-content.js');assert.doesNotMatch(content,/assets\/archetypes/);
- for(const name of ['portal-threshold','exodo-archive','ocultatun-library'])assert.ok(fs.existsSync(new URL('../assets/art-direction/'+name+'.png',import.meta.url)));
+ for(const name of ['portal-threshold','exodo-archive','ocultatun-library'])assert.ok(fs.existsSync(new URL('../assets/art-direction/'+name+'.webp',import.meta.url)));
  for(const file of ['js/progression-v2.8.9.js','js/operational-control-v2.10.1.js'])assert.match(read(file),/MS_POINTS.open\('grant'/);
  assert.match(read('js/evolution-gradual-v2.10.1.js'),/renderSheet:baseSheet/);
 });
@@ -100,7 +100,7 @@ test('renderização do Portal integra as novas mídias e atalhos de retorno aut
  const c=runtime(),root={innerHTML:'',setAttribute(){},querySelectorAll:()=>[],classList:{contains:()=>true,add(){},remove(){}}};
  c.document.getElementById=id=>id==='screen-portal'?root:null;c.document.querySelectorAll=()=>[root];c.document.body.classList={remove(){}};
  for(const file of ['js/codex-catalog.js','js/portal/portal-content.js','js/portal/portal-media.js','js/portal/portal-core.js'])vm.runInContext(read(file),c);
- assert.match(root.innerHTML,/assets\/art-direction\/portal-threshold.png/);assert.match(root.innerHTML,/EXPLORAR OS MUNDOS/);assert.doesNotMatch(root.innerHTML,/CONTINUAR MINHA MESA|portal-hero-console/);
+ assert.match(root.innerHTML,/assets\/art-direction\/portal-threshold.webp/);assert.match(root.innerHTML,/EXPLORAR OS MUNDOS/);assert.doesNotMatch(root.innerHTML,/CONTINUAR MINHA MESA|portal-hero-console/);
  c.currentUser={id:'gm',username:'Mestre',role:'mestre'};c.renderOfficialPortal();assert.match(root.innerHTML,/CONTINUAR MINHA MESA/);assert.match(root.innerHTML,/MINHAS PERSONAGENS/);
 });
 test('miniaturas ficam dentro do espaço de trabalho, sem cobrir comunicação',()=>{

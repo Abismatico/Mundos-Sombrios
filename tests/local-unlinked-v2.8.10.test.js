@@ -47,7 +47,8 @@ test('instalador consolidado continua incluindo infraestrutura de evolução V2.
 
 test('sandbox local é a aplicação completa e não uma página de demonstração isolada',{skip:!hasSandbox},()=>{
   assert.match(sandboxIndex,/js\/script\.js/);
-  assert.match(sandboxIndex,/js\/master-tools\.js/);
+  assert.doesNotMatch(sandboxIndex,/js\/master-tools\.js/);
+  assert.match(read('js/feature-loader.js'),/js\/master-tools\.js/);
   assert.match(sandboxIndex,/js\/progression-v2\.8\.9\.js|js\/feature-loader\.js/);
   assert.match(sandboxIndex,/screen-login/);
 });

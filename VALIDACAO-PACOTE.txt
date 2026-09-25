@@ -1,6 +1,5 @@
-MUNDOS SOMBRIOS V2.10.0 — EVOLUÇÃO GRADUAL
-56/56 arquivos JavaScript sintaticamente válidos.
-233 testes: 214 aprovados, 0 falhas, 19 condicionais.
-QA Chromium real: Jogador, Mestre e ADM/Arconte aprovados.
-Mobile 390×844: Fichas Rápidas, Evolução, TRIPULAÇÃO drawer e Arconte sem overflow horizontal.
-Sandbox integral gerado da mesma árvore canônica; Fabric Lite local inicializa o VTT sem Fabric.js remoto.
+Versão 2.11.0
+Build validado antes do empacotamento.
+Testes: 316 total; 297 aprovados; 0 falhas; 19 condicionais/ignorados.
+JavaScript: 63 arquivos válidos.
+Pacote recriado e validado por CRC + extração + SHA-256.

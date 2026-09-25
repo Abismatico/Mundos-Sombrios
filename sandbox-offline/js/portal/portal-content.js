@@ -15,7 +15,7 @@
       subtitle: 'Dois mundos. Dois abismos. Uma história que não deveria ter sido aberta.',
       description: 'Explore os mundos, crie sua personagem e reúna sua mesa. A próxima história começa aqui.',
       primaryLabel: 'ENTRAR NO JOGO',
-      media: {id:'original-hero',kind:'image',url:'assets/art-direction/portal-threshold.png',alt:'Um limiar entre o arquivo de Êxodo e a biblioteca de Ocultatun'}
+      media: {id:'original-hero',kind:'image',url:'assets/art-direction/portal-threshold.webp',alt:'Um limiar entre o arquivo de Êxodo e a biblioteca de Ocultatun'}
     },
     featured: {
       title: 'A Ordem dos Sete Arcanjos',
@@ -24,20 +24,20 @@
       category: 'Expansão',
       world: 'Ocultatun',
       status: 'featured',
-      media: {id:'included-order',kind:'image',url:'assets/art-direction/ocultatun-library.png',alt:'Arquivos de Ocultatun'}
+      media: {id:'included-order',kind:'image',url:'assets/art-direction/ocultatun-library.webp',alt:'Arquivos de Ocultatun'}
     },
     announcements: [],
     events: [],
     classes: [
-      {id:'included-alquerino',title:'Alquerino',world:'Ocultatun',category:'Classe',description:'Conheça o laboratório de síntese e os caminhos alquímicos na Forja e no livro base.',published:true,media:{id:'art-alquerino',kind:'image',url:'assets/art-direction/ocultatun-library.png',alt:'Biblioteca ritual de Ocultatun'}},
-      {id:'included-taumaturgico',title:'Taumatúrgico',world:'Ocultatun',category:'Classe',description:'Consulte a classe no livro base e suas opções na criação de personagens.',published:true,media:{id:'art-taumaturgico',kind:'image',url:'assets/art-direction/ocultatun-library.png',alt:'Biblioteca ritual de Ocultatun'}}
+      {id:'included-alquerino',title:'Alquerino',world:'Ocultatun',category:'Classe',description:'Conheça o laboratório de síntese e os caminhos alquímicos na Forja e no livro base.',published:true,media:{id:'art-alquerino',kind:'image',url:'assets/art-direction/ocultatun-library.webp',alt:'Biblioteca ritual de Ocultatun'}},
+      {id:'included-taumaturgico',title:'Taumatúrgico',world:'Ocultatun',category:'Classe',description:'Consulte a classe no livro base e suas opções na criação de personagens.',published:true,media:{id:'art-taumaturgico',kind:'image',url:'assets/art-direction/ocultatun-library.webp',alt:'Biblioteca ritual de Ocultatun'}}
     ],
     community: [],
     expansions: (window.CODEX_FILE_CATALOG||[]).filter(x=>x.kind==='expansao').map(x=>({id:x.id,title:x.title,world:x.mode==='exodo'?'Êxodo':'Ocultatun',category:'Acervo disponível',description:'Documento incluído nos Códices. Consulte o suplemento completo.',published:true})),
     stories: [],
     worlds: [
-      { id: 'world-1', key: 'exodo', title: 'Êxodo: Assimilação', eyebrow: 'SALA DE REGISTROS SECRETOS', description: 'Um mundo de protocolos, assimilação e sobrevivência entre registros que deveriam permanecer fechados.', accent: 'tech', media:{id:'included-exodo',kind:'image',url:'assets/art-direction/exodo-archive.png',alt:'Êxodo: Assimilação'} },
-      { id: 'world-2', key: 'ocultatun', title: 'Ocultatun Ecos', eyebrow: 'BIBLIOTECA DOS SELOS', description: 'Um mundo de rituais, anomalias, símbolos e ecos que atravessam o conhecimento proibido.', accent: 'arcane', media:{id:'included-ocultatun',kind:'image',url:'assets/art-direction/ocultatun-library.png',alt:'Ocultatun Ecos'} }
+      { id: 'world-1', key: 'exodo', title: 'Êxodo: Assimilação', eyebrow: 'SALA DE REGISTROS SECRETOS', description: 'Um mundo de protocolos, assimilação e sobrevivência entre registros que deveriam permanecer fechados.', accent: 'tech', media:{id:'included-exodo',kind:'image',url:'assets/art-direction/exodo-archive.webp',alt:'Êxodo: Assimilação'} },
+      { id: 'world-2', key: 'ocultatun', title: 'Ocultatun Ecos', eyebrow: 'BIBLIOTECA DOS SELOS', description: 'Um mundo de rituais, anomalias, símbolos e ecos que atravessam o conhecimento proibido.', accent: 'arcane', media:{id:'included-ocultatun',kind:'image',url:'assets/art-direction/ocultatun-library.webp',alt:'Ocultatun Ecos'} }
     ],
     portalVersion: 'V2.2'
   };

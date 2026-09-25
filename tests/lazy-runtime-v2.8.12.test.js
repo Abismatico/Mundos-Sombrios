@@ -15,7 +15,7 @@ test('progressão V2.8.9 inicializa de forma idempotente',()=>{
   assert.match(s,/if \(initialized\) return/);
 });
 test('loader do sandbox injeta UI imediatamente e a UI possui boot tardio seguro',()=>{
-  assert.match(read('js/offline-sandbox-ui-loader.js'),/\n\s*load\(\);/);
+  assert.match(read('js/offline-sandbox-ui-loader.js'),/\n\s*boot\(\);/);
   const s=read('js/offline-sandbox-ui.js');
   assert.match(s,/const boot = async/);
   assert.match(s,/else boot\(\)/);

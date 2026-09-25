@@ -6,8 +6,8 @@ const root=path.resolve(import.meta.dirname,'..');
 const read=f=>fs.readFileSync(path.join(root,f),'utf8');
 
 test('V2.5 carrega Soul Economy global e visual 3D',()=>{
-  const html=read('index.html'),js=read('js/soul-economy.js'),css=read('css/soul-economy.css');
-  assert.match(html,/css\/soul-economy\.css/);assert.match(html,/js\/soul-economy\.js/);
+  const html=read('index.html'),js=read('js/soul-economy.js'),css=read('css/soul-economy.css'),loader=read('js/feature-loader.js');
+  assert.doesNotMatch(html,/css\/soul-economy\.css/);assert.match(loader,/css\/soul-economy\.css/);assert.match(html,/js\/soul-economy\.js/);
   for(const token of ['ms-soul-orb','ms-soul-canvas','createSoulOrbRenderer','COFRE SOULDRΔKMA','COLHEITA ATIVA','Ledger','playUnlockAnimation']) assert.match(js,new RegExp(token,'i'));
   for(const token of ['perspective','transform-style:preserve-3d','@keyframes soulFloat','@keyframes soulHaloA','ms-soul-flight','ms-soul-expansion-locked']) assert.match(css,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
 });

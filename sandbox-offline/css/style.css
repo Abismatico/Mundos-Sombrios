@@ -16,24 +16,6 @@ h1, h2, h3, .souls-btn { font-family: var(--vtt-font-family, "Cinzel", serif); f
 .souls-header h1, .souls-header h2 { color: #d4af37; font-size: 3rem; text-transform: uppercase; letter-spacing: 5px; text-shadow: 0 0 15px rgba(212, 175, 55, 0.4); border-bottom: 1px solid rgba(212, 175, 55, 0.3); padding-bottom: 10px; margin-bottom: 10px; }
 .souls-header p { color: #888; font-style: italic; letter-spacing: 2px; }
 
-/* TELA DE SELEÇÃO DE MODO DE JOGO */
-.spheres-container { display: flex; gap: 60px; justify-content: center; align-items: center; flex-wrap: wrap; margin-top: 30px; }
-.sphere-wrapper { display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: transform 0.3s; }
-.sphere-wrapper:hover { transform: scale(1.05); }
-.sphere { position: relative; width: 180px; height: 180px; border-radius: 50%; display: flex; justify-content: center; align-items: center; transform-style: preserve-3d; }
-.tech-sphere { background: radial-gradient(circle at 30% 30%, #00ffcc, #003333 70%, #000); box-shadow: 0 0 30px rgba(0,255,204,0.4), inset 0 0 30px rgba(0,255,204,0.6); animation: rotateTech 12s linear infinite; }
-@keyframes rotateTech { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-.paranormal-sphere { background: radial-gradient(circle at 30% 30%, #ff3333, #330000 70%, #000); box-shadow: 0 0 30px rgba(255,51,51,0.4), inset 0 0 30px rgba(255,51,51,0.6); animation: rotatePara 15s linear infinite reverse; }
-@keyframes rotatePara { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-.sphere-inner { position: absolute; width: 80%; height: 80%; border-radius: 50%; border: 1px dashed rgba(255,255,255,0.3); }
-.orbit-ring { position: absolute; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); }
-.ring-1 { width: 120%; height: 120%; animation: spinRing 8s linear infinite; }
-.ring-2 { width: 140%; height: 140%; animation: spinRing 12s linear reverse; }
-@keyframes spinRing { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-.sphere-label { margin-top: 20px; text-align: center; }
-.sphere-label h3 { color: #fff; font-size: 1.3rem; margin-bottom: 5px; letter-spacing: 2px; }
-.sphere-label p { color: #888; font-size: 0.8rem; max-width: 220px; }
-
 /* CARROSSEL E CARDS NO SANTUÁRIO */
 .carousel-section { position: relative; width: 100%; max-width: 900px; height: 450px; display: flex; justify-content: center; align-items: center; margin-bottom: 40px; perspective: 1200px; }
 #character-list { width: 100%; height: 100%; position: relative; display: flex; justify-content: center; align-items: center; transform-style: preserve-3d; }
@@ -378,10 +360,10 @@ h1, h2, h3, .souls-btn { font-family: var(--vtt-font-family, "Cinzel", serif); f
 
 /* NOVOS TEMAS DINÂMICOS DA FICHA */
 .builder-layout { transition: all 0.5s ease; background-size: cover; background-position: center; }
-.theme-exodo-padrao { --theme-color: #d4af37; background: linear-gradient(rgba(10,10,10,0.9), rgba(10,10,10,0.9)), url("https://www.transparenttextures.com/patterns/black-scales.png"); }
+.theme-exodo-padrao { --theme-color: #d4af37; background: linear-gradient(rgba(10,10,10,0.9), rgba(10,10,10,0.9)), radial-gradient(circle at 25% 25%, rgba(212,175,55,.055) 0 1px, transparent 1.5px) 0 0 / 14px 14px; }
 .theme-arquiteto { --theme-color: #0088ff; }
 .theme-operador { --theme-color: #ff00ff; }
-.theme-ocultatun-carreira { --theme-color: #aaaaaa; background: linear-gradient(rgba(15,15,15,0.95), rgba(15,15,15,0.95)), url("https://www.transparenttextures.com/patterns/brushed-alum.png"); }
+.theme-ocultatun-carreira { --theme-color: #aaaaaa; background: linear-gradient(rgba(15,15,15,0.95), rgba(15,15,15,0.95)), repeating-linear-gradient(90deg, rgba(255,255,255,.018) 0 1px, transparent 1px 4px); }
 .theme-ocultatun-designado { --theme-color: #6600cc; background: radial-gradient(circle at center, rgba(30,0,50,0.9) 0%, rgba(5,5,5,0.95) 100%); border-color: #6600cc; }
 .theme-ocultatun-envolto { --theme-color: #00ffcc; background: radial-gradient(circle at center, rgba(0,20,20,0.9) 0%, rgba(0,0,0,0.95) 100%); border-color: #00ffcc; }
 .theme-ocultatun-ordem { --theme-color: #ffd700; background: linear-gradient(to bottom, rgba(40,30,0,0.9), rgba(5,5,5,0.95)); border-color: #ffd700; }
@@ -1288,3 +1270,32 @@ body.admin-setup-open {
 #gallery-container .gallery-thumb{display:flex;flex-wrap:wrap;gap:6px;height:auto;overflow:visible;padding:8px}#gallery-container .gallery-thumb img{width:100%;height:180px;object-fit:contain}#gallery-container .gallery-thumb button{position:static;min-height:44px;width:auto;font-size:.8rem;padding:8px;background:#192731;color:#e7d2aa;border:1px solid #8a744d}
 
 body.ms-feature-loading:after{content:'Preparando a criação de ficha…';position:fixed;inset:0;display:grid;place-items:center;background:#0b1118f5;color:#e5d2ad;font:500 1.4rem Georgia,serif;z-index:50000;cursor:progress}
+
+/* === V2.10.9 · Encruzilhada dos Mundos — arte própria e navegação diegética === */
+#screen-mode-select.crossroads-screen{max-width:1360px;align-items:stretch;padding:clamp(10px,2vw,24px) 0 34px}
+.crossroads-screen>.screen-nav-actions{align-self:stretch;margin-bottom:10px;position:relative;z-index:4}
+.crossroads-header{position:relative;text-align:center;max-width:920px;margin:8px auto 24px;padding:0 18px}
+.crossroads-header:after{content:"";display:block;width:min(480px,72vw);height:1px;margin:20px auto 0;background:linear-gradient(90deg,transparent,rgba(212,175,55,.64),transparent)}
+.crossroads-kicker{display:block;color:#bfa365;font:700 .69rem/1.2 "Cinzel",serif;letter-spacing:.2em;text-transform:uppercase}
+.crossroads-header h1{margin:9px 0 10px;color:#f0e7d4;font:700 clamp(1.75rem,4vw,3rem)/1.05 "Cinzel",serif;letter-spacing:.045em;text-shadow:0 12px 34px rgba(0,0,0,.8)}
+.crossroads-header p{max-width:780px;margin:auto;color:#918c84;font-size:.9rem;line-height:1.65}.crossroads-header #display-username{color:#d8bd78;font-weight:700}
+.crossroads-stage{position:relative;isolation:isolate;width:100%;min-height:clamp(430px,52vw,650px);overflow:hidden;border:1px solid rgba(213,184,123,.24);background:#050708;box-shadow:0 28px 75px rgba(0,0,0,.48);container-type:inline-size}
+.crossroads-stage:before{content:"";position:absolute;inset:10px;z-index:3;border:1px solid rgba(226,205,158,.12);pointer-events:none}
+.crossroads-stage-art,.crossroads-stage-atmosphere{position:absolute;inset:0;pointer-events:none}
+.crossroads-stage-art{z-index:-3;background:url('../assets/art-direction/encruzilhada-dos-mundos.webp') center 52%/cover no-repeat;transform:scale(1.006);filter:saturate(.9) contrast(1.03)}
+.crossroads-stage-atmosphere{z-index:-2;background:linear-gradient(180deg,rgba(2,5,8,.08) 0%,rgba(2,4,7,.04) 44%,rgba(2,4,7,.74) 100%),linear-gradient(90deg,rgba(16,88,102,.06),transparent 38%,transparent 62%,rgba(115,39,25,.08));box-shadow:inset 0 0 110px rgba(0,0,0,.48)}
+.crossroads-stage-mark{position:absolute;z-index:1;left:50%;top:8%;transform:translateX(-50%);display:grid;gap:3px;text-align:center;color:#d9bf86;text-shadow:0 3px 18px #000;pointer-events:none}.crossroads-stage-mark span{font:700 .58rem "Cinzel",serif;letter-spacing:.32em}.crossroads-stage-mark strong{font:700 clamp(.9rem,1.6vw,1.2rem) "Cinzel",serif;letter-spacing:.19em;color:#efe5ca}
+.mode-gateway-grid{position:absolute;z-index:2;inset:auto clamp(18px,3vw,38px) clamp(18px,3vw,34px);display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:clamp(18px,7vw,130px);align-items:end}
+.mode-gateway{--gateway-accent:#d4af37;position:relative;isolation:isolate;min-height:165px;overflow:hidden;padding:22px 24px 20px;border:1px solid color-mix(in srgb,var(--gateway-accent) 35%,rgba(255,255,255,.08));background:linear-gradient(145deg,rgba(5,10,14,.88),rgba(4,6,9,.72));color:#fff;text-align:left;cursor:pointer;box-shadow:0 18px 45px rgba(0,0,0,.48);backdrop-filter:blur(7px);transition:transform .2s ease,border-color .2s ease,background .2s ease,box-shadow .2s ease}
+.mode-gateway-exodo{--gateway-accent:#74e5df;background:linear-gradient(145deg,rgba(4,23,29,.9),rgba(4,8,12,.7))}.mode-gateway-ocultatun{--gateway-accent:#d98a68;background:linear-gradient(145deg,rgba(33,13,10,.9),rgba(8,5,7,.72))}
+.mode-gateway:before{content:"";position:absolute;inset:7px;border:1px solid color-mix(in srgb,var(--gateway-accent) 20%,transparent);pointer-events:none}.mode-gateway:after{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:linear-gradient(transparent,var(--gateway-accent),transparent);opacity:.75}
+.mode-gateway-copy{position:relative;z-index:2;display:grid;gap:6px;padding-right:48px}.mode-gateway-index{color:var(--gateway-accent);font:700 .61rem/1.2 "Cinzel",serif;letter-spacing:.16em;text-transform:uppercase}.mode-gateway-copy>strong{color:#f5f1e8;font:700 clamp(1.25rem,2.2vw,1.8rem)/1.05 "Cinzel",serif;letter-spacing:.035em;text-shadow:0 3px 16px #000}.mode-gateway-text{max-width:500px;color:#bcb9b1;font-size:.78rem;line-height:1.45;text-shadow:0 2px 8px #000}.mode-gateway-cta{display:flex;align-items:center;gap:10px;width:max-content;margin-top:5px;color:#e4dcc9;font:700 .65rem/1 "Cinzel",serif;letter-spacing:.13em}.mode-gateway-cta i{color:var(--gateway-accent);font-size:1rem;font-style:normal;transition:transform .2s ease}.mode-gateway-sigil{position:absolute;z-index:2;top:18px;right:18px;width:40px;height:40px;display:grid;place-items:center;border:1px solid color-mix(in srgb,var(--gateway-accent) 48%,transparent);color:var(--gateway-accent);background:rgba(3,5,6,.68);font-size:1.12rem;box-shadow:0 0 28px color-mix(in srgb,var(--gateway-accent) 13%,transparent)}
+.mode-gateway:hover,.mode-gateway:focus-visible{transform:translateY(-4px);border-color:color-mix(in srgb,var(--gateway-accent) 76%,transparent);background:linear-gradient(145deg,color-mix(in srgb,var(--gateway-accent) 12%,#071017),rgba(4,6,9,.84));box-shadow:0 26px 58px rgba(0,0,0,.54),0 0 30px color-mix(in srgb,var(--gateway-accent) 8%,transparent);outline:none}.mode-gateway:hover .mode-gateway-cta i,.mode-gateway:focus-visible .mode-gateway-cta i{transform:translateX(5px)}
+.crossroads-nexus{position:relative;isolation:isolate;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:30px;align-items:end;width:100%;min-height:185px;margin-top:18px;padding:30px clamp(24px,5vw,54px);overflow:hidden;border:1px solid rgba(189,156,95,.28);background:#090909;color:#fff;text-align:left;cursor:pointer;box-shadow:0 18px 48px rgba(0,0,0,.27);transition:border-color .2s ease,transform .2s ease}.crossroads-nexus:after{content:"";position:absolute;inset:9px;z-index:2;border:1px solid rgba(212,175,55,.1);pointer-events:none}.crossroads-nexus-art{position:absolute;z-index:-2;inset:0;background:linear-gradient(90deg,rgba(5,7,8,.96) 0%,rgba(5,7,8,.75) 48%,rgba(5,7,8,.38) 100%),url('../assets/art-direction/mesa-salao.webp') center 53%/cover;filter:saturate(.66)}.crossroads-nexus-copy{position:relative;z-index:3;display:grid;gap:7px;max-width:760px}.crossroads-nexus-copy>strong{font:700 clamp(1.35rem,3vw,2rem)/1 "Cinzel",serif;color:#f0e8d8;letter-spacing:.05em}.crossroads-nexus-copy>span:last-child{color:#aaa59c;font-size:.82rem;line-height:1.5}.crossroads-nexus-action{position:relative;z-index:3;display:flex;align-items:center;gap:11px;color:#d9bd7b;font:700 .72rem "Cinzel",serif;letter-spacing:.14em;white-space:nowrap}.crossroads-nexus-action i{font-style:normal;font-size:1.05rem;transition:transform .2s ease}.crossroads-nexus:hover,.crossroads-nexus:focus-visible{transform:translateY(-2px);border-color:rgba(212,175,55,.62);outline:none}.crossroads-nexus:hover .crossroads-nexus-action i,.crossroads-nexus:focus-visible .crossroads-nexus-action i{transform:translateX(5px)}
+.crossroads-utilities{display:flex!important;flex-direction:row!important;flex-wrap:wrap;justify-content:center;align-items:center!important;gap:8px!important;width:100%!important;margin-top:16px!important}.crossroads-utilities .souls-btn{min-height:40px;margin:0!important;padding:9px 14px!important;border-color:rgba(212,175,55,.22)!important;color:#918a7e!important;background:rgba(7,8,9,.72);box-shadow:none!important;text-shadow:none!important;font-size:.67rem!important;letter-spacing:.08em}.crossroads-utilities .souls-btn:hover,.crossroads-utilities .souls-btn:focus-visible{color:#e1d5bb!important;border-color:rgba(212,175,55,.52)!important}
+@media(max-width:860px){.crossroads-stage{min-height:auto;aspect-ratio:16/11;overflow:visible;margin-bottom:310px}.mode-gateway-grid{top:calc(100% - 18px);bottom:auto;grid-template-columns:1fr;gap:9px;inset-inline:0}.mode-gateway{min-height:145px;backdrop-filter:none}.crossroads-stage-mark{top:5%}.crossroads-nexus{grid-template-columns:1fr;gap:18px;align-items:start}.crossroads-nexus-action{white-space:normal}.crossroads-header{margin-top:16px}.crossroads-screen>.screen-nav-actions{flex-wrap:wrap}}
+@media(max-width:520px){#screen-mode-select.crossroads-screen{padding-top:4px}.crossroads-stage{aspect-ratio:4/3;margin-bottom:330px}.crossroads-stage-art{background-position:center 45%}.mode-gateway{padding:19px 18px 17px}.mode-gateway-copy{padding-right:38px}.mode-gateway-text{font-size:.75rem}.mode-gateway-sigil{top:15px;right:14px;width:34px;height:34px}.crossroads-nexus{padding:24px 20px}.crossroads-utilities .souls-btn{flex:1 1 46%}}
+@media(prefers-reduced-motion:reduce){.mode-gateway,.mode-gateway-cta i,.crossroads-nexus,.crossroads-nexus-action i{transition:none}}
+
+/* V2.10.5 · identificação da matriz tática */
+.ms-grid-dimension{display:block;margin-top:3px;color:#777f85;font:700 .6rem "Orbitron",sans-serif;letter-spacing:.12em;text-transform:uppercase}

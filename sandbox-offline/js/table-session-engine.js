@@ -80,6 +80,12 @@
     try{const event=await services().VTT.event(state.tableId,type,payload,{clientEventId:crypto.randomUUID?.()});if(event?.id)remember(event);return event;}
     catch(error){state.lastError=error;health();throw error;}finally{state.pending=Math.max(0,state.pending-1);health();}
   }
+  async function broadcastTransient(type,payload){
+    if(!state.tableId)throw new Error('Nenhuma mesa conectada.');
+    if(String(type)==='grid_preview'&&!window.__msVttIsGM)throw new Error('GM_REQUIRED');
+    if(!window.MS_DB?.broadcastTableEvent)throw new Error('Canal efêmero indisponível.');
+    return window.MS_DB.broadcastTableEvent(state.tableId,String(type),payload||{}, { transient:true });
+  }
   async function disconnect(){
     if(state.reconnectTimer){clearTimeout(state.reconnectTimer);state.reconnectTimer=null;}stopPresenceHeartbeat();
     const leavingId=state.tableId;
@@ -88,5 +94,5 @@
     state.stop=null;state.tableId=null;state.handler=null;state.status='idle';state.connectedAt=null;state.lastEventId=0;state.bootstrapping=false;state.buffer=[];state.seen.clear();health();
   }
   function current(){return snapshot();}
-  window.MS_TABLE_SESSION=Object.freeze({version:'3.1',connect,disconnect,send,catchUp,normalizeState:normalize,current,DEFAULT_STATE:clone(DEFAULT_STATE)});
+  window.MS_TABLE_SESSION=Object.freeze({version:'3.2',connect,disconnect,send,broadcastTransient,catchUp,normalizeState:normalize,current,DEFAULT_STATE:clone(DEFAULT_STATE)});
 })();

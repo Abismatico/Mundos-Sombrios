@@ -30,6 +30,8 @@
     }catch(e){console.warn('[Mundos Sombrios] hidratação das ferramentas do Mestre:',e);}
   }
   const mode=()=>{try{return contextTable?.gameMode || currentTableData?.gameMode || (typeof currentDraftGameMode!=='undefined'?currentDraftGameMode:null) || (typeof currentMode!=='undefined'?currentMode:'exodo')}catch(_){return 'exodo'}};
+  const DEFAULT_GRID=()=>window.MS_GRID_ENGINE?.DEFAULT_CONFIG||{schemaVersion:1,type:'square',columns:16,rows:16,cellWidth:64,cellHeight:64,boardWidth:1024,boardHeight:1024,offsetX:0,offsetY:0,rotation:0,snap:true,showGrid:true,showCoordinates:false,showToPlayers:true,lineWidth:1,opacity:.45,lineColor:'#65717a',unitName:'m',unitsPerCell:1.5};
+  const cloneSafe=v=>{try{return JSON.parse(JSON.stringify(v));}catch(_){return v;}};
 
   const state={activeTool:'files', shield:null};
   const MEMORY_POS_KEY='ms:ui:world-memory:position:v1';
@@ -282,7 +284,7 @@
     }
     if(idx<0||!tokenActorAllowed(event,objects[idx]))return;
     if(event.event_type==='token_remove'){objects.splice(idx,1);return;}
-    if(event.event_type==='token_move')objects[idx]={...objects[idx],left:Number(p.left)||0,top:Number(p.top)||0,angle:Number(p.angle)||0,scaleX:Number(p.scaleX)||objects[idx].scaleX||1,scaleY:Number(p.scaleY)||objects[idx].scaleY||1};
+    if(event.event_type==='token_move')objects[idx]={...objects[idx],left:Number(p.left)||0,top:Number(p.top)||0,angle:Number(p.angle)||0,scaleX:Number(p.scaleX)||objects[idx].scaleX||1,scaleY:Number(p.scaleY)||objects[idx].scaleY||1,msTokenWidthCells:Number(p.msTokenWidthCells)||objects[idx].msTokenWidthCells||null,msTokenHeightCells:Number(p.msTokenHeightCells)||objects[idx].msTokenHeightCells||null};
   }
   function tokenActorAllowed(event,obj){
     const p=event?.payload||{};if(p.actorCanManage===true)return true;
@@ -338,7 +340,35 @@
       if(!duplicate){ const item={sender:p.sender,msg:p.msg,color:p.color||'#00ffcc',id:event.id,at:Date.now()}; online.vtt.chat.push(item); online.vtt.chat=online.vtt.chat.slice(-150); if(typeof addChatMessage==='function')addChatMessage(item.sender,item.msg,item.color); }
     }
     if(event.event_type==='reveal'){ showDramaticReveal(p); return; }
-    if(event.event_type==='scene'){ window.MS_PLATFORM?.toast(`Cena: ${p.title||'Nova cena'}`,'success'); return; }
+    if(event.event_type==='grid_preview'){
+      // Evento efêmero: altera apenas a camada visual. Nunca entra no estado persistente da Cena.
+      if(window.MS_GRID_ENGINE?.isPreviewing?.())return;
+      window.MS_GRID_ENGINE?.applySharedPreview?.(p.active===false?null:p.gridConfig);
+      return;
+    }
+    if(event.event_type==='architect_intent'){
+      if(isVttGM())window.MS_GRID_ARCHITECT?.handleIntent?.(p);
+      return;
+    }
+    if(event.event_type==='architect_move_intent'){
+      if(!isVttGM())return;const canvas=window.vttCanvas||vttCanvas,tokenId=String(p.tokenId||''),obj=canvas?.getObjects?.()?.find(o=>String(o.msTokenId||'')===tokenId);if(!obj)return;
+      const actor=String(event.actor_id||''),owner=String(obj.ownerAuthId||'');if(owner&&actor&&owner!==actor)return;
+      const from={x:Number(p.fromLeft)||Number(obj.left)||0,y:Number(p.fromTop)||Number(obj.top)||0},to={x:Number(p.left)||0,y:Number(p.top)||0};if(window.MS_GRID_ARCHITECT?.canMoveBetween?.(from,to)===false){window.MS_TABLE_SESSION?.broadcastTransient?.('architect_move_denied',{tokenId,actorId:actor,reason:'Movimento bloqueado pelo cenário.'}).catch?.(()=>{});return;}
+      obj.set({left:to.x,top:to.y,angle:Number(p.angle)||0,scaleX:Number(p.scaleX)||obj.scaleX,scaleY:Number(p.scaleY)||obj.scaleY});canvas?.requestRenderAll?.();if(window.MasterTools?.saveGrid)window.MasterTools.saveGrid(canvas);
+      window.MS_TABLE_SESSION?.send?.('token_move',{tokenId,left:to.x,top:to.y,angle:Number(p.angle)||0,scaleX:Number(p.scaleX)||1,scaleY:Number(p.scaleY)||1,msTokenWidthCells:Number(p.msTokenWidthCells)||null,msTokenHeightCells:Number(p.msTokenHeightCells)||null}).catch?.(()=>{});return;
+    }
+    if(event.event_type==='architect_move_denied'){
+      if(String(p.actorId||'')===String(currentUser?.authUserId||''))window.MS_PLATFORM?.toast?.(p.reason||'Movimento recusado pelo Mestre.','error');return;
+    }
+    if(event.event_type==='scene'){
+      const s=vttState(),cfg=p.gridConfig&&typeof p.gridConfig==='object'?(window.MS_GRID_ENGINE?.normalize?.(p.gridConfig)||cloneSafe(p.gridConfig)):null;
+      s.scene={...(s.scene||{}),id:p.sceneId||s.scene?.id||null,title:p.title||s.scene?.title||'',summary:p.summary||s.scene?.summary||'',location:p.location||s.scene?.location||'',mapUrl:p.mapUrl||s.scene?.mapUrl||'',gridConfig:cfg||s.scene?.gridConfig||cloneSafe(DEFAULT_GRID()),vtt:p.vtt&&typeof p.vtt==='object'?cloneSafe(p.vtt):(s.scene?.vtt||null)};
+      if(cfg){s.grid={...(s.grid||{}),config:cloneSafe(cfg)};window.MS_GRID_ENGINE?.applyRemote?.(cfg);}
+      if(s.scene.vtt)window.MS_GRID_ARCHITECT?.load?.(s.scene.vtt,{gridConfig:cfg||s.scene.gridConfig});
+      window.applyVttSceneContext?.();
+      if(!p.gridOnly)window.MS_PLATFORM?.toast(`Cena: ${p.title||'Nova cena'}`,'success');
+      return;
+    }
     if(['token_add','token_move','token_remove'].includes(event.event_type)){
       const tokenId=String(p.tokenId||p.token?.msTokenId||''),canvas=window.vttCanvas||vttCanvas;
       let obj=canvas?.getObjects?.()?.find(o=>String(o.msTokenId||'')===tokenId)||null;
@@ -348,14 +378,14 @@
         // Para jogador comum, o servidor reescreve ownerAuthId e actorCanManage.
         if(p.actorCanManage!==true&&String(p.token.ownerAuthId||'')!==String(event.actor_id||''))return;
         applyTokenEventToState(event);
-        if(canvas&&window.fabric?.util?.enlivenObjects){window.__msApplyingRemoteToken=true;try{window.fabric.util.enlivenObjects([p.token],items=>{const item=items?.[0];if(item&&!canvas.getObjects().some(o=>String(o.msTokenId||'')===tokenId)){canvas.add(item);canvas.renderAll();if(isVttGM()&&window.MasterTools?.saveGrid)window.MasterTools.saveGrid(canvas);}window.__msApplyingRemoteToken=false;});}catch(_){window.__msApplyingRemoteToken=false;}}
+        if(canvas&&window.fabric?.util?.enlivenObjects){window.__msApplyingRemoteToken=true;try{window.fabric.util.enlivenObjects([p.token],items=>{const item=items?.[0];if(item&&!canvas.getObjects().some(o=>String(o.msTokenId||'')===tokenId)){canvas.add(item);if(Number(item.msTokenWidthCells)>0)window.MS_GRID_ENGINE?.applyTokenSize?.(item,item.msTokenWidthCells,item.msTokenHeightCells||item.msTokenWidthCells,{silent:true});canvas.renderAll();if(isVttGM()&&window.MasterTools?.saveGrid)window.MasterTools.saveGrid(canvas);}window.__msApplyingRemoteToken=false;});}catch(_){window.__msApplyingRemoteToken=false;}}
         return;
       }
       if(!obj){applyTokenEventToState(event);return;}
       if(!tokenActorAllowed(event,obj))return;
       window.__msApplyingRemoteToken=true;
       if(event.event_type==='token_remove')canvas?.remove?.(obj);
-      else obj.set({left:Number(p.left)||0,top:Number(p.top)||0,angle:Number(p.angle)||0,scaleX:Number(p.scaleX)||obj.scaleX,scaleY:Number(p.scaleY)||obj.scaleY});
+      else {obj.set({left:Number(p.left)||0,top:Number(p.top)||0,angle:Number(p.angle)||0,scaleX:Number(p.scaleX)||obj.scaleX,scaleY:Number(p.scaleY)||obj.scaleY,msTokenWidthCells:Number(p.msTokenWidthCells)||obj.msTokenWidthCells||null,msTokenHeightCells:Number(p.msTokenHeightCells)||obj.msTokenHeightCells||null});if(Number(obj.msTokenWidthCells)>0)window.MS_GRID_ENGINE?.applyTokenSize?.(obj,obj.msTokenWidthCells,obj.msTokenHeightCells||obj.msTokenWidthCells,{silent:true});}
       canvas?.renderAll?.();window.__msApplyingRemoteToken=false;applyTokenEventToState(event);if(isVttGM()&&window.MasterTools?.saveGrid)window.MasterTools.saveGrid(canvas);return;
     }
     if(event.event_type==='control'){ if(typeof p.chatLocked==='boolean'){ chatLocked=p.chatLocked; const btn=document.getElementById('btn-lock-chat'); if(btn)btn.innerText=chatLocked?'🔏':'🔓'; } return; }
@@ -373,7 +403,7 @@
     document.getElementById('ms-vtt-reveal')?.remove();
     const box=document.createElement('div');box.id='ms-vtt-reveal';box.className='ms-vtt-reveal';box.innerHTML=`<article><small>INFORMAÇÃO REVELADA</small><h2>${esc(p.title||'Revelação')}</h2><p>${esc(p.body||'')}</p><button>FECHAR</button></article>`;document.body.appendChild(box);box.querySelector('button').onclick=()=>box.remove();setTimeout(()=>box.classList.add('show'),20);
   }
-  function restoreVttState(){const s=vttState();const chat=document.getElementById('chat-messages');if(chat){chat.innerHTML='';(s.chat||[]).forEach(x=>{if(typeof addChatMessage==='function')addChatMessage(x.sender,x.msg,x.color);});}if(typeof diceHistory!=='undefined'){diceHistory=Array.isArray(s.dice)?s.dice.slice():[];if(typeof renderDiceHistory==='function')renderDiceHistory();}const c=document.getElementById('camp-gallery-container');if(c){c.innerHTML='';(s.gallery||[]).forEach(f=>addGalleryDom(f));}}
+  function restoreVttState(){const s=vttState();const chat=document.getElementById('chat-messages');if(chat){chat.innerHTML='';(s.chat||[]).forEach(x=>{if(typeof addChatMessage==='function')addChatMessage(x.sender,x.msg,x.color);});}if(typeof diceHistory!=='undefined'){diceHistory=Array.isArray(s.dice)?s.dice.slice():[];if(typeof renderDiceHistory==='function')renderDiceHistory();}const c=document.getElementById('camp-gallery-container');if(c){c.innerHTML='';(s.gallery||[]).forEach(f=>addGalleryDom(f));}window.MS_GRID_ENGINE?.applyRemote?.(getGridConfig());window.applyVttSceneContext?.();}
   function addGalleryDom(f){const c=document.getElementById('camp-gallery-container');if(!c)return;c.insertAdjacentHTML('beforeend',`<div class="gallery-thumb"><img src="${f.src}" alt="${esc(f.name||'Imagem')}" onclick="viewFullscreen(this.src)"><button type="button" class="delete-btn hide-on-view" data-gallery-src="${encodeURIComponent(f.src||'')}">X</button></div>`);}
   async function onChatMessage(sender,msg,isGM){const s=vttState();s.chat=Array.isArray(s.chat)?s.chat:[];const local={id:'local-'+Date.now()+'-'+Math.random(),sender,msg,color:isGM?'#ff00ff':'#00ffcc',at:Date.now()};s.chat.push(local);s.chat=s.chat.slice(-150);if(window.MS_DB?.ready&&tableId()!=='draft'){try{return await window.MS_TABLE_SESSION?.send?.('chat',{sender,msg,color:local.color});}catch(error){window.MS_PLATFORM?.toast('Mensagem exibida localmente, mas não foi confirmada pela mesa.','error');throw error;}}return local;}
   async function onDiceRoll(type,result,sender){if(gm())window.MasterCommandCenter?.log?.('dice',`${sender} rolou ${type}: ${result}`);const s=vttState();s.dice=Array.isArray(s.dice)?s.dice:[];s.dice.push({id:'local-'+Date.now()+'-'+Math.random(),type,result,sender,at:Date.now()});s.dice=s.dice.slice(-100);if(window.MS_DB?.ready&&tableId()!=='draft'){try{return await window.MS_TABLE_SESSION?.send?.('dice',{type,result,sender});}catch(error){window.MS_PLATFORM?.toast('Rolagem local concluída, mas não foi confirmada pela mesa.','error');throw error;}}return result;}
@@ -383,8 +413,35 @@
   function isVttGM(){try{return !!window.__msVttIsGM}catch(_){return false;}}
   function removeGalleryImage(src){const s=vttState();s.gallery=(s.gallery||[]).filter(f=>f.src!==src);saveVtt(s);document.querySelectorAll('[data-gallery-src]').forEach(b=>{try{if(decodeURIComponent(b.dataset.gallerySrc||'')===src)b.parentElement?.remove()}catch(_){}})}
 
-  function saveGrid(canvas){if(!canvas)return;const s=vttState();const props=['owner','ownerId','ownerAuthId','characterId','msTokenId','borderColor','isGridLine','isRuler'];const objects=canvas.getObjects().filter(o=>!o.isGridLine&&!o.isRuler);s.grid=canvas.toJSON(props);s.grid.objects=objects.map(o=>o.toObject(props));saveVtt(s);}
-  function restoreGrid(canvas){const s=vttState();if(!canvas||!s.grid||!s.grid.objects?.length)return;try{window.__msRestoringGrid=true;canvas.loadFromJSON({version:s.grid.version||'6.0.0',objects:s.grid.objects},()=>{drawGridLines?.();canvas.getObjects().forEach(o=>o.set('selectable',!o.isGridLine&&!o.isRuler&&(gm()||String(o.ownerId||'')===uid()||String(o.ownerAuthId||'')===String(currentUser?.authUserId||''))));canvas.renderAll();window.__msRestoringGrid=false;});}catch(_){window.__msRestoringGrid=false}}
+  function getSceneContext(){const s=vttState();return s.scene&&typeof s.scene==='object'?cloneSafe(s.scene):null;}
+  function getGridConfig(){
+    const s=vttState(),cmd=s.gmWorkbench?.command,scene=cmd?.scenes?.find?.(x=>x.id===cmd.activeSceneId);
+    // Cena ativa sem configuração é uma Cena legada: sempre recebe o fallback 16×16,
+    // nunca a matriz da Cena anteriormente aberta.
+    const raw=scene?(scene.gridConfig||DEFAULT_GRID()):(s.scene?.gridConfig||s.grid?.config||DEFAULT_GRID());
+    return window.MS_GRID_ENGINE?.normalize?.(raw)||cloneSafe(raw);
+  }
+  function activateSceneContext(scene,options={}){
+    if(!scene||typeof scene!=='object')return null;const s=vttState(),base=scene.gridConfig||DEFAULT_GRID(),cfg=window.MS_GRID_ENGINE?.normalize?.(base)||cloneSafe(base);
+    scene.gridConfig=cloneSafe(cfg);const architect=scene.vtt&&typeof scene.vtt==='object'?cloneSafe(scene.vtt):(window.MS_GRID_ARCHITECT?.migrateLegacy?.(scene)||null);if(architect)scene.vtt=cloneSafe(architect);s.scene={id:scene.id||scene.sceneId||null,title:scene.title||'',summary:scene.summary||'',location:scene.location||'',mapUrl:scene.mapUrl||'',gridConfig:cloneSafe(cfg),vtt:architect};s.grid={...(s.grid||{}),config:cloneSafe(cfg)};saveVtt(s);window.MS_GRID_ENGINE?.applyRemote?.(cfg);if(architect)window.MS_GRID_ARCHITECT?.load?.(architect,{gridConfig:cfg});if(options.apply!==false)window.applyVttSceneContext?.();return cloneSafe(s.scene);
+  }
+  async function saveSceneGridConfig(config,options={}){
+    if(!gm())return false;const s=vttState(),cfg=window.MS_GRID_ENGINE?.normalize?.(config)||cloneSafe(config||DEFAULT_GRID()),cmd=s.gmWorkbench?.command,scene=cmd?.scenes?.find?.(x=>x.id===cmd.activeSceneId)||null;
+    if(scene)scene.gridConfig=cloneSafe(cfg);
+    s.scene={...(s.scene||{}),id:scene?.id||s.scene?.id||null,title:scene?.title||s.scene?.title||'',summary:scene?.summary||s.scene?.summary||'',location:scene?.location||s.scene?.location||'',mapUrl:scene?.mapUrl||s.scene?.mapUrl||'',gridConfig:cloneSafe(cfg)};
+    s.grid={...(s.grid||{}),config:cloneSafe(cfg)};saveVtt(s);
+    if(options.broadcast!==false&&tableId()!=='draft')await window.MS_TABLE_SESSION?.send?.('scene',{sceneId:s.scene.id,title:s.scene.title,summary:s.scene.summary,location:s.scene.location,mapUrl:s.scene.mapUrl,gridConfig:cfg,vtt:s.scene.vtt||window.MS_GRID_ARCHITECT?.serialize?.()||null,gridOnly:true});
+    return cloneSafe(cfg);
+  }
+  function getArchitectLegacyObjects(){const s=vttState();return Array.isArray(s.grid?.objects)?cloneSafe(s.grid.objects):[];}
+  function getArchitectState(){const s=vttState(),cmd=s.gmWorkbench?.command,scene=cmd?.scenes?.find?.(x=>x.id===cmd.activeSceneId);return cloneSafe(scene?.vtt||s.scene?.vtt||null);}
+  async function saveArchitectState(vtt,options={}){
+    if(!gm()||!vtt||typeof vtt!=='object')return false;const s=vttState(),cmd=s.gmWorkbench?.command,scene=cmd?.scenes?.find?.(x=>x.id===cmd.activeSceneId)||null,payload=cloneSafe(vtt);
+    if(scene)scene.vtt=payload;s.scene={...(s.scene||{}),id:scene?.id||s.scene?.id||null,title:scene?.title||s.scene?.title||'',summary:scene?.summary||s.scene?.summary||'',location:scene?.location||s.scene?.location||'',mapUrl:scene?.mapUrl||s.scene?.mapUrl||'',gridConfig:cloneSafe(scene?.gridConfig||s.scene?.gridConfig||getGridConfig()),vtt:payload};saveVtt(s);
+    if(options.broadcast!==false&&tableId()!=='draft')await window.MS_TABLE_SESSION?.send?.('scene',{sceneId:s.scene.id,title:s.scene.title,summary:s.scene.summary,location:s.scene.location,mapUrl:s.scene.mapUrl,gridConfig:s.scene.gridConfig,vtt:payload,gridOnly:true});return cloneSafe(payload);
+  }
+  function saveGrid(canvas){if(!canvas)return;const s=vttState(),config=getGridConfig();const props=['owner','ownerId','ownerAuthId','characterId','msTokenId','borderColor','isGridLine','isRuler','msTokenWidthCells','msTokenHeightCells'];const objects=canvas.getObjects().filter(o=>!o.isGridLine&&!o.isRuler);const json=canvas.toJSON(props);s.grid={...json,config:cloneSafe(config)};s.grid.objects=objects.map(o=>o.toObject(props));saveVtt(s);}
+  function restoreGrid(canvas){const s=vttState(),cfg=getGridConfig();window.MS_GRID_ENGINE?.applyRemote?.(cfg);if(!canvas||!s.grid||!s.grid.objects?.length){window.MS_GRID_ENGINE?.rescaleManagedTokens?.();return;}try{window.__msRestoringGrid=true;canvas.loadFromJSON({version:s.grid.version||'6.0.0',objects:s.grid.objects},()=>{drawGridLines?.();canvas.getObjects().forEach(o=>o.set('selectable',!o.isGridLine&&!o.isRuler&&(gm()||String(o.ownerId||'')===uid()||String(o.ownerAuthId||'')===String(currentUser?.authUserId||''))));window.MS_GRID_ENGINE?.applyRemote?.(cfg);window.MS_GRID_ENGINE?.rescaleManagedTokens?.();canvas.renderAll();window.__msRestoringGrid=false;});}catch(_){window.__msRestoringGrid=false}}
   window.renderMasterTools=renderMasterTools;
-  window.MasterTools={renderMasterTools,mountShield,unmountShield,collapseMemoryPanel:()=>setMemoryPanelOpen(false),toggleMemoryPanel:()=>setMemoryPanelOpen(!!state.shield?.box?.hidden),onVttEnter,restoreVttState,onChatMessage,onDiceRoll,syncDice,saveGalleryImage,removeGalleryImage,saveGrid,restoreGrid,saveTableControlState,getWorkbench:workbench,persistWorkbench,getNPCs:()=>scoped(NPCS),getContextTable:()=>contextTable,setActiveTool(tool){state.activeTool=tool;const suite=document.querySelector('.gm-tools-suite');if(!suite)return;suite.querySelectorAll('.gm-tools-tab').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));renderPanel(suite.querySelector('#gm-tools-panel'));}};
+  window.MasterTools={renderMasterTools,mountShield,unmountShield,collapseMemoryPanel:()=>setMemoryPanelOpen(false),toggleMemoryPanel:()=>setMemoryPanelOpen(!!state.shield?.box?.hidden),onVttEnter,restoreVttState,onChatMessage,onDiceRoll,syncDice,saveGalleryImage,removeGalleryImage,saveGrid,restoreGrid,getGridConfig,getSceneContext,activateSceneContext,saveSceneGridConfig,getArchitectState,saveArchitectState,getArchitectLegacyObjects,saveTableControlState,getWorkbench:workbench,persistWorkbench,getNPCs:()=>scoped(NPCS),getContextTable:()=>contextTable,setActiveTool(tool){state.activeTool=tool;const suite=document.querySelector('.gm-tools-suite');if(!suite)return;suite.querySelectorAll('.gm-tools-tab').forEach(b=>b.classList.toggle('active',b.dataset.tool===tool));renderPanel(suite.querySelector('#gm-tools-panel'));}};
 })();

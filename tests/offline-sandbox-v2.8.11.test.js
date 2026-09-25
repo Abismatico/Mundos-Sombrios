@@ -52,10 +52,12 @@ test('site principal carrega adaptador offline antes do contrato MS_DB',()=>{
 });
 
 test('sandbox é réplica integral do runtime e usa banco isolado',{skip:!hasSandbox},()=>{
-  for(const token of ['js/script.js','js/ms-services.js','js/master-room.js','js/soul-economy.js','js/offline-db-loader.js','js/offline-sandbox-ui-loader.js']){
+  for(const token of ['js/script.js','js/ms-services.js','js/soul-economy.js','js/offline-db.js','js/offline-sandbox-ui-loader.js']){
     assert.match(sandboxIndex,new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
   }
+  assert.doesNotMatch(sandboxIndex,/js\/master-room\.js/);
+  assert.match(read('js/feature-loader.js'),/js\/master-room\.js/);
   assert.match(sandboxRuntime,/sandboxMode:\s*true/);
-  assert.match(sandboxRuntime,/ms-sandbox-v(?:2811|290|2100|2101)/);
+  assert.match(sandboxRuntime,/ms-sandbox-v(?:2811|290|2100|2101|2104)/);
   assert.match(ui,/JOGADOR/);assert.match(ui,/MESTRE/);assert.match(ui,/ADM \/ ARCONTE/);
 });

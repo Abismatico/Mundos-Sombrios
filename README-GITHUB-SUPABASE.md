@@ -1,4 +1,4 @@
-# Mundos Sombrios V2.10.2 — GitHub + qualquer Supabase
+# Site Oficial MS V2.10.4 — GitHub + Supabase
 
 Este pacote é genérico: não está vinculado a repositório GitHub nem projeto Supabase específico.
 
@@ -18,7 +18,7 @@ O pacote de produção inclui `.github/workflows/pages.yml` genérico. Envie o c
 O workflow executa `npm run build` e publica apenas `dist/`.
 
 ## 3. Sandbox
-O pacote `COMPLETO_COM_SANDBOX` inclui `sandbox-offline/`. Ele é gerado a partir do mesmo runtime do site e não usa o Supabase configurado na raiz.
+O pacote `Site-oficial-MS_2.10.4_COMPLETO-COM-SANDBOX.zip` inclui `sandbox-offline/` e o marcador `PUBLISH-SANDBOX`, portanto o workflow também publica essa rota no GitHub Pages. O pacote SEM SANDBOX não publica a área QA.
 
 ## 4. Validação recomendada após conectar um backend real
 Valide login, RLS por papel, fichas, viewer, criação/entrada/exclusão de Mesa, Realtime, SoulDrakma, PEG, Núcleo de Evolução, Arconte e reversões de ledger.

@@ -207,6 +207,7 @@
     async fetchTableState(tableId){if(!canAccess(tableId))return fail('TABLE_ACCESS_REQUIRED');return ok(clone(state.tableStates[String(tableId)]||{}))},
     async saveTableState(tableId,next){if(!canAccess(tableId))return fail('TABLE_ACCESS_REQUIRED');state.tableStates[String(tableId)]=clone(next||{});save();emit('STATE',{table_id:String(tableId),state:next});return ok(state.tableStates[String(tableId)])},
     async publishTableEvent(tableId,type,payload){const u=requireUser();if(!canAccess(tableId))return fail('TABLE_ACCESS_REQUIRED');const e={id:++state.eventSeq,table_id:String(tableId),event_type:String(type),payload:clone(payload||{}),actor_id:u.id,created_at:now()};state.tableEvents.push(e);save();emit('TABLE_EVENT',e);return ok(e)},
+    async broadcastTableEvent(tableId,type,payload){const u=requireUser();if(!canAccess(tableId))return fail('TABLE_ACCESS_REQUIRED');if(String(type)==='grid_preview'&&!canManage(tableId))return fail('GM_REQUIRED');const e={id:null,table_id:String(tableId),event_type:String(type),payload:clone(payload||{}),actor_id:u.id,created_at:now(),transient:true};emit('TABLE_EVENT',e);return ok(e)},
     async fetchTableEvents(tableId){if(!canAccess(tableId))return fail('TABLE_ACCESS_REQUIRED');return ok(state.tableEvents.filter(e=>e.table_id===String(tableId)))},
     async fetchTableEventsAfter(tableId,lastId=0,limit=500){if(!canAccess(tableId))return fail('TABLE_ACCESS_REQUIRED');return ok(state.tableEvents.filter(e=>e.table_id===String(tableId)&&Number(e.id)>Number(lastId)).slice(-Number(limit||500)))},
     async subscribeTable(tableId,handlers={}){const u=requireUser();if(!canAccess(tableId))throw new Error('TABLE_ACCESS_REQUIRED');const presence={};presence[u.id]=[{user_id:u.id,username:u.username,role:u.role,online_at:now()}];handlers.presence?.(presence);handlers.status?.('SUBSCRIBED');const stop=subscribeRaw(String(tableId),msg=>{if(msg.type==='TABLE_EVENT'&&msg.payload?.table_id===String(tableId))handlers.event?.(clone(msg.payload));if(msg.type==='PRESENCE'&&msg.payload?.table_id===String(tableId)){presence[msg.payload.user_id]=msg.payload.online?[{...msg.payload,online_at:now()}]:[];handlers.presence?.(clone(presence))}});return()=>{stop();handlers.status?.('CLOSED')}},
@@ -273,7 +274,7 @@
     __debug:{reset,snapshot:()=>clone(state),switchRole:async(role)=>{const u=state.users.find(x=>x.role===String(role));if(!u)throw new Error('Papel offline não encontrado.');localStorage.setItem(SESSION,u.id);window.dispatchEvent(new CustomEvent('ms-auth-state',{detail:{event:'SIGNED_IN',session:{user:safeUser(u)},user:safeUser(u)}}));return clone(u)}}
   };
   api.__evolutionContext=Object.freeze({state:()=>state,save,now,id,clone,ok,fail,currentId,currentProfile,requireUser,isAdmin,canManage,isActiveMember,getChar,ensureProgressionWallet,ensureProgressionAccount,tx,emit});
-  window.MS_OFFLINE_DB={version:'2.10.1',create:()=>api,reset,snapshot:()=>clone(state),credentials:[
+  window.MS_OFFLINE_DB={version:'2.10.4',create:()=>api,reset,snapshot:()=>clone(state),credentials:[
     {role:'jogador',username:'jogador',password:'jogador123'},
     {role:'mestre',username:'mestre',password:'mestre1234'},
     {role:'admin',username:'admin',password:'admin12345'}

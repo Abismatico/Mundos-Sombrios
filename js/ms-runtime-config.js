@@ -1,4 +1,4 @@
-/* Mundos Sombrios — Runtime Configuration v2.10.2
+/* Mundos Sombrios — Runtime Configuration v2.10.4
  * CONFIGURAÇÃO GENÉRICA PARA GITHUB PAGES + QUALQUER SUPABASE.
  *
  * Para conectar:
@@ -6,7 +6,8 @@
  * 2) substitua SUPABASE_PUBLISHABLE_KEY pela chave publishable/anon pública;
  * 3) NUNCA coloque service_role aqui.
  *
- * Se os campos ficarem vazios, o site ativa automaticamente o adaptador local/offline.
+ * O modo local/offline distribuído usa a pasta offline-local/.
+ * Se esta configuração for removida manualmente, o fallback local também permanece suportado.
  */
 (function(){
   'use strict';

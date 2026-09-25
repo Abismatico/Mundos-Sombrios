@@ -62,6 +62,7 @@
   }
 
   function installShell(){
+    window.MS_FEATURES?.ensureSoulStyles?.().catch(()=>null);
     if(document.getElementById('ms-soul-orb')){ensureSoulOrbRenderer();return;}
     const orb=document.createElement('aside');orb.id='ms-soul-orb';orb.className='ms-soul-orb';orb.setAttribute('aria-label','Carteira SoulDrakma');
     orb.innerHTML=`<button type="button" class="ms-soul-orb-core" data-soul-toggle aria-label="Abrir Cofre SoulDrakma"><span class="ms-soul-art" aria-hidden="true"><span class="ms-soul-halo ms-soul-halo-a"></span><span class="ms-soul-halo ms-soul-halo-b"></span><canvas class="ms-soul-canvas" width="144" height="144"></canvas><span class="ms-soul-sigil">∆</span></span><span class="ms-soul-orb-copy"><small>SOULDRΔKMA</small><strong data-soul-balance>0</strong><em data-soul-harvest>COLHEITA DORMENTE</em></span></button><div class="ms-soul-orb-actions"><button type="button" data-soul-vault>COFRE</button><button type="button" data-soul-minimize aria-label="Minimizar">—</button></div><div class="ms-soul-session"><span data-soul-clock>00:00</span><span data-soul-earned>+0 nesta Colheita</span></div>`;
@@ -100,7 +101,7 @@
       ordered.forEach(({f,z},idx)=>{const a=rv[f[0]],b=rv[f[1]],c=rv[f[2]];const ux=b[0]-a[0],uy=b[1]-a[1],uz=b[2]-a[2],vx=c[0]-a[0],vy=c[1]-a[1],vz=c[2]-a[2];const nz=ux*vy-uy*vx;const nx=uy*vz-uz*vy,ny=uz*vx-ux*vz;const nl=Math.max(.0001,Math.hypot(nx,ny,nz));const light=Math.max(0,(nx*.25+ny*-.35+nz*.90)/nl);const alpha=.14+light*.34+(active?.08:0);ctx.beginPath();ctx.moveTo(pp[f[0]][0],pp[f[0]][1]);ctx.lineTo(pp[f[1]][0],pp[f[1]][1]);ctx.lineTo(pp[f[2]][0],pp[f[2]][1]);ctx.closePath();const hue=idx%2===0?'91,226,255':'139,104,255';ctx.fillStyle=`rgba(${hue},${alpha})`;ctx.fill();ctx.strokeStyle=`rgba(174,247,255,${.18+light*.52})`;ctx.lineWidth=1.4+(light*.7);ctx.stroke();});
       ctx.save();ctx.translate(size/2,size/2);for(let i=0;i<4;i++){const t=angle*(1.1+i*.16)+i*Math.PI/2;const rx=size*(.34+i*.025),ry=size*(.12+i*.010);const x=Math.cos(t)*rx,y=Math.sin(t)*ry;const r=2.4+(i%2);ctx.fillStyle=active?'rgba(126,245,255,.95)':'rgba(109,207,255,.62)';ctx.shadowColor=active?'#79f6ff':'#6ab9ff';ctx.shadowBlur=active?15:8;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill()}ctx.restore();
     }
-    function loop(ts){if(!window.currentUser){raf=0;return}if(document.visibilityState!=='hidden'){if(!reduced()||ts-last>900)draw(ts)}raf=requestAnimationFrame(loop)}
+    function loop(ts){if(!window.currentUser){raf=0;return}const orb=document.getElementById('ms-soul-orb');const minimized=!!orb?.classList.contains('is-minimized');const interval=reduced()||minimized?900:33;if(document.visibilityState!=='hidden'&&ts-last>=interval)draw(ts);raf=requestAnimationFrame(loop)}
     return {draw,start(){if(!raf){draw();raf=requestAnimationFrame(loop)}},stop(){if(raf)cancelAnimationFrame(raf);raf=0}};
   }
   function ensureSoulOrbRenderer(){const canvas=document.querySelector('#ms-soul-orb .ms-soul-canvas');if(!canvas)return;if(orbRenderer?.canvas===canvas){orbRenderer.start?.();return}orbRenderer?.stop?.();const renderer=createSoulOrbRenderer(canvas);renderer.canvas=canvas;orbRenderer=renderer;renderer.start()}

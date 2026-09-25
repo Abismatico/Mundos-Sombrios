@@ -9,8 +9,12 @@ const migrationTest=HAS_V27_BASE_MIGRATION?test:test.skip;
 
 test('V2.7 instala uma única camada de sessão e a nova Mesa/Ancoragem',()=>{
   const html=read('index.html'),pkg=JSON.parse(read('package.json'));
-  assert.match(pkg.version,/^2\.(?:7|8|9|10)\./);
-  for(const token of ['js/ms-config.js','js/table-session-engine.js','js/table-room.js','css/table-room.css']) assert.match(html,new RegExp(token.replaceAll('.','\\.')));
+  assert.match(pkg.version,/^2\.(?:7|8|9|10|11)\./);
+  assert.match(html,/js\/ms-config\.js/);
+  for(const token of ['js/table-session-engine.js','js/table-room.js']) assert.doesNotMatch(html,new RegExp(token.replaceAll('.','\\.')));
+  for(const token of ['js/table-session-engine.js','js/table-room.js']) assert.match(read('js/feature-loader.js'),new RegExp(token.replaceAll('.','\\.')));
+  assert.doesNotMatch(html,/css\/table-room\.css/);
+  assert.match(read('js/feature-loader.js'),/css\/table-room\.css/);
   assert.match(read('js/master-room.js'),/Ancoragem V3/);
   assert.match(read('js/table-room.js'),/Salão, Grid e PEG/);
 });

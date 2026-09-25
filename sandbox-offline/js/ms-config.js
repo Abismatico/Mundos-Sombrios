@@ -1,4 +1,4 @@
-/* Mundos Sombrios — Runtime Configuration v2.10.1 GENERIC
+/* Mundos Sombrios — Runtime Configuration v2.10.4 GENERIC
  * Não contém endpoint, project-ref ou chave Supabase específicos embutidos.
  * A configuração só é ativada se o proprietário preencher window.MS_RUNTIME_CONFIG manualmente.
  */
@@ -11,7 +11,7 @@
   const configured=Boolean(match&&anonKey);
   const environment=String(supplied.environment||window.MS_RUNTIME_CONFIG?.environment||'unlinked');
   const config=Object.freeze({url,anonKey,projectRef:match?.[1]||'unlinked',environment,configured});
-  window.MS_CONFIG=Object.freeze({version:window.MS_VERSION||'2.10.2',supabase:config});
+  window.MS_CONFIG=Object.freeze({version:window.MS_VERSION||'2.10.4',supabase:config});
   window.MS_DB_CONFIG=config;
-  window.dispatchEvent(new CustomEvent('ms:config-ready',{detail:{version:window.MS_VERSION||'2.10.2',projectRef:config.projectRef,environment:config.environment,configured}}));
+  window.dispatchEvent(new CustomEvent('ms:config-ready',{detail:{version:window.MS_VERSION||'2.10.4',projectRef:config.projectRef,environment:config.environment,configured}}));
 })();

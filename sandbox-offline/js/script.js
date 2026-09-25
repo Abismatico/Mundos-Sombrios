@@ -328,6 +328,7 @@ async function msApplyAuthenticatedSession(profileOverride = null) {
 }
 
 async function msBootstrapAuthSession() {
+    try { if (window.MS_DB_READY) await window.MS_DB_READY; } catch (error) { console.warn('[Mundos Sombrios] Inicialização do banco:', error); }
     if (!window.MS_DB?.ready) { window.MS_PLATFORM?.setStatus('auth','error',new Error('Supabase indisponível')); return; }
     window.MS_PLATFORM?.setStatus('auth','loading');
     try {
@@ -388,6 +389,7 @@ function msAuthErrorMessage(error){
 }
 async function doLogin() {
     if(msLoginInFlight) return false;
+    try { if (window.MS_DB_READY) await window.MS_DB_READY; } catch (error) { console.warn('[Mundos Sombrios] Banco local/online indisponível:', error); }
     const identifier=document.getElementById('login-user').value.trim(); const password=document.getElementById('login-pass').value;
     const button=document.getElementById('login-submit'); const status=document.getElementById('login-status');
     window.MS_PLATFORM?.setStatus('auth','loading');
@@ -1088,7 +1090,11 @@ function applyNatureTheme(nature) {
 // NAVIGATION
 function showScreen(id, options = {}) {
     window.MS_PLATFORM?.emit('screen:changing',{screen:id});
-    if((id==='screen-char-select'||id==='screen-builder') && window.MS_FEATURES && !window.MS_FEATURES.isBuilderReady()) { window.MS_FEATURES.ensureBuilder().catch(error=>window.MS_PLATFORM?.toast(error.message||'Falha ao carregar a Forja.','error')); }
+    if(id==='screen-builder' && window.MS_FEATURES && !window.MS_FEATURES.isBuilderReady()) { window.MS_FEATURES.ensureBuilder().catch(error=>window.MS_PLATFORM?.toast(error.message||'Falha ao carregar a Forja.','error')); }
+    if(id==='screen-vtt') window.MS_FEATURES?.ensureTableRuntime?.().catch(()=>null);
+    if(id==='screen-ancoragem') window.MS_FEATURES?.ensureMasterRuntime?.().catch(()=>null);
+    if(id==='screen-master-shield') window.MS_FEATURES?.ensureShieldRuntime?.().catch(()=>null);
+    if(id==='screen-codex') window.MS_FEATURES?.ensureCodexRuntime?.().catch(()=>null);
     const target = document.getElementById(id);
     if(!target) {
         console.error('[Mundos Sombrios] Tela não encontrada:', id);
@@ -1368,8 +1374,10 @@ function importCharacterJSON(evt) {
     reader.readAsText(file);
 }
 
-function openCodex() {
+async function openCodex() {
+    await window.MS_FEATURES?.ensureCodexRuntime?.();
     if (typeof showScreen === 'function') showScreen('screen-codex');
+    window.renderWorldCodex?.();
 }
 
 /* Editor de corte pertence a js/gallery-editor.js.
@@ -2360,7 +2368,7 @@ function makeDraggable(el, header, requiresGM) {
     }
 }
 
-// VTT GRID (Fabric.js)
+// VTT GRID (Fabric.js + Grid Engine configurável por Cena)
 function msVttObjectOwnedByCurrentUser(obj) {
     if (isVttGM) return true;
     const myProfileId = String(currentUser?.id || '');
@@ -2372,192 +2380,144 @@ function msVttObjectOwnedByCurrentUser(obj) {
 }
 function msVttPlayerInteractionBlocked() { return !isVttGM && !!window.__msTableLivePaused; }
 async function initVttGrid() {
-    const visibleHost=document.getElementById('canvas-wrapper');if(!visibleHost||visibleHost.clientWidth<=0||visibleHost.clientHeight<=0)return;
-    try { if(!window.fabric) await window.MS_VENDOR?.ensure('fabric'); } catch(error) { window.MS_PLATFORM?.toast(error.message||'Não foi possível carregar o mapa do VTT.','error'); return; }
-    if (!msRequireDependency('fabric', 'VTT/Mapa', 'A biblioteca Fabric.js não foi carregada.')) return;
+    const visibleHost=document.getElementById('canvas-wrapper');if(!visibleHost)return false;
+    // Architect pinta mapa/cena imediatamente; a camada Fabric de compatibilidade entra depois.
+    const perfStart=performance?.now?.()||Date.now();
+    window.MS_GRID_ENGINE?.boot?.();window.MS_GRID_ARCHITECT?.boot?.();window.MS_GRID_ARCHITECT?.draw?.();
+    document.body.classList.add('ms-vtt-compat-loading');
+    try { if(!window.fabric) await window.MS_VENDOR?.ensure('fabric'); } catch(error) { document.body.classList.remove('ms-vtt-compat-loading');window.MS_PLATFORM?.toast(error.message||'Não foi possível carregar a camada de totens do VTT.','error'); return false; }
+    document.body.classList.remove('ms-vtt-compat-loading');
+    if (!msRequireDependency('fabric', 'VTT/Mapa', 'A camada de compatibilidade de totens não foi carregada.')) return false;
     const container = document.getElementById('canvas-wrapper');
     if(!container||container.clientWidth<=0||container.clientHeight<=0)return false;
     document.getElementById('vtt-table-name-display').innerText = document.getElementById('vtt-table-name').innerText;
-    
+
     if(!vttCanvas) {
-        vttCanvas = new fabric.Canvas('vtt-canvas', {
-            width: container.clientWidth,
-            height: container.clientHeight,
-            selection: false
-        });
-        
+        vttCanvas = new fabric.Canvas('vtt-canvas', {width:container.clientWidth,height:container.clientHeight,selection:false});
+        window.vttCanvas=vttCanvas;
         drawGridLines();
-        
+
         let moveTimer = null;
         vttCanvas.on('object:moving', function(e) {
             const target=e.target;
             if(msVttPlayerInteractionBlocked() || !msVttObjectOwnedByCurrentUser(target)) { target.set({left:e.transform.original.left, top:e.transform.original.top}); vttCanvas.renderAll(); return; }
-            if(window.__msGridSnap && target && !target.isGridLine && !target.isRuler){const gs=Math.max(20,Math.min(120,Number(window.__msGridSize)||50));target.set({left:Math.round((Number(target.left)||0)/gs)*gs,top:Math.round((Number(target.top)||0)/gs)*gs});}
+            if(target && !target.isGridLine && !target.isRuler){if(window.MS_GRID_ARCHITECT?.constrainTokenMove?.(target)===false){vttCanvas.renderAll();return;}window.MS_GRID_ENGINE?.snapObject?.(target);window.MS_GRID_ARCHITECT?.draw?.();}
+            if(window.MS_GRID_ENGINE?.isPreviewing?.()) return;
             if(window.__msApplyingRemoteToken || !target?.msTokenId || !currentTableData?.id || !window.MS_SERVICES?.VTT) return;
             clearTimeout(moveTimer);
             moveTimer=setTimeout(()=>{
-                window.MS_TABLE_SESSION?.send?.('token_move',{tokenId:String(target.msTokenId),left:Number(target.left)||0,top:Number(target.top)||0,angle:Number(target.angle)||0,scaleX:Number(target.scaleX)||1,scaleY:Number(target.scaleY)||1});
+                const payload={tokenId:String(target.msTokenId),left:Number(target.left)||0,top:Number(target.top)||0,angle:Number(target.angle)||0,scaleX:Number(target.scaleX)||1,scaleY:Number(target.scaleY)||1,msTokenWidthCells:Number(target.msTokenWidthCells)||null,msTokenHeightCells:Number(target.msTokenHeightCells)||null};
+                if(!isVttGM&&window.MS_GRID_ARCHITECT){const original={left:Number(e.transform?.original?.left)||0,top:Number(e.transform?.original?.top)||0};target.set(original);vttCanvas.renderAll();window.MS_TABLE_SESSION?.broadcastTransient?.('architect_move_intent',{...payload,fromLeft:original.left,fromTop:original.top}).catch(()=>window.MS_TABLE_SESSION?.send?.('token_move',payload));}
+                else window.MS_TABLE_SESSION?.send?.('token_move',payload);
             },60);
         });
         vttCanvas.on('object:added',e=>{
-            const target=e.target;if(window.__msRestoringGrid||window.__msApplyingRemoteToken||!target?.msTokenId)return;
-            const props=['owner','ownerId','ownerAuthId','characterId','msTokenId','borderColor','isGridLine','isRuler'];
+            const target=e.target;if(window.MS_GRID_ENGINE?.isPreviewing?.()||window.__msRestoringGrid||window.__msApplyingRemoteToken||!target?.msTokenId)return;
+            const props=['owner','ownerId','ownerAuthId','characterId','msTokenId','borderColor','isGridLine','isRuler','msTokenWidthCells','msTokenHeightCells'];
             if(currentTableData?.id) window.MS_TABLE_SESSION?.send?.('token_add',{tokenId:String(target.msTokenId),characterId:target.characterId||null,token:target.toObject(props)}).catch(err=>window.MS_PLATFORM?.toast?.(err?.message||'Totem não foi compartilhado.','error'));
             if(isVttGM&&window.MasterTools?.saveGrid) window.MasterTools.saveGrid(vttCanvas);
         });
         vttCanvas.on('object:removed',e=>{
-            const target=e.target;if(window.__msRestoringGrid||window.__msApplyingRemoteToken||!target?.msTokenId)return;
+            const target=e.target;if(window.MS_GRID_ENGINE?.isPreviewing?.()||window.__msRestoringGrid||window.__msApplyingRemoteToken||!target?.msTokenId)return;
             if(currentTableData?.id) window.MS_TABLE_SESSION?.send?.('token_remove',{tokenId:String(target.msTokenId)}).catch(err=>window.MS_PLATFORM?.toast?.(err?.message||'Remoção do totem não foi compartilhada.','error'));
             if(isVttGM&&window.MasterTools?.saveGrid) window.MasterTools.saveGrid(vttCanvas);
         });
-        vttCanvas.on('object:modified',()=>{if(isVttGM&&window.MasterTools?.saveGrid&&!window.__msRestoringGrid&&!window.__msApplyingRemoteToken)window.MasterTools.saveGrid(vttCanvas);});
+        vttCanvas.on('object:modified',()=>{if(window.MS_GRID_ENGINE?.isPreviewing?.())return;if(isVttGM&&window.MasterTools?.saveGrid&&!window.__msRestoringGrid&&!window.__msApplyingRemoteToken)window.MasterTools.saveGrid(vttCanvas);});
     } else {
-        vttCanvas.setWidth(container.clientWidth);
-        vttCanvas.setHeight(container.clientHeight);
-        vttCanvas.calcOffset(); 
+        window.vttCanvas=vttCanvas;
+        vttCanvas.setWidth(container.clientWidth);vttCanvas.setHeight(container.clientHeight);vttCanvas.calcOffset();
     }
     if (window.MasterTools && typeof window.MasterTools.restoreGrid === 'function') window.MasterTools.restoreGrid(vttCanvas);
     applyVttSceneContext();
+    window.MS_GRID_ENGINE?.draw?.();window.MS_GRID_ENGINE?.rescaleManagedTokens?.();window.MS_GRID_ARCHITECT?.draw?.();
+    const perfEnd=performance?.now?.()||Date.now();window.__msVttLastBootMs=Math.max(0,perfEnd-perfStart);window.MS_PLATFORM?.emit?.('vtt:grid-ready',{ms:window.__msVttLastBootMs,fabricLite:!!window.fabric?.__msLite});
     return true;
 }
+window.initVttGrid=initVttGrid;
 
+function msFitVttBackground(){const bg=vttCanvas?.backgroundImage;if(!bg?.width||!bg?.height||!vttCanvas)return;bg.set?.({scaleX:vttCanvas.width/bg.width,scaleY:vttCanvas.height/bg.height});}
 // Resize sem restaurar o estado persistido nem registrar novos listeners.
 function msResizeVttGrid(){
     const host=document.getElementById('canvas-wrapper');
     if(!vttCanvas||!host||host.clientWidth<=0||host.clientHeight<=0)return;
-    if(vttCanvas.width===host.clientWidth&&vttCanvas.height===host.clientHeight)return;
-    vttCanvas.setWidth(host.clientWidth);vttCanvas.setHeight(host.clientHeight);
-    vttCanvas.calcOffset();vttCanvas.requestRenderAll();
+    const changed=vttCanvas.width!==host.clientWidth||vttCanvas.height!==host.clientHeight;
+    if(changed){vttCanvas.setWidth(host.clientWidth);vttCanvas.setHeight(host.clientHeight);vttCanvas.calcOffset();msFitVttBackground();window.MS_GRID_ENGINE?.rescaleManagedTokens?.();}
+    drawGridLines();vttCanvas.requestRenderAll();window.MS_GRID_ARCHITECT?.resize?.();window.MS_GRID_ARCHITECT?.draw?.();
 }
+window.msResizeVttGrid=msResizeVttGrid;
 
 function applyVttSceneContext(){
     try{
-        const w=window.MasterTools?.getWorkbench?.();const c=w?.command;const scene=c?.scenes?.find?.(x=>x.id===c.activeSceneId);
+        const privateW=window.MasterTools?.getWorkbench?.();const cmd=privateW?.command;const privateScene=cmd?.scenes?.find?.(x=>x.id===cmd.activeSceneId);
+        const scene=privateScene||window.MasterTools?.getSceneContext?.()||null;
         const label=document.getElementById('vtt-table-name-display');if(label&&scene?.title)label.dataset.scene=scene.title;
-        if(!vttCanvas||!scene?.mapUrl||window.__msSceneMapApplied===scene.mapUrl)return;
+        if(scene?.gridConfig)window.MS_GRID_ENGINE?.applyRemote?.(scene.gridConfig);if(scene)window.MS_GRID_ARCHITECT?.loadScene?.(scene);
+        const architectMap=scene?.vtt?.map?.src||'';
+        if(architectMap){if(vttCanvas?.backgroundImage)vttCanvas.setBackgroundImage(null,()=>vttCanvas.renderAll());window.__msSceneMapApplied=architectMap;window.MS_GRID_ENGINE?.draw?.();window.MS_GRID_ARCHITECT?.draw?.();return;}
+        if(!vttCanvas||!scene?.mapUrl||window.__msSceneMapApplied===scene.mapUrl){window.MS_GRID_ENGINE?.draw?.();window.MS_GRID_ARCHITECT?.draw?.();return;}
         if(!window.fabric?.Image?.fromURL)return;
-        fabric.Image.fromURL(scene.mapUrl,function(img){if(!img)return;vttCanvas.setBackgroundImage(img,vttCanvas.renderAll.bind(vttCanvas),{scaleX:vttCanvas.width/img.width,scaleY:vttCanvas.height/img.height});window.__msSceneMapApplied=scene.mapUrl;},{crossOrigin:'anonymous'});
+        fabric.Image.fromURL(scene.mapUrl,function(img){if(!img)return;vttCanvas.setBackgroundImage(img,()=>{msFitVttBackground();if(vttCanvas.backgroundImage)vttCanvas.backgroundImage.opacity=0;vttCanvas.renderAll();window.MS_GRID_ENGINE?.draw?.();window.MS_GRID_ARCHITECT?.setMap?.(scene.mapUrl,img.width,img.height,scene.title||'Mapa');window.MS_GRID_ARCHITECT?.draw?.();},{scaleX:vttCanvas.width/img.width,scaleY:vttCanvas.height/img.height});window.__msSceneMapApplied=scene.mapUrl;},{crossOrigin:'anonymous'});
     }catch(e){console.warn('[Mundos Sombrios] contexto da cena no VTT:',e);}
 }
 window.applyVttSceneContext=applyVttSceneContext;
 
-function drawGridLines() {
-    if(!vttCanvas) return;
-    const objects = vttCanvas.getObjects('line');
-    objects.forEach(obj => { if(obj.isGridLine) vttCanvas.remove(obj); });
-
-    const gridSize = Math.max(20, Math.min(120, Number(window.__msGridSize)||50));
-    for (let i = 0; i < (vttCanvas.width / gridSize); i++) {
-        vttCanvas.add(new fabric.Line([ i * gridSize, 0, i * gridSize, vttCanvas.height], { stroke: '#333', selectable: false, isGridLine: true }));
-    }
-    for (let i = 0; i < (vttCanvas.height / gridSize); i++) {
-        vttCanvas.add(new fabric.Line([ 0, i * gridSize, vttCanvas.width, i * gridSize], { stroke: '#333', selectable: false, isGridLine: true }));
-    }
-    vttCanvas.getObjects('line').filter(o=>o.isGridLine).forEach(o=>o.set({visible:window.__msGridVisible!==false}));
-    vttCanvas.sendToBack(...vttCanvas.getObjects('line'));
-    vttCanvas.requestRenderAll();
+function msVttGridMetrics() {
+    const m=window.MS_GRID_ENGINE?.metrics?.();if(m)return m;
+    const cols=16,rows=16,width=Math.max(1,Number(vttCanvas?.width)||640),height=Math.max(1,Number(vttCanvas?.height)||640);return{cols,rows,cellW:width/cols,cellH:height/rows};
 }
-function canvasToggleGridVisibility(){if(!vttCanvas)return false;window.__msGridVisible=window.__msGridVisible===false;vttCanvas.getObjects('line').filter(o=>o.isGridLine).forEach(o=>o.set({visible:window.__msGridVisible}));vttCanvas.requestRenderAll();return window.__msGridVisible;}
-function canvasToggleSnapToGrid(){window.__msGridSnap=!window.__msGridSnap;window.MS_PLATFORM?.toast?.(window.__msGridSnap?'Encaixe na grade ativado.':'Encaixe na grade desativado.','info');return window.__msGridSnap;}
+window.msVttGridMetrics = msVttGridMetrics;
+function drawGridLines() {
+    if(!vttCanvas)return;
+    // Remove linhas legadas persistidas por versões anteriores. A grade V2.10.7
+    // vive em um canvas de overlay e não polui o estado Fabric da Mesa.
+    vttCanvas.getObjects?.().filter(o=>o.isGridLine).forEach(o=>vttCanvas.remove(o));
+    window.MS_GRID_ENGINE?.draw?.();vttCanvas.requestRenderAll?.();
+}
+function canvasToggleGridVisibility(){if(!isVttGM){window.MS_PLATFORM?.toast?.('Somente o Mestre altera a matriz da Cena.','error');return false;}return window.MS_GRID_ENGINE?.toggleVisibility?.();}
+function canvasToggleSnapToGrid(){if(!isVttGM){window.MS_PLATFORM?.toast?.('Somente o Mestre altera o encaixe da matriz.','error');return false;}return window.MS_GRID_ENGINE?.toggleSnap?.();}
 function canvasClearMeasurements(){if(!vttCanvas)return;vttCanvas.getObjects().filter(o=>o.isRuler||o.msMeasureShape).forEach(o=>vttCanvas.remove(o));if(window.__msRulerActive)msSetRulerActive(false);vttCanvas.requestRenderAll();}
 window.canvasToggleGridVisibility=canvasToggleGridVisibility;window.canvasToggleSnapToGrid=canvasToggleSnapToGrid;window.canvasClearMeasurements=canvasClearMeasurements;
 
 function canvasSetMode(mode) {
-    if(!vttCanvas) return;
-    if(window.__msRulerActive) msSetRulerActive(false);
-    vttCanvas.isDrawingMode = false;
-    vttCanvas.selection = mode === 'select';
-    vttCanvas.getObjects().forEach(o => o.set('selectable', mode === 'select' && !o.isGridLine && !o.isRuler && (isVttGM || !o.owner || o.owner === 'me' || String(o.ownerId||'')===String(currentUser?.id||''))));
-    vttCanvas.requestRenderAll();
+    if(!vttCanvas) return;if(window.__msRulerActive) msSetRulerActive(false);vttCanvas.isDrawingMode=false;vttCanvas.selection=mode==='select';
+    vttCanvas.getObjects().forEach(o=>o.set('selectable',mode==='select'&&!o.isGridLine&&!o.isRuler&&(isVttGM||!o.owner||o.owner==='me'||String(o.ownerId||'')===String(currentUser?.id||''))));vttCanvas.requestRenderAll();
 }
-
 function canvasAddPCToken() {
-    if(msVttPlayerInteractionBlocked()){window.MS_PLATFORM?.toast?.('A sessão está pausada pelo Mestre.','error');return;}
-    if(!tablePlayers.length) return;
-    const myChar = tablePlayers.find(p => p.isMe) || tablePlayers[0];
-    
-    fabric.Image.fromURL(myChar.avatar || '', function(img) {
-        if(!img) {
-            const circle = new fabric.Circle({ radius: 25, fill: '#00ffcc', stroke: '#fff', strokeWidth: 2, shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.8)', blur: 10, offsetX: 5, offsetY: 5 }) });
-            createTokenGroup(circle, myChar.name, 'player', '#00ffcc', null, myChar.sourceCharId||myChar.id||null, myChar.sourceOwnerId||currentUser?.id||myChar.ownerId||null, myChar.participantUserId||currentUser?.authUserId||null);
-        } else {
-            img.scaleToWidth(50);
-            img.scaleToHeight(50);
-            img.set({clipPath: new fabric.Circle({radius:25, originX:'center', originY:'center'})});
-            const circle = new fabric.Circle({ radius: 26, fill: 'transparent', stroke: '#00ffcc', strokeWidth: 2, shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.8)', blur: 10, offsetX: 5, offsetY: 5 }) });
-            createTokenGroup(img, myChar.name, 'player', '#00ffcc', circle, myChar.sourceCharId||myChar.id||null, myChar.sourceOwnerId||currentUser?.id||myChar.ownerId||null, myChar.participantUserId||currentUser?.authUserId||null);
-        }
+    if(msVttPlayerInteractionBlocked()){window.MS_PLATFORM?.toast?.('A sessão está pausada pelo Mestre.','error');return;}if(!tablePlayers.length)return;
+    const myChar=tablePlayers.find(p=>p.isMe)||tablePlayers[0];
+    fabric.Image.fromURL(myChar.avatar||'',function(img){
+        if(!img){const circle=new fabric.Circle({radius:25,fill:'#00ffcc',stroke:'#fff',strokeWidth:2,shadow:new fabric.Shadow({color:'rgba(0,0,0,0.8)',blur:10,offsetX:5,offsetY:5})});createTokenGroup(circle,myChar.name,'player','#00ffcc',null,myChar.sourceCharId||myChar.id||null,myChar.sourceOwnerId||currentUser?.id||myChar.ownerId||null,myChar.participantUserId||currentUser?.authUserId||null,1,1);}
+        else{img.scaleToWidth(50);img.scaleToHeight(50);img.set({clipPath:new fabric.Circle({radius:25,originX:'center',originY:'center'})});const circle=new fabric.Circle({radius:26,fill:'transparent',stroke:'#00ffcc',strokeWidth:2,shadow:new fabric.Shadow({color:'rgba(0,0,0,0.8)',blur:10,offsetX:5,offsetY:5})});createTokenGroup(img,myChar.name,'player','#00ffcc',circle,myChar.sourceCharId||myChar.id||null,myChar.sourceOwnerId||currentUser?.id||myChar.ownerId||null,myChar.participantUserId||currentUser?.authUserId||null,1,1);}
     });
 }
-
 function canvasAddNPCToken() {
-    if(!isVttGM) return;
-    const color = prompt("Cor do Monstro/NPC (Ex: red, #ff00ff):", "#ff3333");
-    const name = prompt("Nome do Monstro:", "Goblin Abissal");
-    const circle = new fabric.Circle({ radius: 25, fill: color, stroke: '#000', strokeWidth: 2, shadow: new fabric.Shadow({ color: 'rgba(0,0,0,0.8)', blur: 10, offsetX: 5, offsetY: 5 }) });
-    createTokenGroup(circle, name, 'gm', color, null, null, currentUser?.id||null, currentUser?.authUserId||null);
+    if(!isVttGM)return;const color=prompt('Cor do Monstro/NPC (Ex: red, #ff00ff):','#ff3333');const name=prompt('Nome do Monstro:','Goblin Abissal');if(!name)return;
+    const circle=new fabric.Circle({radius:25,fill:color,stroke:'#000',strokeWidth:2,shadow:new fabric.Shadow({color:'rgba(0,0,0,0.8)',blur:10,offsetX:5,offsetY:5})});createTokenGroup(circle,name,'gm',color,null,null,currentUser?.id||null,currentUser?.authUserId||null,1,1);
 }
-
-function createTokenGroup(mainObj, nameText, owner, color, borderObj = null, characterId = null, ownerId = null, ownerAuthId = null) {
-    const text = new fabric.Text(nameText, { fontSize: 12, fill: '#fff', originX: 'center', top: 30, backgroundColor: 'rgba(0,0,0,0.7)' });
-    const objs = borderObj ? [mainObj, borderObj, text] : [mainObj, text];
-    const group = new fabric.Group(objs, { left: 100, top: 100, owner, ownerId, ownerAuthId, characterId, msTokenId: (crypto.randomUUID ? crypto.randomUUID() : 'tok-'+Date.now()+'-'+Math.random().toString(36).slice(2)), borderColor: color, cornerColor: color, transparentCorners: false });
-    vttCanvas.add(group); vttCanvas.setActiveObject(group); vttCanvas.requestRenderAll();
+function createTokenGroup(mainObj,nameText,owner,color,borderObj=null,characterId=null,ownerId=null,ownerAuthId=null,widthCells=1,heightCells=widthCells,left=100,top=100) {
+    const text=new fabric.Text(nameText,{fontSize:12,fill:'#fff',originX:'center',top:30,backgroundColor:'rgba(0,0,0,0.7)'});const objs=borderObj?[mainObj,borderObj,text]:[mainObj,text];
+    const group=new fabric.Group(objs,{left:Number(left)||100,top:Number(top)||100,owner,ownerId,ownerAuthId,characterId,msTokenId:(crypto.randomUUID?crypto.randomUUID():'tok-'+Date.now()+'-'+Math.random().toString(36).slice(2)),msTokenWidthCells:Number(widthCells)||1,msTokenHeightCells:Number(heightCells)||Number(widthCells)||1,borderColor:color,cornerColor:color,transparentCorners:false});
+    window.MS_GRID_ENGINE?.applyTokenSize?.(group,widthCells,heightCells,{silent:true});vttCanvas.add(group);vttCanvas.setActiveObject(group);vttCanvas.requestRenderAll();window.MS_GRID_ARCHITECT?.draw?.();return group;
 }
-
+window.msCreateTokenGroup=createTokenGroup;
 function canvasSetBackground(e) {
-    const file = e.target.files[0];
-    if(!file) return;
-    const reader = new FileReader();
-    reader.onload = function(f) {
-        fabric.Image.fromURL(f.target.result, function(img) {
-            vttCanvas.setBackgroundImage(img, vttCanvas.renderAll.bind(vttCanvas), {
-                scaleX: vttCanvas.width / img.width,
-                scaleY: vttCanvas.height / img.height
-            });
-        });
-    };
-    reader.readAsDataURL(file);
+    if(!isVttGM)return;const file=e.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=function(f){fabric.Image.fromURL(f.target.result,function(img){vttCanvas.setBackgroundImage(img,()=>{msFitVttBackground();if(vttCanvas.backgroundImage)vttCanvas.backgroundImage.opacity=0;vttCanvas.renderAll();window.MS_GRID_ARCHITECT?.setMap?.(f.target.result,img.width,img.height,file.name||'Mapa');window.MS_GRID_ARCHITECT?.persist?.({broadcast:true});},{scaleX:vttCanvas.width/img.width,scaleY:vttCanvas.height/img.height});});};reader.readAsDataURL(file);
 }
-
 function canvasAddShape(type) {
-    let shape;
-    if(type === 'cone') {
-        shape = new fabric.Triangle({ width: 100, height: 100, fill: 'rgba(255,51,51,0.3)', stroke: '#ff3333', left: 150, top: 150, owner: isVttGM?'gm':'me', msMeasureShape:true });
-    } else if (type === 'line') {
-        shape = new fabric.Rect({ width: 200, height: 10, fill: 'rgba(0,255,204,0.5)', stroke: '#00ffcc', left: 150, top: 150, owner: isVttGM?'gm':'me', msMeasureShape:true });
-    } else if (type === 'radius') {
-        shape = new fabric.Circle({ radius: 100, fill: 'rgba(212,175,55,0.3)', stroke: '#d4af37', left: 150, top: 150, owner: isVttGM?'gm':'me', msMeasureShape:true });
-    }
-    vttCanvas.add(shape);
+    let shape;if(type==='cone')shape=new fabric.Triangle({width:100,height:100,fill:'rgba(255,51,51,0.3)',stroke:'#ff3333',left:150,top:150,owner:isVttGM?'gm':'me',msMeasureShape:true});else if(type==='line')shape=new fabric.Rect({width:200,height:10,fill:'rgba(0,255,204,0.5)',stroke:'#00ffcc',left:150,top:150,owner:isVttGM?'gm':'me',msMeasureShape:true});else if(type==='radius')shape=new fabric.Circle({radius:100,fill:'rgba(212,175,55,0.3)',stroke:'#d4af37',left:150,top:150,owner:isVttGM?'gm':'me',msMeasureShape:true});if(shape)vttCanvas.add(shape);
 }
-
-function msRulerScale(){ const n=Number(document.getElementById('vtt-grid-scale')?.value||1.5); return Number.isFinite(n)&&n>0?n:1.5; }
-function msRulerStatus(text, active=window.__msRulerActive){ const el=document.getElementById('vtt-ruler-status');if(el){el.textContent=text;el.classList.toggle('active',!!active);} const btn=document.getElementById('vtt-ruler-btn');if(btn)btn.classList.toggle('active',!!active); }
-function msClearRulerObjects(){ if(!vttCanvas)return; vttCanvas.getObjects().filter(o=>o.isRuler).forEach(o=>vttCanvas.remove(o));vttCanvas.requestRenderAll(); }
-function msSetRulerActive(active){
-    if(!vttCanvas)return; window.__msRulerActive=!!active; window.__msRulerStart=null;
-    vttCanvas.selection=!active; vttCanvas.skipTargetFind=!!active;
-    vttCanvas.getObjects().forEach(o=>o.set('selectable',!active && !o.isGridLine && !o.isRuler && msVttObjectOwnedByCurrentUser(o)));
-    if(!active) msClearRulerObjects();
-    msRulerStatus(active?'Clique e arraste sobre o mapa para medir.':'Régua desligada',active);vttCanvas.requestRenderAll();
-}
+function msRulerScale(){return Number(window.MS_GRID_ENGINE?.active?.().unitsPerCell||1.5);}
+function msRulerStatus(text,active=window.__msRulerActive){const el=document.getElementById('vtt-ruler-status');if(el){el.textContent=text;el.classList.toggle('active',!!active);}const btn=document.getElementById('vtt-ruler-btn');if(btn)btn.classList.toggle('active',!!active);}
+function msClearRulerObjects(){if(!vttCanvas)return;vttCanvas.getObjects().filter(o=>o.isRuler).forEach(o=>vttCanvas.remove(o));vttCanvas.requestRenderAll();}
+function msSetRulerActive(active){if(!vttCanvas)return;window.__msRulerActive=!!active;window.__msRulerStart=null;vttCanvas.selection=!active;vttCanvas.skipTargetFind=!!active;vttCanvas.getObjects().forEach(o=>o.set('selectable',!active&&!o.isGridLine&&!o.isRuler&&msVttObjectOwnedByCurrentUser(o)));if(!active)msClearRulerObjects();msRulerStatus(active?'Clique e arraste sobre o mapa para medir.':'Régua desligada',active);vttCanvas.requestRenderAll();}
 function msInstallRulerHandlers(){
-    if(!vttCanvas || vttCanvas.__msRulerInstalled)return; vttCanvas.__msRulerInstalled=true;
-    vttCanvas.on('mouse:down',opt=>{if(!window.__msRulerActive)return;msClearRulerObjects();const p=vttCanvas.getPointer(opt.e);window.__msRulerStart=p;const line=new fabric.Line([p.x,p.y,p.x,p.y],{stroke:'#00ffcc',strokeWidth:3,selectable:false,evented:false,isRuler:true});const label=new fabric.Text('0 m',{left:p.x+8,top:p.y+8,fontSize:14,fill:'#fff',backgroundColor:'rgba(0,0,0,.75)',selectable:false,evented:false,isRuler:true});vttCanvas.add(line,label);window.__msRulerLine=line;window.__msRulerLabel=label;});
-    vttCanvas.on('mouse:move',opt=>{if(!window.__msRulerActive||!window.__msRulerStart||!window.__msRulerLine)return;const p=vttCanvas.getPointer(opt.e),st=window.__msRulerStart;window.__msRulerLine.set({x2:p.x,y2:p.y});const px=Math.hypot(p.x-st.x,p.y-st.y),cells=px/50,meters=cells*msRulerScale();window.__msRulerLabel.set({left:p.x+8,top:p.y+8,text:`${meters.toFixed(1)} m · ${cells.toFixed(1)} células`});msRulerStatus(`${meters.toFixed(1)} m (${cells.toFixed(1)} células)`,true);vttCanvas.requestRenderAll();});
+    if(!vttCanvas||vttCanvas.__msRulerInstalled)return;vttCanvas.__msRulerInstalled=true;
+    vttCanvas.on('mouse:down',opt=>{if(!window.__msRulerActive)return;msClearRulerObjects();const p=vttCanvas.getPointer(opt.e);window.__msRulerStart=p;const line=new fabric.Line([p.x,p.y,p.x,p.y],{stroke:'#00ffcc',strokeWidth:3,selectable:false,evented:false,isRuler:true});const unit=window.MS_GRID_ENGINE?.active?.().unitName||'m';const label=new fabric.Text(`0 ${unit}`,{left:p.x+8,top:p.y+8,fontSize:14,fill:'#fff',backgroundColor:'rgba(0,0,0,.75)',selectable:false,evented:false,isRuler:true});vttCanvas.add(line,label);window.__msRulerLine=line;window.__msRulerLabel=label;});
+    vttCanvas.on('mouse:move',opt=>{if(!window.__msRulerActive||!window.__msRulerStart||!window.__msRulerLine)return;const p=vttCanvas.getPointer(opt.e),st=window.__msRulerStart;window.__msRulerLine.set({x2:p.x,y2:p.y});const m=window.MS_GRID_ENGINE?.measure?.(st,p)||{cells:Math.hypot(p.x-st.x,p.y-st.y)/50,distance:(Math.hypot(p.x-st.x,p.y-st.y)/50)*msRulerScale(),unit:'m'};const txt=`${Number(m.distance).toFixed(1)} ${m.unit} · ${Number(m.cells).toFixed(1)} células`;window.__msRulerLabel.set({left:p.x+8,top:p.y+8,text:txt});msRulerStatus(`${Number(m.distance).toFixed(1)} ${m.unit} (${Number(m.cells).toFixed(1)} células)`,true);vttCanvas.requestRenderAll();});
     vttCanvas.on('mouse:up',()=>{if(window.__msRulerActive)window.__msRulerStart=null;});
 }
-function canvasToggleRuler() { if(!vttCanvas){window.MS_PLATFORM?.toast('Abra o mapa antes de ativar a régua.','error');return;} msInstallRulerHandlers(); msSetRulerActive(!window.__msRulerActive); }
-
-function canvasDeleteSelected() {
-    const active = vttCanvas.getActiveObject();
-    if(active) {
-        if(msVttPlayerInteractionBlocked()){window.MS_PLATFORM?.toast?.('A sessão está pausada pelo Mestre.','error');return;}
-        if(!msVttObjectOwnedByCurrentUser(active)) { alert("Você não pode apagar isso."); return; }
-        vttCanvas.remove(active);
-    }
-}
+function canvasToggleRuler(){if(!vttCanvas){window.MS_PLATFORM?.toast('Abra o mapa antes de ativar a régua.','error');return;}msInstallRulerHandlers();msSetRulerActive(!window.__msRulerActive);}
+function canvasDeleteSelected(){const active=vttCanvas.getActiveObject();if(active){if(msVttPlayerInteractionBlocked()){window.MS_PLATFORM?.toast?.('A sessão está pausada pelo Mestre.','error');return;}if(!msVttObjectOwnedByCurrentUser(active)){alert('Você não pode apagar isso.');return;}vttCanvas.remove(active);}}
 
 // VTT CARDS & QUICK ACCESS
 function renderVttCards() {
@@ -4286,6 +4246,7 @@ async function confirmJoinTable() {
 }
 
 async function enterVTT(tableIdOrCode, asGM, draftName = null) {
+    await window.MS_FEATURES?.ensureTableRuntime?.();
     window.MS_FEATURES?.ensureProgression?.().catch(()=>{});
     isVttGM = !!asGM;
     document.querySelectorAll('.gm-only-btn').forEach(el => el.style.display = asGM ? 'flex' : 'none');

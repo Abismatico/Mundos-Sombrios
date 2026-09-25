@@ -22,5 +22,5 @@
 }
 
 /* Arte nova reservada à preparação; comandos permanecem sobre superfície limpa. */
-.master-command-center .mcc-head{background:linear-gradient(90deg,#10151bef,#10151b96),url('../assets/art-direction/portal-threshold.png') center 45%/cover;padding:32px 24px}
+.master-command-center .mcc-head{background:linear-gradient(90deg,#10151bef,#10151b96),url('../assets/art-direction/portal-threshold.webp') center 45%/cover;padding:32px 24px}
 .master-command-center button{min-height:44px}.master-command-center :is(input,select,textarea){font-size:1rem}.master-command-center :focus-visible{outline:3px solid #9bdde5;outline-offset:2px}

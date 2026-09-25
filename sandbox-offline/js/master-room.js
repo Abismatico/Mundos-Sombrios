@@ -22,8 +22,11 @@
   function renderPlayerConnections(){
     const root=document.getElementById('player-tables-list');if(!root)return;
     const rows=joined();
-    root.className='anchor-v3-list';
-    root.innerHTML=rows.length?rows.map(t=>{const ch=myCharacter(t);return `<article class="anchor-v3-card"><div class="anchor-v3-sigil">◈</div><div class="anchor-v3-main"><small>${esc(modeLabel(t.gameMode||t.game_mode))}</small><h4>${esc(t.name||'Mesa sem nome')}</h4><p>${esc(t.settings?.description||'Campanha conectada ao Nexo.')}</p><div class="anchor-v3-meta"><span>CÓDIGO <b>${esc(t.code||'—')}</b></span><span>${Number(t.activeMembers||0)} MEMBROS</span><span>${ch?`ALMA · ${esc(ch.name)}`:'ALMA VINCULADA'}</span></div></div><div class="anchor-v3-actions"><button data-player-enter="${esc(t.id)}">ENTRAR NA SESSÃO</button><button class="danger" data-player-leave="${esc(t.code||'')}">ABANDONAR CAMPANHA</button></div></article>`}).join(''):`<div class="anchor-v3-empty"><span>∴</span><strong>Nenhuma campanha conectada</strong><p>Use “Atravessar Véu” e informe o código recebido do Mestre.</p></div>`;
+    root.className='player-fenda-grid';
+    root.innerHTML=rows.length?rows.map(t=>{
+      const ch=myCharacter(t),mode=String(t.gameMode||t.game_mode||'exodo').toLowerCase(),modeClass=['exodo','ocultatun','hybrid'].includes(mode)?mode:'exodo';
+      return `<article class="player-fenda-card player-fenda-${modeClass}"><div class="player-fenda-art" aria-hidden="true"></div><div class="player-fenda-rune" aria-hidden="true">${modeClass==='ocultatun'?'◉':modeClass==='hybrid'?'◇':'⌬'}</div><div class="player-fenda-main"><small>FENDA VINCULADA · ${esc(modeLabel(mode))}</small><h4>${esc(t.name||'Mesa sem nome')}</h4><p>${esc(t.settings?.description||'Campanha conectada ao Nexo.')}</p><div class="player-fenda-meta"><span>CÓDIGO <b>${esc(t.code||'—')}</b></span><span>${Number(t.activeMembers||0)} MEMBROS</span><span>${ch?`ALMA · ${esc(ch.name)}`:'ALMA VINCULADA'}</span></div></div><div class="player-fenda-actions"><button class="player-fenda-enter" data-player-enter="${esc(t.id)}"><span>ATRAVESSAR</span><b>ENTRAR NA SESSÃO</b></button><button class="danger" data-player-leave="${esc(t.code||'')}">ABANDONAR CAMPANHA</button></div></article>`;
+    }).join(''):`<div class="player-fenda-empty"><span aria-hidden="true">∴</span><strong>Nenhuma Fenda vinculada</strong><p>Use “Atravessar o Véu” e informe o código recebido do Mestre para ancorar uma campanha.</p></div>`;
     root.querySelectorAll('[data-player-enter]').forEach(b=>b.onclick=()=>window.enterVTT?.(b.dataset.playerEnter,false));
     root.querySelectorAll('[data-player-leave]').forEach(b=>b.onclick=async()=>{if(await window.leaveJoinedTable?.(b.dataset.playerLeave))await render();});
   }

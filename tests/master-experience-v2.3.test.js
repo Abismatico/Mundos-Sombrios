@@ -8,12 +8,15 @@ const read=f=>readFileSync(join(root,f),'utf8');
 
 test('Centro de Comando permanece no boot e Registros Históricos carregam sob demanda',()=>{
   const html=read('index.html'),loader=read('js/feature-loader.js'),room=read('js/master-room.js');
-  assert.match(html,/css\/master-command-center\.css/);
+  assert.doesNotMatch(html,/css\/master-command-center\.css/);
+  assert.match(loader,/css\/master-command-center\.css/);
+  assert.match(loader,/ensureMasterStyles/);
   assert.doesNotMatch(html,/<script src="js\/master-history-data\.js"/);
   assert.match(loader,/ensureMasterHistory/);
   assert.match(loader,/js\/master-history-data\.js/);
   assert.match(room,/MS_FEATURES\?\.ensureMasterHistory/);
-  assert.ok(html.indexOf('js/master-command-center.js')>0&&html.indexOf('js/master-room.js')>html.indexOf('js/master-command-center.js'));
+  assert.doesNotMatch(html,/js\/master-command-center\.js/);
+  assert.ok(loader.indexOf('js/master-command-center.js')>0&&loader.indexOf('js/master-room.js')>loader.indexOf('js/master-command-center.js'));
   assert.ok(existsSync(join(root,'codex-files/registros-historicos-mundos-sombrios.pdf')));
 });
 

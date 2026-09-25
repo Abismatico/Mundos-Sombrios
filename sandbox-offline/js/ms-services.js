@@ -23,7 +23,7 @@
       return result;
     } catch (error) {
       platform()?.setStatus(scope, 'error', error, meta);
-      if (!meta.silent) platform()?.toast(error?.message || 'Não foi possível concluir a operação online.', 'error');
+      platform()?.toast(error?.message || 'Não foi possível concluir a operação online.', 'error');
       throw error;
     }
   }
@@ -143,7 +143,7 @@
   }
 
   const ProgressionService = Object.freeze({
-    state: tableId => run('persistence', () => unwrapDB(db().fetchProgressionTableState(tableId)), { entity: 'progression', action: 'state', tableId, silent: true }),
+    state: tableId => run('persistence', () => unwrapDB(db().fetchProgressionTableState(tableId)), { entity: 'progression', action: 'state', tableId }),
     buy: (tableId, points) => run('persistence', () => unwrapDB(db().buyTableProgressionPoints(tableId, points)), { entity: 'progression', action: 'buy', tableId }),
     grant: (tableId, characterId, amount, reason) => run('persistence', () => unwrapDB(db().grantCharacterProgression(tableId, characterId, amount, reason)), { entity: 'progression', action: 'grant', tableId, characterId }),
     recordCareer: (tableId, characterId, amount, reason) => run('persistence', () => unwrapDB(db().recordCareerSuccess(tableId, characterId, amount, reason)), { entity: 'progression', action: 'career', tableId, characterId }),

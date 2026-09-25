@@ -20,7 +20,7 @@
 .ms-room-primary{position:absolute;inset:0;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;border:1px solid #393e3c;background:#0f151c}
 .ms-room-window-title{display:flex;justify-content:space-between;gap:24px;align-items:center;padding:28px 36px 16px}.ms-room-window-title h1{margin:5px 0;font:500 clamp(1.5rem,2.5vw,2.5rem)/1.15 Georgia,serif;letter-spacing:.015em;color:#f5e0b3}.ms-room-window-title p{margin:6px 0;color:#b9c3c5;font-size:.9375rem}
 /* Salão: duas alas de cinco posições por formação, sem limite artificial de participantes. */
-.ms-lobby{display:block;overflow:auto;background:linear-gradient(180deg,#07101744,#071017a8 55%,#081017e8),url('../assets/art-direction/mesa-salao.png') center/cover fixed}
+.ms-lobby{display:block;overflow:auto;background:linear-gradient(180deg,#07101744,#071017a8 55%,#081017e8),url('../assets/art-direction/mesa-salao.webp') center/cover fixed}
 .ms-lobby-conductor{display:grid;text-align:center;min-width:130px;color:#d1b780;font-size:1.5rem}.ms-lobby-conductor b{font:500 1rem Georgia,serif}.ms-lobby-conductor small{font:400 .75rem Arial,sans-serif;color:#b8b9b2;margin-top:5px}
 .ms-lobby-controls{display:flex;align-items:end;gap:12px;padding:0 36px 20px}.ms-lobby-controls label{display:grid;gap:4px;font-size:.75rem;color:#c8c5b8}.ms-lobby-controls input{width:240px;background:#09111bd9}.ms-lobby-controls [role=status]{align-self:center;color:#d6c79e;font-size:.8125rem;margin-left:auto}
 .ms-lobby-formations{padding:0 36px 100px}.ms-lobby-formation{max-width:1420px;margin:0 auto 28px}.ms-lobby-team{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:14px}

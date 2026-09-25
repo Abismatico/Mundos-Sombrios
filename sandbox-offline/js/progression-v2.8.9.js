@@ -282,10 +282,7 @@
       window.MS_PLATFORM?.emit?.('progression:state-refreshed',{tableId});
       return tableState;
     } catch (error) {
-      if (!String(error?.message || error).includes('TABLE_ACCESS_REQUIRED')) {
-        console.warn('[Mundos Sombrios] progressão da Mesa:', error);
-      }
-      tableState = null;
+      console.warn('[Mundos Sombrios] progressão da Mesa:', error);
       return null;
     }
   }

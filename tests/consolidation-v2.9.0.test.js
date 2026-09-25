@@ -22,15 +22,23 @@ function runtime(){
 
 async function login(api,user,pass){const r=await api.signIn(user,pass);assert.equal(r.error,null);return r.data}
 
-test('V2.10.2 usa uma versão canônica e sandbox gerado da mesma árvore',()=>{
+test('release atual usa uma versão canônica e gera runtimes locais derivados',()=>{
   assert.equal(read('VERSION.txt').trim(),JSON.parse(read('package.json')).version);
-  assert.equal(JSON.parse(read('package.json')).version,'2.10.2');
-  assert.match(read('scripts/build-sandbox.mjs'),/mesmos bytes de runtime|MESMO runtime/i);
-  for(const p of ['index.html','js/script.js','js/ms-services.js','js/progression-v2.8.9.js','js/forja-overhaul-v2.8.10.js','css/style.css']){
+  assert.equal(JSON.parse(read('package.json')).version,read('VERSION.txt').trim());
+  assert.match(read('scripts/build-sandbox.mjs'),/mesma árvore canônica|mesmo runtime/i);
+  assert.match(read('scripts/build-offline.mjs'),/offline local/i);
+  for(const p of ['js/script.js','js/ms-services.js','js/progression-v2.8.9.js','js/forja-overhaul-v2.8.10.js','css/style.css']){
     assert.equal(fs.readFileSync(`sandbox-offline/${p}`).compare(fs.readFileSync(p)),0,`${p} divergiu do runtime principal`);
+    assert.equal(fs.readFileSync(`offline-local/${p}`).compare(fs.readFileSync(p)),0,`${p} divergiu do runtime principal offline`);
   }
-  assert.match(read('sandbox-offline/js/ms-runtime-config.js'),/ms-sandbox-v2101/);
   assert.match(read('sandbox-offline/js/ms-runtime-config.js'),/sandboxMode:\s*true/);
+  assert.match(read('offline-local/js/ms-runtime-config.js'),/offlineMode:\s*true/);
+  assert.match(read('offline-local/js/ms-runtime-config.js'),/sandboxMode:\s*false/);
+  for(const index of [read('offline-local/index.html'),read('sandbox-offline/index.html')]){
+    assert.match(index,/js\/offline-db\.js/);
+    assert.doesNotMatch(index,/supabase-js@2\/dist\/umd\/supabase\.min\.js/);
+    assert.doesNotMatch(index,/js\/offline-db-loader\.js/);
+  }
 });
 
 test('papéis offline respeitam autoridade Jogador Mestre ADM',async()=>{

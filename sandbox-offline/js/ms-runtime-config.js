@@ -1,4 +1,4 @@
-/* Mundos Sombrios — Runtime SANDBOX INTEGRAL v2.10.2 */
+/* Mundos Sombrios — Runtime SANDBOX INTEGRAL v2.11.2 */
 (function(){
   'use strict';
   window.MS_RUNTIME_CONFIG = {

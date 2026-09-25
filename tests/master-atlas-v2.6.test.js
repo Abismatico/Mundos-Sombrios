@@ -37,7 +37,7 @@ test('20 locais visitáveis possuem arte local otimizada e nenhum visitável fic
 });
 
 test('Escudo monta o Atlas Leaflet sob demanda e preserva dimensionamento de aba oculta',()=>{
-  const shield=read('js/master-shield.js'),loader=read('js/master-shield-loader.js'),vendor=read('js/vendor-loader.js'),html=read('index.html');
+  const shield=read('js/master-shield.js'),loader=read('js/master-shield-loader.js'),vendor=read('js/vendor-loader.js'),features=read('js/feature-loader.js'),html=read('index.html');
   assert.match(shield,/MSAtlas\?\.mount/);
   assert.match(shield,/MSAtlas\?\.refreshLayout/);
   assert.match(loader,/master-atlas-data\.js/);
@@ -46,7 +46,9 @@ test('Escudo monta o Atlas Leaflet sob demanda e preserva dimensionamento de aba
   assert.ok(loader.indexOf('master-atlas.js')<loader.indexOf('master-shield.js'));
   assert.match(vendor,/leaflet:\{global:'L'/);
   assert.match(vendor,/leaflet@1\.9\.4/);
-  assert.match(html,/css\/master-atlas\.css/);
+  assert.doesNotMatch(html,/css\/master-atlas\.css/);
+  assert.match(features,/css\/master-atlas\.css/);
+  assert.match(features,/ensureShieldStyles/);
 });
 
 test('Mestre solicita alteração e ADM mantém exclusividade de edição e economia',()=>{

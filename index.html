@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mundos Sombrios — Portal Oficial V2.10.2</title>
+    <title>Mundos Sombrios — Portal Oficial V2.11.2</title>
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
     <link rel="icon" href="assets/favicon.ico" sizes="any">
     <link rel="apple-touch-icon" href="assets/favicon-192.png">
+    <link rel="preload" as="image" href="assets/art-direction/portal-threshold.webp" type="image/webp" fetchpriority="high">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Roboto:wght@300;400;700&family=MedievalSharp&family=Orbitron&display=swap" rel="stylesheet">
@@ -17,17 +18,6 @@
     <link rel="stylesheet" href="css/ms-platform.css">
     <link rel="stylesheet" href="css/ms-online.css">
     <link rel="stylesheet" href="css/offline-sandbox.css">
-    <link rel="stylesheet" href="css/table-room.css">
-    <link rel="stylesheet" href="css/table-sheets.css">
-    <link rel="stylesheet" href="css/table-studio-v2.8.6.css">
-    <link rel="stylesheet" href="css/world-codices.css">
-    <link rel="stylesheet" href="css/master-room.css">
-    <link rel="stylesheet" href="css/master-tools.css">
-    <link rel="stylesheet" href="css/master-command-center.css">
-    <link rel="stylesheet" href="css/master-shield.css">
-    <link rel="stylesheet" href="css/master-atlas.css">
-    <link rel="stylesheet" href="css/soul-economy.css">
-    <link rel="stylesheet" href="css/operational-control-v2.10.1.css">
     <link rel="stylesheet" href="css/portal/portal.css">
     <link rel="stylesheet" href="css/portal/portal-visual-v0.62.css">
     <link rel="stylesheet" href="css/portal/portal-editorial-v2.2.css">
@@ -92,59 +82,64 @@
             </div>
         </section>
 
-        <!-- TELA 0: SELEÇÃO DE MODO DE JOGO & ANCORAGEM GERAL -->
-        <section id="screen-mode-select" class="screen" aria-hidden="true">
+        <!-- TELA 0: ENCRUZILHADA / HUB DIEGÉTICO DE SELEÇÃO -->
+        <section id="screen-mode-select" class="screen crossroads-screen" aria-hidden="true">
             <div class="screen-nav-actions" role="navigation" aria-label="Navegação da área de jogo">
                 <button class="back-btn" type="button" onclick="returnToOfficialPortal()">&#8592; PORTAL OFICIAL</button>
-                <button class="back-btn" type="button" onclick="doLogout()" style="color:#ff3333;">&#8592; Desconectar</button>
-            </div>
-            <div class="souls-header">
-                <h1>Mundos Sombrios</h1>
-                <p>Bem-vindo, <span id="display-username" style="color:#d4af37; font-weight:bold;"></span>. Escolha a fenda pela qual sua existência se manifestará.</p>
-            </div>
-            
-            <div class="spheres-container">
-                <div class="sphere-wrapper" onclick="selectGameMode('exodo')">
-                    <div class="sphere tech-sphere">
-                        <div class="sphere-inner"></div>
-                        <div class="orbit-ring ring-1"></div>
-                        <div class="orbit-ring ring-2"></div>
-                    </div>
-                    <div class="sphere-label">
-                        <h3>Êxodo: Assimilação</h3>
-                        <p>Acesse seu Santuário Pessoal (Fichas)</p>
-                    </div>
-                </div>
-
-                <div class="sphere-wrapper" onclick="selectGameMode('ocultatun')">
-                    <div class="sphere paranormal-sphere">
-                        <div class="sphere-inner"></div>
-                        <div class="orbit-ring ring-1"></div>
-                        <div class="orbit-ring ring-2"></div>
-                    </div>
-                    <div class="sphere-label">
-                        <h3>Ocultatun</h3>
-                        <p>Acesse seu Santuário Pessoal (Fichas)</p>
-                    </div>
-                </div>
+                <button class="back-btn" type="button" onclick="doLogout()" style="color:#ff6868;">&#8592; Desconectar</button>
             </div>
 
-            <div class="menu-actions" style="margin-top: 60px; text-align: center; width: 100%; display:flex; flex-direction:column; gap:20px; align-items:center;">
-                <button class="souls-btn" type="button" data-global-sheets="1" onclick="window.MS_FEATURES?.ensureOperational?.().then(()=>window.msOpenQuickSheets?.())" style="border-color:#d4af37;color:#e5cd83;padding:14px 38px;font-size:1.08rem;box-shadow:0 0 18px rgba(212,175,55,.12);">
-                    FICHAS · ACESSO RÁPIDO
-                </button>
-                <button class="souls-btn" onclick="showScreen('screen-ancoragem')" style="border-color:#ff00ff; color:#ff00ff; padding: 20px 50px; font-size: 1.5rem; text-shadow: 0 0 10px #ff00ff; box-shadow: 0 0 20px rgba(255,0,255,0.2);">
-                    ANCORAGEM (SALA DOS MESTRES)
-                </button>
-                <button class="souls-btn" onclick="openCodex()" style="border-color:#7aa7ff; color:#9fc1ff; padding: 12px 35px; font-size: 1.05rem; box-shadow: 0 0 15px rgba(100,150,255,0.15);">
-                    CÓDICE DOS MUNDOS (REGRAS & EXPANSÕES)
-                </button>
-                <button id="btn-admin-panel" class="souls-btn" onclick="openAdminPanel()" style="display:none; border-color:#00ffcc; color:#00ffcc; padding: 10px 30px; font-size: 1rem;">
-                    SISTEMA DO ARCONTE (ADM)
-                </button>
-                <button id="btn-master-shield" class="souls-btn" onclick="openMasterShield()" style="display:none; border-color:#69e8ff; color:#69e8ff; padding: 10px 30px; font-size: 1rem;">
-                    ESCUDO DO MESTRE
-                </button>
+            <header class="crossroads-header">
+                <span class="crossroads-kicker">ENCRUZILHADA DOS MUNDOS · HUB DE SELEÇÃO</span>
+                <h1>Escolha onde sua alma desperta</h1>
+                <p>Bem-vindo, <strong id="display-username"></strong>. Cada limiar conduz a um sistema, uma estética e uma forma diferente de sobreviver aos Mundos Sombrios.</p>
+            </header>
+
+            <div class="crossroads-stage" aria-label="Encruzilhada dos Mundos">
+                <span class="crossroads-stage-art" aria-hidden="true"></span>
+                <span class="crossroads-stage-atmosphere" aria-hidden="true"></span>
+                <div class="crossroads-stage-mark" aria-hidden="true">
+                    <span>NEXO CENTRAL</span>
+                    <strong>ENCRUZILHADA</strong>
+                </div>
+                <div class="mode-gateway-grid" role="group" aria-label="Escolha do modo de jogo">
+                    <button type="button" class="mode-gateway mode-gateway-exodo" onclick="selectGameMode('exodo')" aria-label="Entrar em Êxodo: Assimilação">
+                        <span class="mode-gateway-copy">
+                            <span class="mode-gateway-index">I · LIMIAR DA ASSIMILAÇÃO</span>
+                            <strong>Êxodo: Assimilação</strong>
+                            <span class="mode-gateway-text">Bioengenharia, linhagens e tecnologia viva. Atravesse o limiar ciano e desperte no arquivo de Êxodo.</span>
+                            <span class="mode-gateway-cta">ATRAVESSAR LIMIAR <i aria-hidden="true">→</i></span>
+                        </span>
+                        <span class="mode-gateway-sigil" aria-hidden="true">⌬</span>
+                    </button>
+
+                    <button type="button" class="mode-gateway mode-gateway-ocultatun" onclick="selectGameMode('ocultatun')" aria-label="Entrar em Ocultatun">
+                        <span class="mode-gateway-copy">
+                            <span class="mode-gateway-index">II · LIMIAR DO OCULTO</span>
+                            <strong>Ocultatun</strong>
+                            <span class="mode-gateway-text">Investigação, ritos e fenômenos proibidos. Atravesse o limiar rubro e alcance o arquivo do Oculto.</span>
+                            <span class="mode-gateway-cta">ATRAVESSAR LIMIAR <i aria-hidden="true">→</i></span>
+                        </span>
+                        <span class="mode-gateway-sigil" aria-hidden="true">◉</span>
+                    </button>
+                </div>
+            </div>
+
+            <button type="button" class="crossroads-nexus" onclick="showScreen('screen-ancoragem')" aria-label="Abrir Ancoragem e acessar as mesas dos Mestres">
+                <span class="crossroads-nexus-art" aria-hidden="true"></span>
+                <span class="crossroads-nexus-copy">
+                    <span class="crossroads-kicker">NEXO DE FENDAS · MESAS & CAMPANHAS</span>
+                    <strong>Ancoragem</strong>
+                    <span>Encontre as campanhas às quais sua alma está vinculada, atravesse uma Fenda por código ou acesse a Sala dos Mestres.</span>
+                </span>
+                <span class="crossroads-nexus-action">ATRAVESSAR O VÉU <i aria-hidden="true">→</i></span>
+            </button>
+
+            <div class="menu-actions crossroads-utilities" aria-label="Acessos complementares">
+                <button class="souls-btn" type="button" data-global-sheets="1" onclick="window.MS_FEATURES?.ensureOperational?.().then(()=>window.msOpenQuickSheets?.())">FICHAS · ACESSO RÁPIDO</button>
+                <button class="souls-btn" type="button" onclick="openCodex()">CÓDICE DOS MUNDOS</button>
+                <button id="btn-admin-panel" class="souls-btn" type="button" onclick="openAdminPanel()" style="display:none;">SISTEMA DO ARCONTE</button>
+                <button id="btn-master-shield" class="souls-btn" type="button" onclick="openMasterShield()" style="display:none;">ESCUDO DO MESTRE</button>
             </div>
         </section>
 
@@ -608,30 +603,43 @@
                     </section>
             <section id="vtt-grid-window" class="ms-room-primary ms-grid-window" data-room-window="grid" aria-labelledby="grid-window-title" hidden>
                 <div class="vtt-window-header" id="grid-window-header">
-                    <h1 id="grid-window-title" tabindex="-1">Mapa &amp; Grid · <span id="vtt-table-name-display">Mesa</span></h1>
+                    <div><h1 id="grid-window-title" tabindex="-1">Mapa &amp; Grid · <span id="vtt-table-name-display">Mesa</span></h1><small class="ms-grid-dimension">MATRIZ TÁTICA · 16 × 16 · ORTOGONAL</small></div>
                     <button type="button" data-room-open="salon">Voltar ao Salão</button>
                 </div>
                 <div class="ms-grid-body">
-                    <div class="ms-grid-tools">
-                        <b class="vtt-font" style="color:var(--vtt-accent); font-size:0.9rem;">Movimento</b>
-                        <button class="vtt-tool-btn" onclick="canvasSetMode('select')">👆 Seta (Mover)</button>
-                        <button class="vtt-tool-btn" onclick="canvasAddPCToken()">+ Meu Totem</button>
-                        <div class="gm-only-btn" style="display:none; flex-direction:column; gap:5px; margin-top:5px;">
-                            <hr style="border-color:#333; margin:5px 0;">
-                            <b class="vtt-font" style="color:#ff3333; font-size:0.9rem;">Mestre</b>
-                            <button class="vtt-tool-btn" style="border-color:#ff3333; color:#ff3333;" onclick="canvasAddNPCToken()">+ Totem NPC</button>
-                            <input type="file" id="grid-bg-upload" accept="image/*" style="display:none;" onchange="canvasSetBackground(event)">
-                            <button class="vtt-tool-btn" onclick="document.getElementById('grid-bg-upload').click()">+ Fundo</button>
+                    <div class="ms-grid-tools" aria-label="Ferramentas do mapa">
+                        <div class="ms-grid-tool-group" data-tool-group="movement">
+                            <b class="ms-grid-tool-label vtt-font">Movimento</b>
+                            <button class="vtt-tool-btn" onclick="canvasSetMode('select')">👆 Mover / selecionar</button>
+                            <button class="vtt-tool-btn" onclick="window.MS_GRID_ARCHITECT?.setTool?.('pan')">✥ Câmera</button>
+                            <button class="vtt-tool-btn" onclick="window.MS_GRID_ARCHITECT?.zoomBy?.(1.25)">＋ Zoom</button>
+                            <button class="vtt-tool-btn" onclick="window.MS_GRID_ARCHITECT?.zoomBy?.(.8)">− Zoom</button>
+                            <button class="vtt-tool-btn" onclick="canvasAddPCToken()">+ Meu Totem</button>
+                            <button class="vtt-tool-btn" onclick="window.MS_GRID_ARCHITECT?.setTool?.('interact')">✦ Interagir com cenário</button>
                         </div>
-                        <hr style="border-color:#333; margin: 10px 0;">
-                        <b class="vtt-font">Medição</b><button type="button" class="vtt-tool-btn" onclick="canvasToggleGridVisibility()">Mostrar / ocultar grade</button><button type="button" class="vtt-tool-btn" onclick="canvasToggleSnapToGrid()">Encaixe na grade</button><button type="button" class="vtt-tool-btn" onclick="canvasClearMeasurements()">Limpar medidas</button>
-                        <button class="vtt-tool-btn" onclick="canvasAddShape('cone')">📐 Cone</button>
-                        <button class="vtt-tool-btn" onclick="canvasAddShape('line')">➖ Linha</button>
-                        <button class="vtt-tool-btn" onclick="canvasAddShape('radius')">⭕ Raio</button>
-                        <label class="vtt-scale-control">Escala / célula <span><input id="vtt-grid-scale" type="number" min="0.1" step="0.1" value="1.5"> m</span></label>
-                        <button id="vtt-ruler-btn" class="vtt-tool-btn" onclick="canvasToggleRuler()">📏 Régua</button>
-                        <div id="vtt-ruler-status" class="vtt-ruler-status" aria-live="polite">Régua desligada</div>
-                        <button class="vtt-tool-btn" style="border-color:red; color:red; margin-top:15px;" onclick="canvasDeleteSelected()">Apagar Sel.</button>
+                        <div class="gm-only-btn ms-grid-tool-group ms-grid-gm-tools" style="display:none">
+                            <b class="ms-grid-tool-label vtt-font">Mestre</b>
+                            <button class="vtt-tool-btn danger-soft" onclick="canvasAddNPCToken()">+ Totem NPC</button>
+                            <input type="file" id="grid-bg-upload" accept="image/*" style="display:none;" onchange="canvasSetBackground(event)">
+                            <button class="vtt-tool-btn" onclick="document.getElementById('grid-bg-upload').click()">🖼 Alterar mapa</button>
+                            <button class="vtt-tool-btn" title="Paleta flutuante: arraste pela alça e recolha onde desejar." onclick="window.MS_GRID_ARCHITECT?.resetCamera?.();window.MS_GRID_ENGINE?.openPanel?.()">⌘ Editor de Matriz</button>
+                            <button class="vtt-tool-btn ga-launch" title="Construção de cenário: paredes, portas, névoa, luz, objetos e ambiência." onclick="window.MS_GRID_ARCHITECT?.openPanel?.()">⌘ Grid Architect</button>
+                            <button class="vtt-tool-btn" onclick="canvasToggleGridVisibility()">◫ Exibir / ocultar grade</button>
+                            <button class="vtt-tool-btn" onclick="canvasToggleSnapToGrid()"><span data-ms-grid-snap-state>Snap: ligado</span></button>
+                        </div>
+                        <div class="ms-grid-tool-group" data-tool-group="measure">
+                            <b class="ms-grid-tool-label vtt-font">Medição</b>
+                            <button id="vtt-ruler-btn" class="vtt-tool-btn" onclick="canvasToggleRuler()">📏 Régua</button>
+                            <button class="vtt-tool-btn" onclick="canvasAddShape('cone')">📐 Cone</button>
+                            <button class="vtt-tool-btn" onclick="canvasAddShape('line')">➖ Linha</button>
+                            <button class="vtt-tool-btn" onclick="canvasAddShape('radius')">⭕ Raio</button>
+                            <button type="button" class="vtt-tool-btn" onclick="canvasClearMeasurements()">Limpar medidas</button>
+                        </div>
+                        <div class="ms-grid-tool-group ms-grid-tool-status" data-tool-group="status">
+                            <span class="ms-grid-scale-readout">Escala: <strong id="vtt-grid-scale-readout">1,5 m / célula</strong></span>
+                            <div id="vtt-ruler-status" class="vtt-ruler-status" aria-live="polite">Régua desligada</div>
+                            <button class="vtt-tool-btn danger" onclick="canvasDeleteSelected()">Apagar seleção</button>
+                        </div>
                     </div>
                     <div class="ms-grid-stage"><div id="canvas-wrapper">
                         <canvas id="vtt-canvas" width="640" height="640"></canvas>
@@ -973,40 +981,29 @@
         <img id="fs-img" src="" alt="Fullscreen">
     </div>
 
-    <script src="js/ms-version.js"></script>
-    <script src="js/ms-platform.js"></script>
-    <script src="js/codex-catalog.js"></script>
-    <script src="js/world-codices.js"></script>
-    <script src="js/portal/portal-content.js"></script>
-    <script src="js/portal/portal-media.js"></script>
-    <script src="js/portal/portal-core.js"></script>
-    <script src="js/portal/portal-admin.js"></script>
-    <script src="js/archetype-art-direction.js"></script>
-    <script src="js/asset-loader.js"></script>
-    <script src="js/vendor-loader.js"></script>
-    <script src="js/ms-runtime-config.js"></script>
-    <script src="js/ms-config.js"></script>
-    <script src="js/offline-db-loader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-    <script src="js/supabase-db.js"></script>
-    <script src="js/ms-services.js"></script>
-    <script src="js/ms-realtime.js"></script>
-    <script src="js/table-session-engine.js"></script>
-    <script src="js/points-ui.js"></script>
-    <script src="js/table-windows.js"></script>
-    <script src="js/table-room.js"></script>
-    <script src="js/table-sheets.js"></script>
-    <script src="js/master-shield-loader.js"></script>
-    <script src="js/feature-loader.js"></script>
-    <script src="js/script.js"></script>
-    <script src="js/master-command-center.js"></script>
-    <script src="js/master-room.js"></script>
-    <script src="js/table-directory.js"></script>
-    <script src="js/master-tools.js"></script>
-    <script src="js/ms-online-ui.js"></script>
-    <script src="js/soul-economy.js"></script>
-    <script src="js/offline-sandbox-ui-loader.js"></script>
-    <script src="js/ms-consolidation-v2.10.1.js"></script>
+    <script defer src="js/ms-version.js"></script>
+    <script defer src="js/ms-platform.js"></script>
+    <script defer src="js/codex-catalog.js"></script>
+    <script defer src="js/portal/portal-content.js"></script>
+    <script defer src="js/portal/portal-media.js"></script>
+    <script defer src="js/portal/portal-core.js"></script>
+    <script defer src="js/portal/portal-admin.js"></script>
+    <script defer src="js/archetype-art-direction.js"></script>
+    <script defer src="js/asset-loader.js"></script>
+    <script defer src="js/vendor-loader.js"></script>
+    <script defer src="js/ms-runtime-config.js"></script>
+    <script defer src="js/ms-config.js"></script>
+    <script defer src="js/offline-db-loader.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script defer src="js/supabase-db.js"></script>
+    <script defer src="js/ms-services.js"></script>
+    <script defer src="js/ms-realtime.js"></script>
+    <script defer src="js/feature-loader.js"></script>
+    <script defer src="js/script.js"></script>
+    <script defer src="js/ms-online-ui.js"></script>
+    <script defer src="js/soul-economy.js"></script>
+    <script defer src="js/offline-sandbox-ui-loader.js"></script>
+    <script defer src="js/ms-consolidation-v2.10.1.js"></script>
 
 
     <!-- MODAL GLOBAL: configuração inicial do ADM; mantido fora de qualquer .screen para evitar sobreposição/stacking context -->

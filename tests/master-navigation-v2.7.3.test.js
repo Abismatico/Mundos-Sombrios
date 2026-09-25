@@ -125,8 +125,8 @@ test('totens usam propriedade autenticada e ciclo add move remove compartilhado'
 });
 
 test('versão de correção é 2.7.3',()=>{
-  assert.match(read('VERSION.txt').trim(),/^2\.(?:7|8|9|10)\./);
-  assert.match(JSON.parse(read('package.json')).version,/^2\.(?:7|8|9|10)\./);
+  assert.match(read('VERSION.txt').trim(),/^2\.(?:7|8|9|10|11)\./);
+  assert.match(JSON.parse(read('package.json')).version,/^2\.(?:7|8|9|10|11)\./);
 });
 
 test('fluxo funcional Escudo → Mesa recupera contexto persistido e remonta a mesma sessão',()=>{

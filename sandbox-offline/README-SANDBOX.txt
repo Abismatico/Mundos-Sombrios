@@ -1,7 +1,7 @@
-MUNDOS SOMBRIOS V2.10.2 — SANDBOX INTEGRAL
+SITE OFICIAL MS V2.11.2 — SANDBOX INTEGRAL
 
-Esta pasta é gerada automaticamente a partir do MESMO runtime do site principal.
-A única substituição é js/ms-runtime-config.js, que ativa o banco local isolado.
+Esta pasta é gerada automaticamente a partir do mesmo runtime do site principal.
+O bootstrap troca Supabase por banco local isolado e remove dependências remotas do carregamento inicial.
 Não edite esta pasta manualmente: execute npm run sandbox para reconstruí-la.
 
 Contas QA:

@@ -35,7 +35,8 @@ test('Portal público renderiza antes da hidratação remota e navegação não 
 });
 
 test('atalhos primários evitam cargas e renderizações pesadas duplicadas', () => {
-  assert.match(script, /id==='screen-char-select'\|\|id==='screen-builder'/);
+  assert.match(script, /id==='screen-builder'/);
+  assert.doesNotMatch(script, /id==='screen-char-select'\|\|id==='screen-builder'/);
   assert.doesNotMatch(script, /id==='screen-char-select'\|\|id==='screen-mode-select'\|\|id==='screen-builder'/);
   assert.match(portal, /!document\.getElementById\('world-codex-root'\)/);
   assert.match(portal, /showScreen\('screen-ancoragem',\{skipAncoragemRender:true\}\)/);
